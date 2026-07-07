@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Обновление профиля — IS1C</title>
+  <meta name="description" content="Форма обновления профиля сотрудника IS1C">
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .form-page {
+      min-height: 100vh;
+      background: var(--bg-primary);
+      padding: 0 0 60px;
+    }
+    .form-header {
+      background: rgba(13,13,26,0.9);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    body.light-theme .form-header {
+      background: rgba(255,255,255,0.9);
+    }
+    .form-header-left { display: flex; align-items: center; gap: 12px; }
+    .form-wrap {
+      max-width: 860px;
+      margin: 40px auto;
+      padding: 0 24px;
+    }
+    .fields-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 24px;
+    }
+    .field-full { grid-column: 1 / -1; }
+    .changes-summary {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 20px;
+      font-size: 0.875rem;
+      color: var(--warning);
+      display: none;
+    }
+    .success-screen { text-align: center; padding: 80px 20px; }
+    .success-icon {
+      width: 72px; height: 72px;
+      background: rgba(34,197,94,0.12);
+      border: 2px solid rgba(34,197,94,0.3);
+      border-radius: 50%;
+      display: flex;
+      align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 2rem;
+    }
+    .pending-warning {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.3);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 0.875rem;
+      color: var(--warning);
+    }
+    .error-screen { text-align: center; padding: 80px 20px; color: var(--text-muted); }
+
+    .edu-entry, .job-entry, .proj-entry {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 12px;
+      position: relative;
+    }
+    .edu-entry .remove-btn, .job-entry .remove-btn, .proj-entry .remove-btn {
+      position: absolute; top: 8px; right: 8px;
+      background: rgba(239,68,68,0.15);
+      color: var(--danger); border: none; border-radius: 6px;
+      width: 28px; height: 28px; cursor: pointer;
+      font-size: 1rem; display: flex; align-items: center; justify-content: center;
+    }
+    .edu-entry .remove-btn:hover, .job-entry .remove-btn:hover, .proj-entry .remove-btn:hover { background: rgba(239,68,68,0.25); }
+    .edu-entry .form-group, .job-entry .form-group, .proj-entry .form-group { margin-bottom: 10px; }
+    .edu-entry .form-group:last-child, .job-entry .form-group:last-child, .proj-entry .form-group:last-child { margin-bottom: 0; }
+    .edu-entry .form-label, .job-entry .form-label, .proj-entry .form-label { font-size: 0.78rem; }
+    .edu-entry .form-control, .job-entry .form-control, .proj-entry .form-control { font-size: 0.85rem; padding: 8px 12px; }
+
+    .add-btn {
+      background: transparent;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-md);
+      color: var(--accent-light);
+      padding: 10px; width: 100%;
+      cursor: pointer; font-family: inherit; font-size: 0.875rem;
+      transition: all var(--transition);
+    }
+    .add-btn:hover { background: var(--accent-glow); border-color: var(--accent); }
+
+    .template-panel {
+      background: rgba(108,99,255,0.06);
+      border: 1px solid rgba(108,99,255,0.2);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 16px;
+      font-size: 0.82rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      display: none;
+    }
+    .template-panel.visible { display: block; }
+    .template-panel strong { color: var(--accent-light); }
+
+    .example-hint {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      cursor: pointer;
+      margin-top: 2px;
+    }
+    .example-hint:hover { color: var(--accent-light); }
+
+    #competencyChecklist {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 16px;
+    }
+
+    .form-control:focus + .example-hint,
+    .form-control:focus ~ .example-hint { color: var(--accent-light); }
+
+    .section-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .section-card-title {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-primary);
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    @media (max-width: 768px) {
+      .fields-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body class="form-page">
+
+<header class="form-header">
+  <div class="form-header-left">
+    <svg width="24" height="24" viewBox="0 0 32 32" fill="none">
+      <rect width="32" height="32" rx="8" fill="#6c63ff"/>
+      <path d="M8 16h16M16 8v16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+    <span style="font-weight:700;font-size:1rem;">IS1C Портфолио</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;">— Обновление профиля</span>
+  </div>
+  <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+</header>
+
+<div id="loadingState" style="text-align:center;padding:100px 20px;">
+  <span class="spinner" style="width:40px;height:40px;border-width:3px;"></span>
+  <p style="margin-top:16px;color:var(--text-muted);">Загрузка данных...</p>
+</div>
+
+<div id="errorState" class="error-screen hidden">
+  <div style="font-size:3rem;margin-bottom:16px;">🔗</div>
+  <h2 style="color:var(--text-secondary);margin-bottom:8px;">Ссылка недействительна</h2>
+  <p>Обратитесь к менеджеру для получения актуальной ссылки.</p>
+</div>
+
+<div id="successState" class="form-wrap hidden">
+  <div class="success-screen">
+    <div class="success-icon">✅</div>
+    <h2 style="font-size:1.4rem;margin-bottom:8px;">Данные отправлены на проверку!</h2>
+    <p style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
+      Менеджер рассмотрит изменения и подтвердит их.
+    </p>
+    <p id="changesCountMsg" style="color:var(--text-muted);font-size:0.875rem;"></p>
+  </div>
+</div>
+
+<div id="formState" class="form-wrap hidden">
+  <div class="employee-header">
+    <div class="employee-avatar" id="avatarEl">?</div>
+    <div class="employee-info">
+      <h2 id="employeeName">Загрузка...</h2>
+      <p id="employeePos"></p>
+    </div>
+    <span id="changedFieldsBadge" class="badge badge-warning hidden" style="margin-left:auto">0 изм.</span>
+  </div>
+
+  <div id="pendingWarning" class="pending-warning hidden">
+    ⚠️ У вас уже есть изменения, ожидающие проверки. Отправка новой формы заменит предыдущие.
+  </div>
+  <div id="changesSummary" class="changes-summary">
+    Изменены поля: <span id="changedFieldsList"></span>
+  </div>
+
+  <form id="profileForm">
+    <div class="fields-grid">
+
+      <!-- ===== ОБРАЗОВАНИЕ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">🎓 Образование</div>
+          <div id="educationContainer"></div>
+          <button type="button" class="add-btn" id="addEducationBtn">+ Добавить учебное заведение</button>
+          <div class="template-panel" id="template_education">
+            <strong>Шаблон заполнения:</strong><br>
+            <strong>Учебное заведение:</strong> [Наименование учебного заведения, без сокращения]<br>
+            <strong>Квалификация/Ученая степень:</strong> [магистр, бакалавр, специалист, аспирант]<br>
+            <strong>Направление:</strong> [специальность]<br>
+            <strong>Год окончания:</strong> [2024]<br>
+            <em style="font-size:0.78rem;color:var(--text-muted);">Каждое учебное заведение добавляется отдельно через кнопку "+"</em>
+          </div>
+          <div class="example-hint" onclick="toggleTemplate('education')">👁 Показать шаблон</div>
+        </div>
+      </div>
+
+      <!-- ===== ДОЛЖНОСТЬ ===== -->
+      <div class="form-group">
+        <div class="section-card">
+          <div class="section-card-title">👔 Должность</div>
+          <select id="f_position" name="position" class="form-control"></select>
+          <div class="example-hint" onclick="toggleTemplate('position')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_position">
+            <strong>Шаблон заполнения:</strong> [Текущая занимаемая должность]<br>
+            <em style="font-size:0.78rem;color:var(--text-muted);">Выберите из списка. Если вашей должности нет — обратитесь к менеджеру.</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== КОНТАКТНЫЕ ДАННЫЕ ===== -->
+      <div class="form-group">
+        <div class="section-card">
+          <div class="section-card-title">📞 Контактные данные</div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label">Город</label>
+            <input id="f_city" type="text" class="form-control" placeholder="Москва">
+          </div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label">Email</label>
+            <input id="f_email" type="email" class="form-control" placeholder="ivanov@company.ru">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Телефон</label>
+            <input id="f_phone" type="text" class="form-control" placeholder="+7 (999) 123-45-67">
+          </div>
+          <div class="example-hint" onclick="toggleTemplate('contacts')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_contacts">
+            <strong>Шаблон заполнения:</strong><br>
+            <strong>Город:</strong> [Город проживания]<br>
+            <strong>Email:</strong> [Адрес эл. почты]<br>
+            <strong>Телефон:</strong> [Номер телефона]
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== СТАЖ РАБОТЫ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">⏳ Стаж работы</div>
+
+          <div class="form-group">
+            <label class="form-label">Общий стаж работы</label>
+            <input id="f_total_experience" type="text" class="form-control" placeholder="Например: 12 лет">
+            <div class="example-hint" onclick="toggleTemplate('total_experience')">👁 Показать шаблон</div>
+            <div class="template-panel" id="template_total_experience">
+              <strong>Шаблон заполнения:</strong> [Общий стаж работы сотрудника]<br>
+              <em style="font-size:0.78rem;color:var(--text-muted);">Например: "12 лет" или "Общий стаж: 12 лет"</em>
+            </div>
+          </div>
+
+          <div style="margin:16px 0 8px;font-weight:600;font-size:0.85rem;color:var(--text-secondary);">Стаж работы в 1С / История мест работы</div>
+          <div id="jobContainer"></div>
+          <button type="button" class="add-btn" id="addJobBtn">+ Добавить место работы</button>
+          <div class="example-hint" onclick="toggleTemplate('experience')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_experience">
+            <strong>Шаблон заполнения для каждого места работы:</strong><br>
+            <strong>Компания:</strong> [Наименование компании]<br>
+            <strong>Должность:</strong> [Должность]<br>
+            <strong>Период:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
+            <em style="font-size:0.78rem;color:var(--text-muted);">Каждое место работы добавляется отдельно через кнопку "+"</em>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ОБО МНЕ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">👤 Обо мне</div>
+          <textarea id="f_about" class="form-control" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
+          <div class="example-hint" onclick="toggleTemplate('about')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_about">
+            <strong>Пример заполнения:</strong><br>
+            Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.<br><br>
+            <strong>Шаблон:</strong> [Вводная информация о себе — опыт, специализация, ключевые навыки]
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== КОМПЕТЕНЦИИ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">📋 Ключевые компетенции</div>
+          <textarea id="f_competencies" class="form-control" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
+          <div class="example-hint" onclick="toggleTemplate('competencies')">👁 Показать чек-лист компетенций</div>
+          <div class="template-panel" id="template_competencies">
+            <p style="margin-bottom:8px;color:var(--text-muted);font-size:0.78rem;">Чек-лист помогает в заполнении. Отметьте подходящие пункты — они добавятся в поле выше.</p>
+            <div id="competencyChecklist"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== ПРОЕКТНЫЙ ОПЫТ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">📁 Проектный опыт</div>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту сотрудника</p>
+          <div id="projectExperienceContainer"></div>
+          <button type="button" class="add-btn" id="addProjectBtn">+ Добавить проект</button>
+          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_project_experience">
+            <strong>Шаблон заполнения для каждого проекта:</strong><br>
+            <strong>Период работы:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
+            <strong>Должность в проекте:</strong> [должность сотрудника в рамках проекта]<br>
+            <strong>Роль в проекте:</strong> [роль сотрудника в рамках проекта]<br>
+            <strong>Размер команды:</strong> [количество человек]<br>
+            <strong>Заказчик + отрасль:</strong> [Наименование Заказчика + отрасль]<br>
+            <strong>Описание проекта:</strong> [краткое описание проекта]<br>
+            <strong>Описание задачи:</strong> [описание задачи, реализованной сотрудником]<br>
+            <strong>Программные продукты / технологии:</strong> [Наименование + редакция, XML, JSON, REST API]<br>
+            <br>
+            <strong>Пример:</strong><br>
+            <strong>Период:</strong> 01.2024 - 06.2024<br>
+            <strong>Должность:</strong> Консультант по внедрению 1С<br>
+            <strong>Роль:</strong> Разработчик 1С<br>
+            <strong>Команда:</strong> 5 человек<br>
+            <strong>Заказчик:</strong> ООО "Пример" (нефтегазовая отрасль)<br>
+            <strong>Описание проекта:</strong> Внедрение 1С:ERP 2.5 для автоматизации управленческого учета<br>
+            <strong>Задача:</strong> Разработка интеграции с внешними системами через Datareon ESB<br>
+            <strong>Технологии:</strong> 1С:ERP 2.5, Datareon ESB, HTTP-сервисы, JSON
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== СЕРТИФИКАЦИЯ ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title">📜 Сертификация 1С и обучение</div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label">Сертификаты 1С</label>
+            <textarea id="f_certification" class="form-control" rows="4" placeholder="1С:Профессионал. ERP Управление предприятием 2"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:10px;">
+            <label class="form-label">Обучающие курсы</label>
+            <textarea id="f_courses" class="form-control" rows="3" placeholder="Наименование курса — Год прохождения"></textarea>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label class="form-label">Дата актуализации</label>
+            <input id="f_cert_date" type="text" class="form-control" placeholder="ММ.ГГГГ">
+          </div>
+          <div class="example-hint" onclick="toggleTemplate('certification')">👁 Показать шаблон</div>
+          <div class="template-panel" id="template_certification">
+            <strong>Шаблон заполнения:</strong><br>
+            <strong>Сертификаты:</strong> [Полное наименование сертификата 1C]<br>
+            <em>Например: 1С:Профессионал. ERP Управление предприятием 2; 1С:Специалист-консультант</em><br><br>
+            <strong>Обучающие курсы:</strong> [Наименование курса — Год прохождения обучения]<br>
+            <strong>Дата актуализации:</strong> [ММ.ГГГГ]
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <div style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
+      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">✉️ Отправить на проверку</button>
+      <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
+      <span id="noChangesHint" class="text-muted text-sm hidden">Изменений не обнаружено</span>
+    </div>
+  </form>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="/js/form.js"></script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Проверка изменений — Портфолио IS1C</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0; flex: 1; }
+    .review-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      margin-bottom: 24px;
+      overflow: hidden;
+      transition: border-color var(--transition);
+      animation: fadeIn 0.3s ease forwards;
+    }
+    .review-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .review-card-header .employee-info { display: flex; align-items: center; gap: 14px; }
+    .review-card-header .actions { display: flex; gap: 8px; }
+    .diff-wrap { padding: 20px 24px; }
+    .diff-field {
+      margin-bottom: 20px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+    .diff-field-label {
+      padding: 8px 14px;
+      background: rgba(255,255,255,0.03);
+      border-bottom: 1px solid var(--border);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .diff-cols { display: grid; grid-template-columns: 1fr 1fr; }
+    .diff-col { padding: 14px; }
+    .diff-col-old { border-right: 1px solid var(--border); background: rgba(239,68,68,0.04); }
+    .diff-col-new { background: rgba(34,197,94,0.04); }
+    .diff-col-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+    .diff-col-old .diff-col-title { color: var(--danger); }
+    .diff-col-new .diff-col-title { color: var(--success); }
+    .diff-text {
+      font-size: 0.85rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.6;
+      color: var(--text-secondary);
+    }
+    .diff-text.old-text { color: rgba(239,68,68,0.9); }
+    .diff-text.new-text { color: rgba(34,197,94,0.9); }
+    .reject-modal-form { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+    #noChanges { text-align: center; padding: 80px 20px; }
+    .submitted-at { font-size: 0.75rem; color: var(--text-muted); }
+  </style>
+</head>
+<body class="page-wrapper">
+
+<nav class="navbar">
+  <div class="navbar-brand">
+    <span class="logo-dot"></span>
+    IS1C Портфолио
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+    <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="main-content container">
+  <div style="display:flex;align-items:center;justify-content:center;gap:16px;margin-bottom:28px;flex-wrap:wrap;">
+    <h1 class="section-title" style="margin-bottom:0;">Проверка изменений</h1>
+    <div id="headerBadge"></div>
+  </div>
+
+  <div id="loadingState" style="text-align:center;padding:60px">
+    <span class="spinner" style="width:32px;height:32px;border-width:3px;"></span>
+  </div>
+
+  <div id="noChanges" class="hidden">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3;margin-bottom:16px;">
+      <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <h2 style="font-size:1.2rem;color:var(--text-secondary);margin-bottom:8px;">Нет ожидающих изменений</h2>
+    <p style="color:var(--text-muted);">Все изменения рассмотрены. Отлично!</p>
+    <a href="/index.html" class="btn btn-primary btn-sm" style="margin-top:20px;">← На дашборд</a>
+  </div>
+
+  <div id="reviewList"></div>
+</main>
+
+<!-- Reject Modal -->
+<div class="modal-overlay" id="rejectModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">Отклонить изменения</span>
+      <button class="btn btn-ghost btn-icon" id="closeRejectModal">✕</button>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
+      Укажите причину отклонения (необязательно). Сотрудник получит уведомление на email.
+    </p>
+    <div class="reject-modal-form">
+      <textarea id="rejectReason" class="form-control" rows="3" placeholder="Причина отклонения..."></textarea>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button class="btn btn-ghost" id="cancelReject">Отмена</button>
+        <button class="btn btn-danger" id="confirmReject">Отклонить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/review.js"></script>
+</body>
+</html>

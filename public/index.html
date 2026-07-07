@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Дашборд — Портфолио IS1C</title>
+  <meta name="description" content="Управление портфолио сотрудников — список сотрудников и ссылки">
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0; flex: 1; }
+    .employee-name { font-weight: 600; font-size: 0.9rem; }
+    .employee-pos  { font-size: 0.78rem; color: var(--text-muted); }
+    /* .link-cell теперь оформляется как ссылка в /css/styles.css */
+    .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+    .toolbar-left { flex: 1; }
+    #pendingBadge {
+      background: var(--danger);
+      color: #fff;
+      border-radius: 12px;
+      padding: 2px 8px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-left: 4px;
+    }
+    .import-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 9px 18px;
+      border-radius: var(--radius-sm);
+      background: transparent;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      font-size: 0.875rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .import-label:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+    #importFile { display: none; }
+    .progress-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(4px);
+      z-index: 400;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.25s;
+    }
+    .progress-overlay.active { opacity: 1; visibility: visible; }
+    .progress-box {
+      background: #16163a;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 32px 40px;
+      text-align: center;
+      min-width: 280px;
+    }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body class="page-wrapper">
+
+<!-- Navbar -->
+<nav class="navbar">
+  <div class="navbar-brand">
+    <span class="logo-dot"></span>
+    IS1C Портфолио
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+    <a href="/review.html" class="btn btn-warning btn-sm" id="reviewBtn">
+      ⚡ Проверить изменения <span id="pendingBadge" class="hidden">0</span>
+    </a>
+    <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<!-- Main -->
+<main class="main-content container">
+
+  <!-- Stats -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-value" id="statTotal">—</div>
+      <div class="stat-label">Всего сотрудников</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--warning)" id="statPending">—</div>
+      <div class="stat-label">Ожидают подтверждения</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-value" style="color:var(--success)" id="statApproved">—</div>
+      <div class="stat-label">Изменений подтверждено</div>
+    </div>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="searchInput" type="text" class="form-control" placeholder="Поиск по ФИО или должности..." style="width:320px">
+      </div>
+      <select id="filterPosition" class="form-control" style="width:auto;min-width:200px;">
+        <option value="">— Все должности —</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">
+        <input type="checkbox" id="filterArchived" checked> Показывать архив
+      </label>
+    </div>
+    <button id="addEmployeeBtn" class="btn btn-primary btn-sm">➕ Сотрудника</button>
+    <label class="import-label" for="importFile">
+      📥 Импорт Excel
+      <input type="file" id="importFile" accept=".xlsx,.xls">
+    </label>
+    <a href="/api/excel/export" class="btn btn-ghost btn-sm">📤 Экспорт Excel</a>
+  </div>
+
+  <!-- Table -->
+  <div class="card" style="padding:0;overflow:hidden;">
+    <div class="table-wrap">
+      <table class="table" id="employeesTable">
+        <thead>
+          <tr>
+            <th>Сотрудник</th>
+            <th>Должность</th>
+            <th>Город</th>
+            <th>Статус</th>
+            <th>Персональная ссылка</th>
+            <th style="text-align:right">Действия</th>
+          </tr>
+        </thead>
+        <tbody id="employeesTbody">
+          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">
+            <span class="spinner"></span>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Add Employee Modal -->
+<div class="modal-overlay" id="addEmployeeModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <span class="modal-title">➕ Новый сотрудник</span>
+      <button class="btn btn-ghost btn-icon" id="closeAddModal">✕</button>
+    </div>
+    <form id="addEmployeeForm">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">ФИО <span class="required">*</span></label>
+          <input type="text" class="form-control" id="new_name" placeholder="Иванов Иван Иванович" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Должность</label>
+          <select class="form-control" id="new_position"></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Email</label>
+          <input type="email" class="form-control" id="new_email" placeholder="ivanov@company.ru">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Город</label>
+          <input type="text" class="form-control" id="new_city" placeholder="Москва">
+        </div>
+      </div>
+      <div id="addResult" style="margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost" id="cancelAdd">Отмена</button>
+        <button type="submit" class="btn btn-primary" id="saveNewBtn">➕ Добавить и скопировать ссылку</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Progress overlay -->
+<div class="progress-overlay" id="progressOverlay">
+  <div class="progress-box">
+    <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 16px;"></div>
+    <div id="progressMsg" style="color:var(--text-secondary);font-size:0.9rem;">Импорт...</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-container" id="toastContainer"></div>
+
+<script src="/js/manager.js"></script>
+</body>
+</html>

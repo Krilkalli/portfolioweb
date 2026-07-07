@@ -1,0 +1,337 @@
+function toast(msg, type = 'info') {
+  const c = document.getElementById('toastContainer');
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  t.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> ${msg}`;
+  c.appendChild(t);
+  setTimeout(() => { t.style.animation = 'none'; t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
+}
+
+function initials(name) {
+  return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
+}
+
+function formatDate(str) {
+  if (!str) return '—';
+  return new Date(str).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ─── Theme ──────────────────────────────────────────────────────────────────
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  if (saved === 'light') {
+    document.body.classList.add('light-theme');
+    document.getElementById('themeToggle').textContent = '☀️';
+  }
+}
+
+document.getElementById('themeToggle').addEventListener('click', () => {
+  document.body.classList.toggle('light-theme');
+  const isLight = document.body.classList.contains('light-theme');
+  localStorage.setItem('theme', isLight ? 'light' : 'dark');
+  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+});
+
+// ─── Data ───────────────────────────────────────────────────────────────────
+let employees = [];
+let positionsList = [];
+
+async function loadStats() {
+  try {
+    const r = await fetch('/api/stats');
+    const s = await r.json();
+    document.getElementById('statTotal').textContent = s.total;
+    document.getElementById('statPending').textContent = s.pending;
+    document.getElementById('statApproved').textContent = s.approved;
+
+    const badge = document.getElementById('pendingBadge');
+    if (s.pending > 0) { badge.textContent = s.pending; badge.classList.remove('hidden'); }
+    else { badge.classList.add('hidden'); }
+  } catch {}
+}
+
+async function loadEmployees() {
+  try {
+    const r = await fetch('/api/employees');
+    if (r.status === 401) { location.href = '/login.html'; return; }
+    employees = await r.json();
+    applyFilter();
+  } catch (e) {
+    document.getElementById('employeesTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:40px">Ошибка загрузки данных</td></tr>`;
+  }
+}
+
+async function loadPositions() {
+  try {
+    const r = await fetch('/api/positions');
+    if (r.ok) {
+      const d = await r.json();
+      positionsList = d.positions || [];
+      populatePositionSelects();
+    }
+  } catch {}
+}
+
+function populatePositionSelects() {
+  const selects = document.querySelectorAll('select[id="new_position"]');
+  selects.forEach(sel => {
+    sel.innerHTML = '<option value="">— Не выбрана —</option>';
+    positionsList.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      sel.appendChild(opt);
+    });
+  });
+  // Also populate the filter dropdown
+  const filterSel = document.getElementById('filterPosition');
+  if (filterSel) {
+    const curr = filterSel.value;
+    filterSel.innerHTML = '<option value="">— Все должности —</option>';
+    positionsList.forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p;
+      opt.textContent = p;
+      filterSel.appendChild(opt);
+    });
+    filterSel.value = curr;
+  }
+}
+
+function renderTable(list) {
+  const tbody = document.getElementById('employeesTbody');
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = list.map(e => `
+    <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
+          <div>
+            <div class="employee-name">${e.name}${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted)">${e.email || '—'}</div>
+          </div>
+        </div>
+      </td>
+      <td><span class="employee-pos">${e.position || '—'}</span></td>
+      <td><span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span></td>
+      <td>
+        ${e.status === 'archived'
+          ? '<span class="badge badge-muted">Архив</span>'
+          : e.pendingCount > 0
+            ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
+            : `<span class="badge badge-muted">Актуально</span>`}
+      </td>
+      <td>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${e.status !== 'archived'
+            ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="Открыть: ${e.link}">${e.link}</a>
+               <button class="btn btn-ghost btn-icon btn-sm" title="Скопировать ссылку" onclick="copyLink(${e.id})">
+                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+               </button>`
+            : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
+        </div>
+      </td>
+      <td>
+        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+          ${e.status !== 'archived'
+            ? `<a href="${e.link}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
+               <button class="btn btn-ghost btn-sm" onclick="copyLink(${e.id})">🔗 Скопировать</button>
+               <button class="btn btn-ghost btn-sm" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
+               <a href="/api/employees/${e.id}/resume" class="btn btn-ghost btn-sm">📄 Резюме</a>
+               ${e.pendingCount > 0 ? `<a href="/review.html" class="btn btn-warning btn-sm">⚡ Проверить</a>` : ''}
+               <button class="btn btn-ghost btn-sm" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Архивировать">📦 Архив</button>`
+            : `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`}
+        </div>
+      </td>
+    </tr>
+  `).join('');
+
+  window._employeeLinks = Object.fromEntries(list.map(e => [e.id, e.link]));
+}
+
+// ─── Actions ─────────────────────────────────────────────────────────────────
+function copyLink(id) {
+  const link = window._employeeLinks?.[id];
+  if (!link) return;
+  navigator.clipboard.writeText(link).then(() => toast('Ссылка скопирована в буфер обмена', 'success'))
+    .catch(() => { prompt('Скопируйте ссылку:', link); });
+}
+
+async function regenerateToken(id, name) {
+  if (!confirm(`Сгенерировать новую ссылку для ${name}?\nСтарая ссылка перестанет работать.`)) return;
+  try {
+    const r = await fetch(`/api/employees/${id}/new-token`, { method: 'POST' });
+    const d = await r.json();
+    toast(`Новая ссылка создана для ${name}`, 'success');
+    await loadEmployees();
+    navigator.clipboard.writeText(d.link).catch(() => {});
+  } catch { toast('Ошибка при обновлении ссылки', 'error'); }
+}
+
+async function archiveEmployee(id, name) {
+  if (!confirm(`Архивировать сотрудника «${name}»?\nОн будет скрыт из основного списка, но данные сохранятся.`)) return;
+  try {
+    const r = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      toast(`Сотрудник «${name}» архивирован`, 'info');
+      await loadEmployees();
+      await loadStats();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка при архивации', 'error');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
+}
+
+async function restoreEmployee(id, name) {
+  try {
+    const r = await fetch(`/api/employees/${id}/restore`, { method: 'POST' });
+    if (r.ok) {
+      toast(`Сотрудник «${name}» восстановлен`, 'success');
+      await loadEmployees();
+      await loadStats();
+    } else { toast('Ошибка восстановления', 'error'); }
+  } catch { toast('Ошибка соединения', 'error'); }
+}
+
+// ─── Add Employee ────────────────────────────────────────────────────────────
+document.getElementById('addEmployeeBtn').addEventListener('click', () => {
+  document.getElementById('addEmployeeModal').classList.add('active');
+  document.getElementById('addResult').innerHTML = '';
+  document.getElementById('addEmployeeForm').reset();
+  populatePositionSelects();
+});
+
+document.getElementById('closeAddModal').addEventListener('click', () => {
+  document.getElementById('addEmployeeModal').classList.remove('active');
+});
+document.getElementById('cancelAdd').addEventListener('click', () => {
+  document.getElementById('addEmployeeModal').classList.remove('active');
+});
+document.getElementById('addEmployeeModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('addEmployeeModal').classList.remove('active');
+});
+
+document.getElementById('addEmployeeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('saveNewBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Создание...';
+
+  const payload = {
+    name: document.getElementById('new_name').value.trim(),
+    position: document.getElementById('new_position').value,
+    email: document.getElementById('new_email').value.trim(),
+    city: document.getElementById('new_city').value.trim(),
+  };
+
+  if (!payload.name) {
+    toast('Укажите ФИО сотрудника', 'error');
+    btn.disabled = false;
+    btn.innerHTML = '➕ Добавить и скопировать ссылку';
+    return;
+  }
+
+  try {
+    const r = await fetch('/api/employees', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast(`Сотрудник ${payload.name} добавлен`, 'success');
+      document.getElementById('addEmployeeModal').classList.remove('active');
+      navigator.clipboard.writeText(d.employee.link).catch(() => {});
+      document.getElementById('addResult').innerHTML = `
+        <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:12px;font-size:0.85rem;">
+          ✅ Сотрудник добавлен. Ссылка скопирована в буфер обмена.<br>
+          <a href="${d.employee.link}" target="_blank" style="font-size:0.8rem;">${d.employee.link}</a>
+        </div>`;
+      await loadEmployees();
+      await loadStats();
+    } else {
+      toast(d.error || 'Ошибка создания', 'error');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
+  btn.disabled = false;
+  btn.innerHTML = '➕ Добавить и скопировать ссылку';
+});
+
+// ─── Search & Filter ──────────────────────────────────────────────────────────
+let showArchived = true;
+
+document.getElementById('filterArchived').addEventListener('change', (e) => {
+  showArchived = e.target.checked;
+  applyFilter();
+});
+
+document.getElementById('searchInput').addEventListener('input', () => { applyFilter(); });
+document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
+
+function applyFilter() {
+  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  const pos = document.getElementById('filterPosition').value;
+  let list = employees;
+  if (!showArchived) list = list.filter(e => e.status !== 'archived');
+  if (pos) list = list.filter(e => e.position === pos);
+  list = list.filter(emp =>
+    emp.name.toLowerCase().includes(q) ||
+    (emp.position || '').toLowerCase().includes(q) ||
+    (emp.city || '').toLowerCase().includes(q)
+  );
+  renderTable(list);
+}
+
+// ─── Import Excel ─────────────────────────────────────────────────────────────
+document.getElementById('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!confirm('Импорт полностью ЗАМЕНИТ текущий список сотрудников данными из файла.\nВсе существующие сотрудники будут удалены.\n\nПродолжить?')) {
+    e.target.value = '';
+    return;
+  }
+
+  const overlay = document.getElementById('progressOverlay');
+  const msg = document.getElementById('progressMsg');
+  overlay.classList.add('active');
+  msg.textContent = 'Импорт файла...';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
+    const d = await r.json();
+    overlay.classList.remove('active');
+    e.target.value = '';
+    if (r.ok) {
+      toast(`Импорт завершён: список заменён, добавлено ${d.imported} сотрудников (было удалено: ${d.removed})`, 'success');
+      await loadEmployees();
+      await loadStats();
+    } else { toast(d.error || 'Ошибка импорта', 'error'); }
+  } catch {
+    overlay.classList.remove('active');
+    toast('Ошибка при импорте файла', 'error');
+  }
+});
+
+// ─── Logout ──────────────────────────────────────────────────────────────────
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  location.href = '/login.html';
+});
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+(async () => {
+  const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
+  if (!auth.authenticated) { location.href = '/login.html'; return; }
+
+  initTheme();
+  await Promise.all([loadStats(), loadEmployees(), loadPositions()]);
+})();
