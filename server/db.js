@@ -57,6 +57,15 @@ db.exec(`
     key TEXT PRIMARY KEY,
     value TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS employee_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+    rating INTEGER,
+    comment TEXT DEFAULT '',
+    submitted_at TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id);
 `);
 // Миграция: добавить колонку status если БД создана до этого обновления
 try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"); } catch (e) {}
@@ -97,6 +106,7 @@ const stApproveChange = db.prepare('UPDATE pending_changes SET status = \'approv
 const stRejectChange  = db.prepare('UPDATE pending_changes SET status = \'rejected\', reviewed_at = ?, reject_reason = ? WHERE id = ?');
 const stApproveAll    = db.prepare('UPDATE pending_changes SET status = \'approved\', reviewed_at = ? WHERE employee_id = ? AND status = \'pending\'');
 const stRejectAll     = db.prepare('UPDATE pending_changes SET status = \'rejected\', reviewed_at = ?, reject_reason = ? WHERE employee_id = ? AND status = \'pending\'');
+const stInsertFeedback = db.prepare('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES (?, ?, ?, ?)');
 
 // ─── Нормализация имени для поиска дубликатов ──────────────────────────────
 function normalizeName(name) {
@@ -730,6 +740,10 @@ const helpers = {
     const pendingCount = stCountPending.get().cnt;
     const approvedCount = db.prepare("SELECT COUNT(*) cnt FROM pending_changes WHERE status = 'approved'").get().cnt;
     return { total: empCount, pending: pendingCount, approved: approvedCount };
+  },
+
+  saveFeedback(employeeId, rating, comment) {
+    stInsertFeedback.run(Number(employeeId), rating || null, comment || '', new Date().toISOString());
   },
 };
 

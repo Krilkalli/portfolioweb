@@ -17,9 +17,8 @@ router.get('/:token', (req, res) => {
   if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
   // Parse contacts into city/email/phone
   const contactLines = (emp.contacts || '').split('\n').filter(l => l.trim());
-  emp.city = contactLines[0] || '';
-  emp.email = contactLines.find(l => l.includes('@')) || '';
-  emp.phone = contactLines.find(l => l.includes('+') || l.includes('(') || /^\d/.test(l)) || '';
+  emp.city = emp.city || contactLines[0] || '';
+  emp.email = emp.email || contactLines.find(l => l.includes('@')) || '';
   // Parse certification into sub-fields
   if (typeof emp.certification === 'string' && emp.certification) {
     const parts = emp.certification.split(/\n\s*\n/);
@@ -39,7 +38,7 @@ router.post('/:token/submit', async (req, res) => {
     return res.status(400).json({ error: 'Нет данных для сохранения' });
 
   // Merge city/email/phone into contacts
-  const contacts = [fields.city, fields.email, fields.phone].filter(Boolean).join('\n');
+  const contacts = [fields.city, fields.email].filter(Boolean).join('\n');
   const submitFields = {
     ...fields,
     contacts,
@@ -67,6 +66,18 @@ router.post('/:token/submit', async (req, res) => {
   notifyEmployeeSubmitted(emp).catch(() => {});
 
   res.json({ ok: true, changed: changes.length });
+});
+
+router.post('/:token/feedback', (req, res) => {
+  const emp = helpers.getEmployeeByToken(req.params.token);
+  if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+  const { rating, comment } = req.body;
+  if (rating != null) {
+    const r = Number(rating);
+    if (r < 1 || r > 5) return res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
+  }
+  helpers.saveFeedback(emp.id, rating ? Number(rating) : null, comment || '');
+  res.json({ ok: true });
 });
 
 module.exports = router;
