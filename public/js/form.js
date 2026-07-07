@@ -391,7 +391,6 @@ function showForm(emp) {
   const certParts = certText.split(/\n\s*\n/);
   const certEl = document.getElementById('f_certification');
   const coursesEl = document.getElementById('f_courses');
-  const dateEl = document.getElementById('f_cert_date');
   if (certEl) {
     certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^(Сертификация 1С:?|Обучающие курсы:?)[\s\S]*/i, m => '') : '') || '';
     originalValues.certification = certEl.value;
@@ -402,10 +401,12 @@ function showForm(emp) {
     originalValues.courses = coursesEl.value;
     coursesEl.addEventListener('input', trackChanges);
   }
-  if (dateEl) {
-    dateEl.value = emp.cert_date || '';
-    originalValues.cert_date = dateEl.value;
-    dateEl.addEventListener('input', trackChanges);
+  // Display last updated date
+  const dateEl = document.getElementById('lastUpdatedDate');
+  if (dateEl && emp.updated_at) {
+    const d = new Date(emp.updated_at);
+    const formatted = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    dateEl.textContent = '📅 Дата актуализации: ' + formatted;
   }
 
   trackChanges();
@@ -422,7 +423,7 @@ function trackChanges() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email', phone: 'f_phone',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses', cert_date: 'f_cert_date',
+    certification: 'f_certification', courses: 'f_courses',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -472,7 +473,6 @@ document.getElementById('profileForm').addEventListener('submit', async (e) => {
     competencies: document.getElementById('f_competencies')?.value.trim() || '',
     certification: document.getElementById('f_certification')?.value.trim() || '',
     courses: document.getElementById('f_courses')?.value.trim() || '',
-    cert_date: document.getElementById('f_cert_date')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),

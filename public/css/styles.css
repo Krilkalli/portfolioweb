@@ -198,6 +198,14 @@ textarea.form-control {
   box-shadow: 0 0 0 3px rgba(245,158,11,0.15);
 }
 
+select.form-control {
+  cursor: pointer;
+}
+select.form-control option {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 /* ─── Badge ──────────────────────────────────────────────────────────────── */
 .badge {
   display: inline-flex;

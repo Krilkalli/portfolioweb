@@ -369,17 +369,12 @@
             <label class="form-label">Обучающие курсы</label>
             <textarea id="f_courses" class="form-control" rows="3" placeholder="Наименование курса — Год прохождения"></textarea>
           </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Дата актуализации</label>
-            <input id="f_cert_date" type="text" class="form-control" placeholder="ММ.ГГГГ">
-          </div>
           <div class="example-hint" onclick="toggleTemplate('certification')">👁 Показать шаблон</div>
           <div class="template-panel" id="template_certification">
             <strong>Шаблон заполнения:</strong><br>
             <strong>Сертификаты:</strong> [Полное наименование сертификата 1C]<br>
             <em>Например: 1С:Профессионал. ERP Управление предприятием 2; 1С:Специалист-консультант</em><br><br>
-            <strong>Обучающие курсы:</strong> [Наименование курса — Год прохождения обучения]<br>
-            <strong>Дата актуализации:</strong> [ММ.ГГГГ]
+            <strong>Обучающие курсы:</strong> [Наименование курса — Год прохождения обучения]
           </div>
         </div>
       </div>
@@ -390,6 +385,7 @@
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">✉️ Отправить на проверку</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
       <span id="noChangesHint" class="text-muted text-sm hidden">Изменений не обнаружено</span>
+      <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
     </div>
   </form>
 </div>
