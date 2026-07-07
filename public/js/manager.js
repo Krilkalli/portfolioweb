@@ -125,21 +125,15 @@ function renderTable(list) {
             ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${e.status !== 'archived'
-            ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="Открыть: ${e.link}">${e.link}</a>
-               <button class="btn btn-ghost btn-icon btn-sm" title="Скопировать ссылку" onclick="copyLink(${e.id})">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-               </button>`
-            : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
-        </div>
+      <td class="col-link">
+        ${e.status !== 'archived'
+          ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">Открыть ссылку</a>`
+          : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td>
-        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
+      <td class="col-actions">
+        <div class="actions-cell">
           ${e.status !== 'archived'
-            ? `<a href="${e.link}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
-               <button class="btn btn-ghost btn-sm" onclick="copyLink(${e.id})">🔗 Скопировать</button>
+            ? `<a href="${e.link}&mode=view" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
                <button class="btn btn-ghost btn-sm" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
                <a href="/api/employees/${e.id}/resume" class="btn btn-ghost btn-sm">📄 Резюме</a>
                ${e.pendingCount > 0 ? `<a href="/review.html" class="btn btn-warning btn-sm">⚡ Проверить</a>` : ''}
@@ -149,16 +143,6 @@ function renderTable(list) {
       </td>
     </tr>
   `).join('');
-
-  window._employeeLinks = Object.fromEntries(list.map(e => [e.id, e.link]));
-}
-
-// ─── Actions ─────────────────────────────────────────────────────────────────
-function copyLink(id) {
-  const link = window._employeeLinks?.[id];
-  if (!link) return;
-  navigator.clipboard.writeText(link).then(() => toast('Ссылка скопирована в буфер обмена', 'success'))
-    .catch(() => { prompt('Скопируйте ссылку:', link); });
 }
 
 async function regenerateToken(id, name) {
