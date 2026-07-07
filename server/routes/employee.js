@@ -45,7 +45,7 @@ router.post('/:token/submit', async (req, res) => {
     contacts,
   };
   // Merge certification sub-fields into single text
-  const certParts = [fields.certification, fields.courses ? 'Обучающие курсы: ' + fields.courses : '', fields.cert_date ? 'Дата актуализации: ' + fields.cert_date : ''].filter(Boolean);
+  const certParts = [fields.certification, fields.courses ? 'Обучающие курсы: ' + fields.courses : ''].filter(Boolean);
   if (certParts.length) submitFields.certification = 'Сертификация 1С:\n' + certParts.join('\n\n');
   else submitFields.certification = '';
 

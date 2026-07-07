@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="/css/styles.css">
   <style>
     .main-content { padding: 32px 0; flex: 1; }
-    .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .settings-list { display: flex; flex-direction: column; gap: 24px; }
     .settings-section { margin-bottom: 8px; }
     .settings-section h2 { font-size: 1rem; font-weight: 600; margin-bottom: 16px; color: var(--text-primary); }
     .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
@@ -44,7 +44,14 @@
     .collapsible .collapsible-header { cursor: pointer; user-select: none; }
     .collapsible .collapsible-header .collapse-icon { font-size: 1rem; transition: transform var(--transition); }
     .collapsible.collapsed .collapsible-header .collapse-icon { transform: rotate(-90deg); }
-    @media (max-width: 768px) { .settings-grid { grid-template-columns: 1fr; } }
+
+    .smtp-hint {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      margin-top: -12px;
+      margin-bottom: 16px;
+      line-height: 1.5;
+    }
   </style>
 </head>
 <body class="page-wrapper">
@@ -64,97 +71,99 @@
 <main class="main-content container" style="max-width:900px;">
   <h1 class="section-title">Настройки</h1>
 
-  <div class="settings-grid">
+  <div class="settings-list">
     <!-- SMTP Card -->
-    <div class="card collapsible">
-      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📧 SMTP / Email</span>
-        <span class="collapse-icon">−</span>
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">📧 SMTP / Email — настройка почтовых уведомлений</span>
+      </div>
+      <div class="smtp-hint">
+        Система использует SMTP для отправки уведомлений сотрудникам и менеджеру.
+        Заполните данные вашего почтового сервера. Обычно используется порт 587 (STARTTLS) или 465 (SSL/TLS).
       </div>
       <form id="smtpForm">
         <div class="form-group">
-          <label class="form-label" for="smtp_host">SMTP хост</label>
+          <label class="form-label" for="smtp_host">Сервер (SMTP хост) <span class="text-muted" style="font-weight:400;">— адрес почтового сервера</span></label>
           <input id="smtp_host" name="smtp_host" type="text" class="form-control" placeholder="mail.company.ru">
         </div>
         <div class="form-group">
-          <label class="form-label" for="smtp_port">SMTP порт</label>
+          <label class="form-label" for="smtp_port">Порт <span class="text-muted" style="font-weight:400;">— обычно 587 или 465</span></label>
           <input id="smtp_port" name="smtp_port" type="number" class="form-control" placeholder="587" value="587">
         </div>
         <div class="form-group">
-          <label class="form-label" for="smtp_user">Логин (email)</label>
+          <label class="form-label" for="smtp_user">Логин <span class="text-muted" style="font-weight:400;">— email-адрес для отправки писем</span></label>
           <input id="smtp_user" name="smtp_user" type="email" class="form-control" placeholder="noreply@company.ru">
         </div>
         <div class="form-group">
-          <label class="form-label" for="smtp_pass">Пароль</label>
-          <input id="smtp_pass" name="smtp_pass" type="password" class="form-control" placeholder="Оставьте пустым, чтобы не менять">
+          <label class="form-label" for="smtp_pass">Пароль <span class="text-muted" style="font-weight:400;">— оставьте пустым, чтобы не менять</span></label>
+          <input id="smtp_pass" name="smtp_pass" type="password" class="form-control" placeholder="Пароль от почтового ящика">
         </div>
         <div class="form-group">
-          <label class="form-label" for="smtp_from">Имя отправителя</label>
-          <input id="smtp_from" name="smtp_from" type="text" class="form-control" placeholder="Портфолио IS1C <noreply@company.ru>">
+          <label class="form-label" for="smtp_from">Имя отправителя <span class="text-muted" style="font-weight:400;">— как будут подписаны письма</span></label>
+          <input id="smtp_from" name="smtp_from" type="text" class="form-control" placeholder="Портфолио IS1C &lt;noreply@company.ru&gt;">
+          <div class="form-hint">Пример: <code>Портфолио IS1C &lt;noreply@company.ru&gt;</code></div>
         </div>
         <div class="form-group">
-          <label class="form-label" for="manager_email">Email менеджера (для уведомлений)</label>
+          <label class="form-label" for="manager_email">Email менеджера <span class="text-muted" style="font-weight:400;">— на этот адрес приходят уведомления о новых изменениях</span></label>
           <input id="manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru">
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="submit" class="btn btn-primary" id="saveSmtpBtn">Сохранить</button>
-          <button type="button" class="btn btn-ghost" id="testEmailBtn">Проверить соединение</button>
+          <button type="submit" class="btn btn-primary" id="saveSmtpBtn">💾 Сохранить настройки</button>
+          <button type="button" class="btn btn-ghost" id="testEmailBtn">🔌 Проверить соединение</button>
         </div>
         <div id="smtpResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
 
-    <!-- Right Column -->
-    <div>
-      <!-- Positions Card -->
-      <div class="card collapsible" style="margin-bottom:24px;">
-        <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-          <span class="card-title">👔 Управление должностями</span>
-          <span class="collapse-icon">−</span>
-        </div>
-        <div class="position-list" id="positionList"></div>
-        <div class="add-position-row">
-          <input type="text" class="form-control" id="newPositionInput" placeholder="Название новой должности">
-          <button class="btn btn-primary" id="addPositionBtn">Добавить</button>
-        </div>
-        <div id="positionResult" style="margin-top:8px;font-size:0.85rem;"></div>
+    <!-- Positions Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">👔 Управление должностями</span>
+        <span class="collapse-icon">−</span>
       </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список должностей, доступных для выбора сотрудниками в форме.</p>
+      <div class="position-list" id="positionList"></div>
+      <div class="add-position-row">
+        <input type="text" class="form-control" id="newPositionInput" placeholder="Название новой должности">
+        <button class="btn btn-primary" id="addPositionBtn">Добавить</button>
+      </div>
+      <div id="positionResult" style="margin-top:8px;font-size:0.85rem;"></div>
+    </div>
 
-      <!-- Password Card -->
-      <div class="card collapsible" style="margin-bottom:24px;">
-        <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-          <span class="card-title">🔑 Смена пароля</span>
-          <span class="collapse-icon">−</span>
-        </div>
-        <form id="passwordForm">
-          <div class="form-group">
-            <label class="form-label" for="new_password">Новый пароль</label>
-            <input id="new_password" type="password" class="form-control" placeholder="Минимум 8 символов" autocomplete="new-password">
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="confirm_password">Повторите пароль</label>
-            <input id="confirm_password" type="password" class="form-control" placeholder="Повторите пароль">
-          </div>
-          <button type="submit" class="btn btn-primary" id="savePasswordBtn">Сменить пароль</button>
-          <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
-        </form>
+    <!-- Password Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">🔑 Смена пароля</span>
+        <span class="collapse-icon">−</span>
       </div>
+      <form id="passwordForm">
+        <div class="form-group">
+          <label class="form-label" for="new_password">Новый пароль</label>
+          <input id="new_password" type="password" class="form-control" placeholder="Минимум 8 символов" autocomplete="new-password">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="confirm_password">Повторите пароль</label>
+          <input id="confirm_password" type="password" class="form-control" placeholder="Повторите пароль">
+        </div>
+        <button type="submit" class="btn btn-primary" id="savePasswordBtn">🔑 Сменить пароль</button>
+        <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
+      </form>
+    </div>
 
-      <!-- Info Card -->
-      <div class="card collapsible">
-        <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-          <span class="card-title">ℹ️ О системе</span>
-          <span class="collapse-icon">−</span>
-        </div>
-        <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.7;">
-          <strong>IS1C Портфолио</strong> — система автоматизации данных сотрудников.<br><br>
-          Каждый сотрудник получает уникальную ссылку для обновления своего профиля.
-          Изменения отправляются менеджеру на проверку перед сохранением.<br><br>
-          При наличии файла <code style="color:var(--accent);">templates/resume_template.docx</code> —
-          резюме будет генерироваться по нему.
-        </p>
+    <!-- Info Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">ℹ️ О системе</span>
+        <span class="collapse-icon">−</span>
       </div>
+      <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.7;">
+        <strong>IS1C Портфолио</strong> — система автоматизации данных сотрудников.<br><br>
+        Каждый сотрудник получает уникальную ссылку для обновления своего профиля.
+        Изменения отправляются менеджеру на проверку перед сохранением.<br><br>
+        При наличии файла <code style="color:var(--accent);">templates/resume_template.docx</code> —
+        резюме будет генерироваться по нему.
+      </p>
     </div>
   </div>
 </main>
