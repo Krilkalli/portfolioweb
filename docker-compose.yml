@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - '3000:3000'
+    environment:
+      - NODE_ENV=production
+      - SESSION_SECRET=${SESSION_SECRET:-change-me-in-production}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - SMTP_FROM=${SMTP_FROM:-}
+      - MANAGER_EMAIL=${MANAGER_EMAIL:-}
+      - PORT=3000
+      - HOST=0.0.0.0
+      - DEFAULT_MANAGER_PASSWORD=${DEFAULT_MANAGER_PASSWORD:-Admin1234!}
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped

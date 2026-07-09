@@ -102,7 +102,7 @@ function populatePositionSelects() {
 function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => `
@@ -125,6 +125,7 @@ function renderTable(list) {
             ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
+      <td style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
       <td class="col-link">
         ${e.status !== 'archived'
           ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">Открыть ссылку</a>`
@@ -315,6 +316,9 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
+
+  const nm = document.getElementById('navbarManager');
+  if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
 
   initTheme();
   await Promise.all([loadStats(), loadEmployees(), loadPositions()]);

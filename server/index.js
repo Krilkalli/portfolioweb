@@ -3,6 +3,58 @@ const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const config = require('./config');
+const Database = require('better-sqlite3');
+const { Store } = require('express-session');
+
+// ─── SQLite Session Store ─────────────────────────────────────────────────────
+const SESSION_DB_PATH = path.join(__dirname, '..', 'data', 'sessions.db');
+const sessionDb = new Database(SESSION_DB_PATH);
+sessionDb.pragma('journal_mode = WAL');
+sessionDb.exec(`
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    expired REAL NOT NULL,
+    sess TEXT NOT NULL
+  )
+`);
+const stGetSession = sessionDb.prepare('SELECT sess FROM sessions WHERE sid = ? AND expired > ?');
+const stUpsertSession = sessionDb.prepare(
+  'INSERT OR REPLACE INTO sessions (sid, expired, sess) VALUES (?, ?, ?)'
+);
+const stDelSession = sessionDb.prepare('DELETE FROM sessions WHERE sid = ?');
+const stTouchSession = sessionDb.prepare('UPDATE sessions SET expired = ? WHERE sid = ?');
+const stCleanExpired = sessionDb.prepare('DELETE FROM sessions WHERE expired <= ?');
+
+class SqliteStore extends Store {
+  get(sid, cb) {
+    try {
+      const row = stGetSession.get(sid, Date.now());
+      if (!row) return cb(null, null);
+      cb(null, JSON.parse(row.sess));
+    } catch (e) { cb(e); }
+  }
+  set(sid, session, cb) {
+    try {
+      const maxAge = session.cookie && session.cookie.maxAge
+        ? session.cookie.maxAge : 8 * 60 * 60 * 1000;
+      stUpsertSession.run(sid, Date.now() + maxAge, JSON.stringify(session));
+      cb(null);
+    } catch (e) { cb(e); }
+  }
+  destroy(sid, cb) {
+    try { stDelSession.run(sid); cb(null); } catch (e) { cb(e); }
+  }
+  touch(sid, session, cb) {
+    try {
+      const maxAge = session.cookie && session.cookie.maxAge
+        ? session.cookie.maxAge : 8 * 60 * 60 * 1000;
+      stTouchSession.run(Date.now() + maxAge, sid);
+      cb(null);
+    } catch (e) { cb(e); }
+  }
+}
+// Clean expired sessions every 15 minutes
+setInterval(() => { try { stCleanExpired.run(Date.now()); } catch {} }, 15 * 60 * 1000);
 
 const app = express();
 
@@ -11,6 +63,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
+  store: new SqliteStore(),
   secret: config.sessionSecret,
   resave: false,
   saveUninitialized: false,
@@ -52,7 +105,7 @@ app.use((req, res) => {
 });
 
 // ─── Запуск ───────────────────────────────────────────────────────────────────
-app.listen(config.port, () => {
+app.listen(config.port, config.host, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
   ║   Портфолио IS1C — сервер запущен        ║

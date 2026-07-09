@@ -320,6 +320,10 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
+
+  const nm = document.getElementById('navbarManager');
+  if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
+
   initTheme();
   await loadPending();
 })();

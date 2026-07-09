@@ -24,7 +24,19 @@
 
     <form id="loginForm" autocomplete="on">
       <div class="form-group">
-        <label class="form-label" for="password">Пароль менеджера</label>
+        <label class="form-label" for="login">Логин</label>
+        <input
+          id="login"
+          name="login"
+          type="text"
+          class="form-control"
+          placeholder="admin"
+          autocomplete="username"
+          required
+        >
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="password">Пароль</label>
         <input
           id="password"
           name="password"
@@ -46,8 +58,8 @@
       </button>
 
       <p class="text-xs text-muted" style="text-align:center;margin-top:20px;line-height:1.5;">
-        Первый вход: пароль <strong style="color:var(--text-secondary);">Admin1234!</strong><br>
-        Смените его в настройках после входа.
+        Первый вход: <strong style="color:var(--text-secondary);">admin</strong> / <strong style="color:var(--text-secondary);">Admin1234!</strong><br>
+        Смените пароль в настройках после входа.
       </p>
     </form>
     <div style="text-align:center;margin-top:16px;">
@@ -79,6 +91,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn');
   const err = document.getElementById('errorMsg');
+  const login = document.getElementById('login').value;
   const password = document.getElementById('password').value;
 
   btn.disabled = true;
@@ -89,14 +102,14 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ login, password }),
     });
     const data = await res.json();
 
     if (res.ok) {
       window.location.href = '/index.html';
     } else {
-      err.textContent = data.error || 'Неверный пароль';
+      err.textContent = data.error || 'Неверный email или пароль';
       err.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = 'Войти в систему';

@@ -257,6 +257,8 @@ select.form-control option {
 .table tbody tr:hover { background: var(--bg-card-hover); }
 body.light-theme .table tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
 
+.col-date { padding-left: 12px; }
+
 .link-cell {
   font-size: 0.78rem;
   color: var(--accent-light);

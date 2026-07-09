@@ -64,6 +64,7 @@
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
     <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
 </nav>
@@ -137,7 +138,12 @@
         <span class="card-title">🔑 Смена пароля</span>
         <span class="collapse-icon">−</span>
       </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Изменение пароля для вашей учётной записи (<span id="currentManagerLogin"></span>).</p>
       <form id="passwordForm">
+        <div class="form-group">
+          <label class="form-label" for="current_password">Текущий пароль</label>
+          <input id="current_password" type="password" class="form-control" placeholder="Введите текущий пароль" autocomplete="current-password">
+        </div>
         <div class="form-group">
           <label class="form-label" for="new_password">Новый пароль</label>
           <input id="new_password" type="password" class="form-control" placeholder="Минимум 8 символов" autocomplete="new-password">
@@ -149,6 +155,24 @@
         <button type="submit" class="btn btn-primary" id="savePasswordBtn">🔑 Сменить пароль</button>
         <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
+    </div>
+
+    <!-- Managers Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">👥 Управление менеджерами</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
+      <div id="managerList" style="margin-bottom:16px;"></div>
+      <hr class="divider">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input type="text" class="form-control" id="newManagerName" placeholder="Имя менеджера">
+        <input type="text" class="form-control" id="newManagerLogin" placeholder="Логин">
+        <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 8 символов)">
+        <button class="btn btn-primary" id="addManagerBtn">➕ Добавить менеджера</button>
+        <div id="managerResult" style="font-size:0.85rem;"></div>
+      </div>
     </div>
 
     <!-- Info Card -->

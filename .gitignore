@@ -6,3 +6,12 @@ data/
 *.db
 *.db-shm
 *.db-wal
+=======
+node_modules/
+.env
+dist/
+build/
+data/
+*.db
+*.db-shm
+*.db-wal

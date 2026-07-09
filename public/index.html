@@ -89,6 +89,7 @@
       ⚡ Проверить изменения <span id="pendingBadge" class="hidden">0</span>
     </a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
 </nav>
@@ -146,12 +147,13 @@
             <th>Должность</th>
             <th>Город</th>
             <th>Статус</th>
+            <th class="col-date">Дата актуализации</th>
             <th class="col-link">Персональная ссылка</th>
             <th class="col-actions">Действия</th>
           </tr>
         </thead>
         <tbody id="employeesTbody">
-          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
             <span class="spinner"></span>
           </td></tr>
         </tbody>
