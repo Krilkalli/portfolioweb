@@ -5,13 +5,19 @@ const { helpers } = require('../db');
 
 // POST /api/auth/login
 router.post('/login', (req, res) => {
-  const { password } = req.body;
-  const hash = helpers.getSetting('manager_password_hash');
-  if (!hash || !bcrypt.compareSync(password, hash)) {
-    return res.status(401).json({ error: 'Неверный пароль' });
+  const { login, password } = req.body;
+  if (!login || !password) {
+    return res.status(400).json({ error: 'Логин и пароль обязательны' });
+  }
+  const manager = helpers.getManagerByLogin(login);
+  if (!manager || !bcrypt.compareSync(password, manager.password_hash)) {
+    return res.status(401).json({ error: 'Неверный логин или пароль' });
   }
   req.session.isManager = true;
-  res.json({ ok: true });
+  req.session.managerId = manager.id;
+  req.session.managerName = manager.name;
+  req.session.managerLogin = manager.email;
+  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email } });
 });
 
 // POST /api/auth/logout
@@ -22,7 +28,14 @@ router.post('/logout', (req, res) => {
 
 // GET /api/auth/me
 router.get('/me', (req, res) => {
-  res.json({ authenticated: !!req.session.isManager });
+  res.json({
+    authenticated: !!req.session.isManager,
+    manager: req.session.isManager ? {
+      id: req.session.managerId,
+      name: req.session.managerName,
+      email: req.session.managerEmail,
+    } : null,
+  });
 });
 
 module.exports = router;

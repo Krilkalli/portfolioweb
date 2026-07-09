@@ -66,14 +66,14 @@ router.get('/pending', requireAuth, (req, res) => {
 
 // ── Подтвердить одно изменение ────────────────────────────────────────────────
 router.post('/pending/:changeId/approve', requireAuth, async (req, res) => {
-  const ok = helpers.approveChange(Number(req.params.changeId));
+  const ok = helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
   res.json({ ok: true });
 });
 
 // ── Отклонить одно изменение ──────────────────────────────────────────────────
 router.post('/pending/:changeId/reject', requireAuth, (req, res) => {
-  const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '');
+  const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
   res.json({ ok: true });
 });
@@ -82,8 +82,8 @@ router.post('/pending/:changeId/reject', requireAuth, (req, res) => {
 router.post('/employees/:id/approve-all', requireAuth, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
-  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
-  const applied = helpers.approveAllForEmployee(id);
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
+  const applied = helpers.approveAllForEmployee(id, req.session.managerName || '');
   notifyEmployeeApproved(emp).catch(() => {});
   res.json({ ok: true, applied });
 });
@@ -92,8 +92,8 @@ router.post('/employees/:id/approve-all', requireAuth, async (req, res) => {
 router.post('/employees/:id/reject-all', requireAuth, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
-  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
-  helpers.rejectAllForEmployee(id, req.body.reason || '');
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
+  helpers.rejectAllForEmployee(id, req.body.reason || '', req.session.managerName || '');
   notifyEmployeeRejected(emp, req.body.reason).catch(() => {});
   res.json({ ok: true });
 });
@@ -152,9 +152,6 @@ router.get('/settings', requireAuth, (req, res) => {
 router.put('/settings', requireAuth, (req, res) => {
   const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','manager_email'];
   for (const k of allowed) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
-  if (req.body.new_password) {
-    helpers.setSetting('manager_password_hash', bcrypt.hashSync(req.body.new_password, 10));
-  }
   res.json({ ok: true });
 });
 
@@ -171,6 +168,55 @@ router.post('/settings/test-email', requireAuth, async (req, res) => {
 // ── Статистика ────────────────────────────────────────────────────────────────
 router.get('/stats', requireAuth, (req, res) => {
   res.json(helpers.getStats());
+});
+
+// ── Менеджеры: список ─────────────────────────────────────────────────────────
+router.get('/managers', requireAuth, (req, res) => {
+  res.json({ managers: helpers.getAllManagers() });
+});
+
+// ── Менеджеры: создать ────────────────────────────────────────────────────────
+router.post('/managers', requireAuth, (req, res) => {
+  const { name, login, password } = req.body;
+  if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
+  if (!login || !login.trim()) return res.status(400).json({ error: 'Логин обязателен' });
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
+  try {
+    const hash = require('bcryptjs').hashSync(password, 10);
+    const manager = helpers.createManager(name.trim(), login.trim(), hash);
+    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email } });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Менеджеры: удалить ────────────────────────────────────────────────────────
+router.delete('/managers/:id', requireAuth, (req, res) => {
+  try {
+    helpers.deleteManager(Number(req.params.id));
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Менеджеры: сменить свой пароль ────────────────────────────────────────────
+router.put('/managers/me/password', requireAuth, (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Все поля обязательны' });
+  if (newPassword.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
+
+  const manager = helpers.getManagerById(req.session.managerId);
+  if (!manager) return res.status(404).json({ error: 'Менеджер не найден' });
+
+  const bcrypt = require('bcryptjs');
+  if (!bcrypt.compareSync(currentPassword, manager.password_hash)) {
+    return res.status(400).json({ error: 'Неверный текущий пароль' });
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 10);
+  helpers.updateManagerPassword(manager.id, hash);
+  res.json({ ok: true });
 });
 
 module.exports = router;

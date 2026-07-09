@@ -66,9 +66,19 @@ db.exec(`
     submitted_at TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id);
+
+  CREATE TABLE IF NOT EXISTS managers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    created_at TEXT
+  );
 `);
 // Миграция: добавить колонку status если БД создана до этого обновления
 try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"); } catch (e) {}
+// Миграция: добавить колонку reviewed_by в pending_changes
+try { db.exec("ALTER TABLE pending_changes ADD COLUMN reviewed_by TEXT DEFAULT ''"); } catch (e) {}
 
 // ─── Подготовленные запросы ──────────────────────────────────────────────────
 const stGetSetting   = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -102,11 +112,16 @@ const stInsertChange  = db.prepare(`INSERT INTO pending_changes
   (employee_id, field_name, old_value, new_value, submitted_at, status)
   VALUES (?, ?, ?, ?, ?, 'pending')`);
 const stDelPendingForEmp = db.prepare('DELETE FROM pending_changes WHERE employee_id = ? AND status = \'pending\'');
-const stApproveChange = db.prepare('UPDATE pending_changes SET status = \'approved\', reviewed_at = ? WHERE id = ?');
-const stRejectChange  = db.prepare('UPDATE pending_changes SET status = \'rejected\', reviewed_at = ?, reject_reason = ? WHERE id = ?');
-const stApproveAll    = db.prepare('UPDATE pending_changes SET status = \'approved\', reviewed_at = ? WHERE employee_id = ? AND status = \'pending\'');
-const stRejectAll     = db.prepare('UPDATE pending_changes SET status = \'rejected\', reviewed_at = ?, reject_reason = ? WHERE employee_id = ? AND status = \'pending\'');
+const stApproveChange = db.prepare("UPDATE pending_changes SET status = 'approved', reviewed_at = ?, reviewed_by = ? WHERE id = ?");
+const stRejectChange  = db.prepare("UPDATE pending_changes SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, reject_reason = ? WHERE id = ?");
+const stApproveAll    = db.prepare("UPDATE pending_changes SET status = 'approved', reviewed_at = ?, reviewed_by = ? WHERE employee_id = ? AND status = 'pending'");
+const stRejectAll     = db.prepare("UPDATE pending_changes SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, reject_reason = ? WHERE employee_id = ? AND status = 'pending'");
 const stInsertFeedback = db.prepare('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES (?, ?, ?, ?)');
+const stGetManagerByEmail = db.prepare('SELECT * FROM managers WHERE email = ?');
+const stGetManagerById   = db.prepare('SELECT * FROM managers WHERE id = ?');
+const stGetAllManagers   = db.prepare('SELECT id, name, email, created_at FROM managers ORDER BY name');
+const stInsertManager    = db.prepare('INSERT INTO managers (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)');
+const stDeleteManager    = db.prepare('DELETE FROM managers WHERE id = ?');
 
 // ─── Нормализация имени для поиска дубликатов ──────────────────────────────
 function normalizeName(name) {
@@ -164,8 +179,8 @@ function castEmployee(r) {
   const emp = { ...r };
   emp.id = Number(emp.id);
   try { emp.education = JSON.parse(emp.education || '[]'); } catch { emp.education = parseLegacyEducationLines(emp.education); }
-  try { emp.experience = JSON.parse(emp.experience || '{}'); } catch { emp.experience = { total: '', jobs: [] }; }
-  try { emp.project_experience = JSON.parse(emp.project_experience || '[]'); } catch { emp.project_experience = []; }
+  try { emp.experience = JSON.parse(emp.experience || '{}'); } catch { emp.experience = parseLegacyExperience(emp.experience); }
+  try { emp.project_experience = JSON.parse(emp.project_experience || '[]'); } catch { emp.project_experience = parseLegacyProject(emp.project_experience); }
   delete emp.name_lower;
   return emp;
 }
@@ -438,7 +453,6 @@ function init() {
   // Настройки
   let settings = loadSettings();
   let changed = false;
-  if (!settings.manager_password_hash) { settings.manager_password_hash = bcrypt.hashSync(config.defaultManagerPassword, 10); changed = true; }
   const defs = { smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'' };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
   if (!settings.positions || !Array.isArray(settings.positions) || settings.positions.length === 0) {
@@ -447,21 +461,41 @@ function init() {
   }
   if (changed) saveSettings(settings);
 
+  // Создать первого менеджера, если нет ни одного
+  const managerCount = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
+  if (managerCount === 0) {
+    const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 10);
+    const login = 'admin';
+    stInsertManager.run('Главный администратор', login, hash, new Date().toISOString());
+    console.log(`✅ Создан менеджер по умолчанию: ${login}`);
+  }
+  // Миграция: если есть старый manager_password_hash, удалить его из настроек
+  if (settings.manager_password_hash) {
+    db.prepare("DELETE FROM settings WHERE key = 'manager_password_hash'").run();
+  }
+
   // Миграция из CSV если есть
   migrateFromCsv();
 
   // Seed если пусто
   seedIfEmpty();
 
-  // ── Пост-миграция: конвертировать legacy-текст education в JSON ───────────
-  // и удалить устаревшие pending_changes для courses/cert_date
+  // ── Пост-миграции ──────────────────────────────────────────────────────────
+  // Конвертировать legacy-текст в JSON, удалить устаревшие pending_changes
   const fixTx = db.transaction(() => {
-    const allRows = db.prepare("SELECT id, education FROM employees").all();
+    const allRows = db.prepare("SELECT id, education, experience, project_experience FROM employees").all();
     for (const row of allRows) {
-      const raw = row.education || '';
-      if (!raw.startsWith('[') && raw.trim()) {
-        const parsed = parseLegacyEducationLines(raw);
+      if (row.education && !row.education.startsWith('[') && row.education.trim()) {
+        const parsed = parseLegacyEducationLines(row.education);
         db.prepare("UPDATE employees SET education = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
+      }
+      if (row.experience && !row.experience.startsWith('{') && row.experience.trim()) {
+        const parsed = parseLegacyExperience(row.experience);
+        db.prepare("UPDATE employees SET experience = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
+      }
+      if (row.project_experience && !row.project_experience.startsWith('[') && row.project_experience.trim()) {
+        const parsed = parseLegacyProject(row.project_experience);
+        db.prepare("UPDATE employees SET project_experience = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
       }
     }
     db.prepare("DELETE FROM pending_changes WHERE field_name IN ('courses','cert_date')").run();
@@ -689,7 +723,7 @@ const helpers = {
     tx();
   },
 
-  approveChange(changeId) {
+  approveChange(changeId, reviewerName = '') {
     const tx = db.transaction(() => {
       const ch = stGetChange.get(Number(changeId));
       if (!ch || ch.status !== 'pending') return false;
@@ -698,20 +732,20 @@ const helpers = {
         const now = new Date().toISOString();
         db.prepare(`UPDATE employees SET "${ch.field_name}" = ?, updated_at = ? WHERE id = ?`).run(ch.new_value, now, ch.employee_id);
       }
-      stApproveChange.run(new Date().toISOString(), Number(changeId));
+      stApproveChange.run(new Date().toISOString(), reviewerName, Number(changeId));
       return true;
     });
     return tx();
   },
 
-  rejectChange(changeId, reason = '') {
+  rejectChange(changeId, reason = '', reviewerName = '') {
     const ch = stGetChange.get(Number(changeId));
     if (!ch || ch.status !== 'pending') return false;
-    stRejectChange.run(new Date().toISOString(), reason, Number(changeId));
+    stRejectChange.run(new Date().toISOString(), reviewerName, reason, Number(changeId));
     return true;
   },
 
-  approveAllForEmployee(employeeId) {
+  approveAllForEmployee(employeeId, reviewerName = '') {
     const tx = db.transaction(() => {
       const changes = stGetChangesByEmp.all(Number(employeeId), 'pending');
       const now = new Date().toISOString();
@@ -723,14 +757,14 @@ const helpers = {
           }
         }
       }
-      stApproveAll.run(now, Number(employeeId));
+      stApproveAll.run(now, reviewerName, Number(employeeId));
       return changes.length;
     });
     return tx();
   },
 
-  rejectAllForEmployee(employeeId, reason = '') {
-    stRejectAll.run(new Date().toISOString(), reason, Number(employeeId));
+  rejectAllForEmployee(employeeId, reason = '', reviewerName = '') {
+    stRejectAll.run(new Date().toISOString(), reviewerName, reason, Number(employeeId));
     const changes = stGetChangesByEmp.all(Number(employeeId), 'pending');
     return changes.length;
   },
@@ -744,6 +778,42 @@ const helpers = {
 
   saveFeedback(employeeId, rating, comment) {
     stInsertFeedback.run(Number(employeeId), rating || null, comment || '', new Date().toISOString());
+  },
+
+  // ── Менеджеры ────────────────────────────────────────────────────────────────
+  getManagerByLogin(login) {
+    return stGetManagerByEmail.get(String(login).trim().toLowerCase());
+  },
+  getManagerById(id) {
+    return stGetManagerById.get(Number(id));
+  },
+  getAllManagers() {
+    return stGetAllManagers.all();
+  },
+  createManager(name, login, passwordHash) {
+    const tx = db.transaction(() => {
+      const existing = stGetManagerByEmail.get(String(login).trim().toLowerCase());
+      if (existing) throw new Error('Менеджер с таким логином уже существует');
+      stInsertManager.run(
+        String(name || '').trim(),
+        String(login).trim().toLowerCase(),
+        passwordHash,
+        new Date().toISOString()
+      );
+      return stGetManagerByEmail.get(String(login).trim().toLowerCase());
+    });
+    return tx();
+  },
+  deleteManager(id) {
+    const tx = db.transaction(() => {
+      const count = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
+      if (count <= 1) throw new Error('Нельзя удалить последнего менеджера');
+      stDeleteManager.run(Number(id));
+    });
+    tx();
+  },
+  updateManagerPassword(id, newHash) {
+    db.prepare('UPDATE managers SET password_hash = ? WHERE id = ?').run(newHash, Number(id));
   },
 };
 

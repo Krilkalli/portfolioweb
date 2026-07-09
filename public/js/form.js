@@ -451,7 +451,7 @@ function showForm(emp) {
   const certEl = document.getElementById('f_certification');
   const coursesEl = document.getElementById('f_courses');
   if (certEl) {
-    certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^(Сертификация 1С:?|Обучающие курсы:?)[\s\S]*/i, '') : '') || '';
+    certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^Сертификация 1С:?\s*/i, '').trim() : '') || '';
     originalValues.certification = certEl.value;
     certEl.oninput = trackChanges;
   }

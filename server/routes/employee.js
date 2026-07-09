@@ -48,12 +48,39 @@ router.post('/:token/submit', async (req, res) => {
   if (certParts.length) submitFields.certification = 'Сертификация 1С:\n' + certParts.join('\n\n');
   else submitFields.certification = '';
 
+  function normalizeForComparison(fieldName, value) {
+    if (value == null) return '';
+    if (fieldName === 'certification') {
+      const parts = String(value).split(/\n\s*\n/);
+      const cert = parts[0]?.replace(/^Сертификация 1С:?\s*/i, '').trim() || '';
+      const courses = parts[1]?.replace(/^Обучающие курсы:?\s*/i, '').trim() || '';
+      return JSON.stringify({ certification: cert, courses });
+    }
+    if (typeof value === 'object') {
+      const trim = (v) => {
+        if (typeof v === 'string') return v.trim();
+        if (Array.isArray(v)) return v.map(trim);
+        if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, trim(val)]));
+        return v;
+      };
+      return JSON.stringify(trim(value));
+    }
+    return String(value).trim();
+  }
+
+  function storeValue(fieldName, value) {
+    if (typeof value === 'object') return JSON.stringify(value);
+    return String(value || '').trim();
+  }
+
   const changes = [];
   for (const fieldName of EDITABLE_FIELDS) {
     if (submitFields[fieldName] === undefined) continue;
-    const newValue = typeof submitFields[fieldName] === 'object' ? JSON.stringify(submitFields[fieldName]) : String(submitFields[fieldName]).trim();
-    const oldValue = typeof emp[fieldName] === 'object' ? JSON.stringify(emp[fieldName]) : String(emp[fieldName] || '').trim();
-    if (newValue !== oldValue) changes.push({ field_name: fieldName, old_value: oldValue, new_value: newValue });
+    const newNorm = normalizeForComparison(fieldName, submitFields[fieldName]);
+    const oldNorm = normalizeForComparison(fieldName, emp[fieldName]);
+    if (newNorm !== oldNorm) {
+      changes.push({ field_name: fieldName, old_value: storeValue(fieldName, emp[fieldName]), new_value: storeValue(fieldName, submitFields[fieldName]) });
+    }
   }
 
   if (changes.length === 0)

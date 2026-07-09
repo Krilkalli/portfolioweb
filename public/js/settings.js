@@ -1,3 +1,5 @@
+let currentManager = null;
+
 function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
@@ -138,7 +140,7 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
   } catch { toast('Ошибка соединения', 'error'); }
   finally {
     btn.disabled = false;
-    btn.textContent = 'Сохранить';
+    btn.textContent = '💾 Сохранить настройки';
     setTimeout(() => { result.textContent = ''; }, 5000);
   }
 });
@@ -156,7 +158,7 @@ document.getElementById('testEmailBtn').addEventListener('click', async () => {
     if (r.ok) { result.style.color = 'var(--success)'; result.textContent = `✅ ${d.message}`; toast('Соединение успешно!', 'success'); }
     else { result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; toast('Ошибка соединения', 'error'); }
   } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка запроса'; }
-  finally { btn.disabled = false; btn.textContent = 'Проверить соединение'; }
+  finally { btn.disabled = false; btn.textContent = '🔌 Проверить соединение'; }
 });
 
 // ─── Change Password ────────────────────────────────────────────────────────
@@ -164,9 +166,11 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   e.preventDefault();
   const btn = document.getElementById('savePasswordBtn');
   const result = document.getElementById('passwordResult');
+  const currentPass = document.getElementById('current_password').value;
   const newPass = document.getElementById('new_password').value;
   const confirm = document.getElementById('confirm_password').value;
 
+  if (!currentPass) { result.style.color = 'var(--danger)'; result.textContent = '❌ Введите текущий пароль'; return; }
   if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароль должен быть не менее 8 символов'; return; }
   if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароли не совпадают'; return; }
 
@@ -174,15 +178,92 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   btn.innerHTML = '<span class="spinner"></span> Сохранение...';
 
   try {
-    const r = await fetch('/api/settings', {
+    const r = await fetch('/api/managers/me/password', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ new_password: newPass }),
+      body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
     });
-    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
+    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
     else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; }
   } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
-  finally { btn.disabled = false; btn.textContent = 'Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
+  finally { btn.disabled = false; btn.textContent = '🔑 Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
+});
+
+// ─── Managers Management ────────────────────────────────────────────────────
+async function loadManagers() {
+  try {
+    const r = await fetch('/api/managers');
+    if (r.ok) {
+      const d = await r.json();
+      renderManagers(d.managers);
+    }
+  } catch {}
+}
+
+function renderManagers(managers) {
+  const list = document.getElementById('managerList');
+  if (!list) return;
+  if (!managers || managers.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет менеджеров</p>';
+    return;
+  }
+  list.innerHTML = managers.map(m => `
+    <div class="position-item">
+      <div>
+        <div style="font-weight:600;font-size:0.9rem;">${escHtml(m.name)}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);">${escHtml(m.email)}${m.id === currentManager?.id ? ' <span class="badge badge-accent" style="font-size:0.65rem;">Вы</span>' : ''}</div>
+      </div>
+      ${m.id !== currentManager?.id
+        ? `<button class="remove-pos" onclick="confirmDeleteManager(${m.id}, '${escHtml(m.name)}')">✕</button>`
+        : ''}
+    </div>
+  `).join('');
+}
+
+function confirmDeleteManager(id, name) {
+  if (!confirm(`Удалить менеджера «${name}»?`)) return;
+  deleteManager(id);
+}
+
+async function deleteManager(id) {
+  try {
+    const r = await fetch(`/api/managers/${id}`, { method: 'DELETE' });
+    if (r.ok) {
+      toast('Менеджер удалён', 'info');
+      await loadManagers();
+    } else {
+      const d = await r.json();
+      toast(d.error || 'Ошибка удаления', 'error');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
+}
+
+document.getElementById('addManagerBtn').addEventListener('click', async () => {
+  const name = document.getElementById('newManagerName').value.trim();
+  const login = document.getElementById('newManagerLogin').value.trim();
+  const password = document.getElementById('newManagerPass').value;
+
+  if (!name) { toast('Введите имя менеджера', 'warning'); return; }
+  if (!login) { toast('Введите логин', 'warning'); return; }
+  if (password.length < 8) { toast('Пароль должен быть не менее 8 символов', 'warning'); return; }
+
+  try {
+    const r = await fetch('/api/managers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, login, password }),
+    });
+    if (r.ok) {
+      toast(`Менеджер «${name}» добавлен`, 'success');
+      document.getElementById('newManagerName').value = '';
+      document.getElementById('newManagerLogin').value = '';
+      document.getElementById('newManagerPass').value = '';
+      await loadManagers();
+    } else {
+      const d = await r.json();
+      toast(d.error || 'Ошибка добавления', 'error');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
 });
 
 // ─── Logout ─────────────────────────────────────────────────────────────────
@@ -191,10 +272,17 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   location.href = '/login.html';
 });
 
+function escHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
+  currentManager = auth.manager;
+  document.getElementById('currentManagerLogin').textContent = currentManager?.email || '';
+
   initTheme();
-  await Promise.all([loadSettings(), loadPositions()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers()]);
 })();
