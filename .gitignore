@@ -3,3 +3,9 @@ node_modules/
 dist/ 
 build/ 
 data/
+# Временные файлы БД
+data/*.db-shm
+data/*.db-wal
+data/*.db
+# Зависимости Node.js
+node_modules/
