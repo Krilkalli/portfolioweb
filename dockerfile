@@ -1,19 +1,11 @@
-FROM node:18-alpine
-
-# Устанавливаем Python и компилятор для сборки нативных модулей
-RUN apk add --no-cache python3 make g++
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Копируем package.json и устанавливаем зависимости
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --only=production
 
-# Копируем весь проект
 COPY . .
-
-# Создаём папку для SQLite
-RUN mkdir -p data
 
 EXPOSE 3000
 
