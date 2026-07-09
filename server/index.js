@@ -42,7 +42,7 @@ class SqliteStore extends Store {
     } catch (e) { cb(e); }
   }
   destroy(sid, cb) {
-    try { stDelSession.run(sid); cb(null); } catch (e) { cb(e); }
+    try { stDelSession.run(sid); if (cb) cb(null); } catch (e) { if (cb) cb(e); }
   }
   touch(sid, session, cb) {
     try {

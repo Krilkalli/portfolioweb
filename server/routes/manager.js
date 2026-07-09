@@ -1,9 +1,21 @@
 const express = require('express');
 const router  = express.Router();
 const bcrypt  = require('bcryptjs');
+const { ZipArchive } = require('archiver');
+const XLSX    = require('xlsx');
 const { helpers } = require('../db');
 const { generateResume } = require('../wordgen');
+const { generatePdfResume } = require('../pdfgen');
+const { generateFromTemplate } = require('../templater');
+const { convertToPdf, hasLibreOffice } = require('../pdfconv');
+const multer  = require('multer');
+const path    = require('path');
+const fs      = require('fs');
 const { notifyEmployeeApproved, notifyEmployeeRejected, testConnection } = require('../mailer');
+
+const templatesDir = path.join(__dirname, '..', '..', 'templates');
+if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
+const upload = multer({ dest: path.join(__dirname, '..', '..', 'uploads') });
 
 function requireAuth(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -126,16 +138,125 @@ router.delete('/positions/:name', requireAuth, (req, res) => {
 router.get('/employees/:id/resume', requireAuth, async (req, res) => {
   const emp = helpers.getEmployee(Number(req.params.id));
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+  const fmt = req.query.format || 'docx';
   try {
-    const buf = await generateResume(emp);
-    const fn  = `resume_${emp.name.replace(/\s+/g, '_')}.docx`;
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+    let buf, fn, mime;
+    if (fmt === 'pdf') {
+      buf = await convertToPdf(emp);
+      fn = `resume_${emp.name.replace(/\s+/g, '_')}.pdf`;
+      mime = 'application/pdf';
+    } else {
+      buf = await generateFromTemplate(emp);
+      fn = `resume_${emp.name.replace(/\s+/g, '_')}.docx`;
+      mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    res.setHeader('Content-Type', mime);
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
     res.send(buf);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Ошибка генерации резюме' });
   }
+});
+
+// ── Массовый экспорт резюме (ZIP) ─────────────────────────────────────────
+router.post('/employees/export', requireAuth, async (req, res) => {
+  const { ids, format } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
+  const fmt = format === 'pdf' ? 'pdf' : 'docx';
+  const ext = fmt === 'pdf' ? 'pdf' : 'docx';
+  const mime = fmt === 'pdf' ? 'application/pdf'
+    : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(`resumes_${fmt}.zip`)}`);
+
+  const archive = new ZipArchive({ zlib: { level: 6 } });
+  archive.on('error', err => { console.error(err); res.status(500).json({ error: 'Ошибка архивации' }); });
+  archive.pipe(res);
+
+  for (const id of ids) {
+    const emp = helpers.getEmployee(Number(id));
+    if (!emp) continue;
+    try {
+      const buf = fmt === 'pdf' ? await convertToPdf(emp) : await generateFromTemplate(emp);
+      const fn = `resume_${emp.name.replace(/\s+/g, '_')}.${ext}`;
+      archive.append(buf, { name: fn });
+    } catch (err) {
+      console.error(`Ошибка генерации для ${emp.name}:`, err);
+      archive.append(`Ошибка генерации: ${err.message}`, { name: `ERROR_${emp.name.replace(/\s+/g, '_')}.txt` });
+    }
+  }
+
+  await archive.finalize();
+});
+
+// ── Массовый экспорт Excel ─────────────────────────────────────────────────
+router.post('/employees/export-excel', requireAuth, (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
+
+  const base = `${req.protocol}://${req.get('host')}`;
+  const fmtEducation = (e) => {
+    if (!e) return '';
+    if (typeof e === 'string') return e;
+    if (Array.isArray(e)) return e.map(x => [x.institution, x.degree, x.specialty, x.year].filter(Boolean).join(', ')).join('\n');
+    return String(e);
+  };
+  const fmtExperience = (e) => {
+    if (!e) return '';
+    if (typeof e === 'string') return e;
+    if (e.total) {
+      const jobs = (e.jobs || []).map(j => [j.company, j.position, j.period].filter(Boolean).join(' | ')).join('\n');
+      return `Общий стаж: ${e.total}${jobs ? '\n' + jobs : ''}`;
+    }
+    return String(e);
+  };
+  const fmtProject = (p) => {
+    if (!p) return '';
+    if (typeof p === 'string') return p;
+    if (Array.isArray(p)) return p.map(x => {
+      const fields = [
+        x.period && `Период: ${x.period}`,
+        x.client && `Заказчик: ${x.client}`,
+        x.project_description && `Описание: ${x.project_description}`,
+        x.task_description && `Задача: ${x.task_description}`,
+        x.technologies && `Технологии: ${x.technologies}`,
+      ].filter(Boolean);
+      return fields.join('\n');
+    }).join('\n\n');
+    return String(p);
+  };
+
+  const data = ids.map(id => {
+    const e = helpers.getEmployee(Number(id));
+    if (!e) return null;
+    return {
+      'ФИО':                 e.name,
+      'Образование':         fmtEducation(e.education),
+      'Должность':           e.position,
+      'Контактные данные':   e.contacts,
+      'Стаж работы':         fmtExperience(e.experience),
+      'Обо мне':             e.about,
+      'Компетенции':         e.competencies,
+      'Проектный опыт':      fmtProject(e.project_experience),
+      'Сертификация 1С':     e.certification,
+      'Ссылка на резюме':    `${base}/api/employees/${e.id}/resume`,
+    };
+  }).filter(Boolean);
+
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [
+    {wch:30},{wch:40},{wch:35},{wch:30},{wch:40},
+    {wch:40},{wch:50},{wch:60},{wch:60},{wch:50},
+  ];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Сотрудники');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  const fn = `portfolio_selected_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
+  res.send(buf);
 });
 
 // ── Настройки: получить ───────────────────────────────────────────────────────
@@ -217,6 +338,20 @@ router.put('/managers/me/password', requireAuth, (req, res) => {
   const hash = bcrypt.hashSync(newPassword, 10);
   helpers.updateManagerPassword(manager.id, hash);
   res.json({ ok: true });
+});
+
+// ── Загрузка шаблона резюме ──────────────────────────────────────────────
+router.post('/template/upload', requireAuth, upload.single('template'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+  const dest = path.join(templatesDir, 'custom_template.docx');
+  fs.copyFileSync(req.file.path, dest);
+  fs.unlinkSync(req.file.path);
+  res.json({ ok: true, message: 'Шаблон загружен. Используется для всех новых резюме.' });
+});
+
+router.get('/template/info', requireAuth, (req, res) => {
+  const custom = fs.existsSync(path.join(templatesDir, 'custom_template.docx'));
+  res.json({ custom, placeholders: ['name','position','contacts','about','competencies','experience','project_experience','education','certification'] });
 });
 
 module.exports = router;
