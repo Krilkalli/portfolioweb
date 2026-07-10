@@ -22,6 +22,8 @@ const FIELD_NAMES = {
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
   certification: 'Сертификация',
+  course_name: 'Наименование курса',
+  course_year: 'Год прохождения курса',
 };
 
 let originalValues = {};
@@ -56,9 +58,10 @@ function toggleTemplate(field) {
   if (panel) panel.classList.toggle('visible');
 }
 function setupTemplateTriggers() {
+  const templateFields = ['about', 'competencies', 'project_experience', 'certification'];
   document.querySelectorAll('.form-control').forEach(el => {
     const field = el.id.replace('f_', '');
-    if (document.getElementById('template_' + field)) {
+    if (templateFields.includes(field) && document.getElementById('template_' + field)) {
       el.addEventListener('focus', () => {
         const panel = document.getElementById('template_' + field);
         if (panel) panel.classList.add('visible');
@@ -449,22 +452,33 @@ function showForm(emp) {
   const certText = emp.certification || '';
   const certParts = certText.split(/\n\s*\n/);
   const certEl = document.getElementById('f_certification');
-  const coursesEl = document.getElementById('f_courses');
+  const courseNameEl = document.getElementById('f_course_name');
+  const courseYearEl = document.getElementById('f_course_year');
   if (certEl) {
     certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^Сертификация 1С:?\s*/i, '').trim() : '') || '';
     originalValues.certification = certEl.value;
     certEl.oninput = trackChanges;
   }
-  if (coursesEl) {
-    coursesEl.value = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
-    originalValues.courses = coursesEl.value;
-    coursesEl.oninput = trackChanges;
+  if (courseNameEl) {
+    // Try to split courses by " — " to get name and year
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseNameEl.value = parts[0]?.trim() || '';
+    originalValues.course_name = courseNameEl.value;
+    courseNameEl.oninput = trackChanges;
+  }
+  if (courseYearEl) {
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseYearEl.value = parts[1]?.trim() || '';
+    originalValues.course_year = courseYearEl.value;
+    courseYearEl.oninput = trackChanges;
   }
 
   const dateEl = document.getElementById('lastUpdatedDate');
   if (dateEl && emp.updated_at) {
     const d = new Date(emp.updated_at);
-    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   trackChanges();
@@ -482,7 +496,8 @@ function renderViewContent() {
   document.getElementById('viewCompetencies').innerHTML = viewValue(document.getElementById('f_competencies')?.value);
   document.getElementById('viewCertification').innerHTML =
     viewField('Сертификаты 1С', document.getElementById('f_certification')?.value) +
-    viewField('Обучающие курсы', document.getElementById('f_courses')?.value);
+    viewField('Наименование курса', document.getElementById('f_course_name')?.value) +
+    viewField('Год прохождения', document.getElementById('f_course_year')?.value);
   document.getElementById('viewEducation').innerHTML = renderAccordionView(getEducationData(),
     d => d.institution || 'Образование',
     d => viewField('Квалификация', d.degree) + viewField('Направление', d.specialty) + viewField('Год окончания', d.year),
@@ -528,7 +543,7 @@ function trackChanges() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -571,7 +586,7 @@ function getChangedFieldNames() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -593,7 +608,8 @@ function collectFormFields() {
     about: document.getElementById('f_about')?.value.trim() || '',
     competencies: document.getElementById('f_competencies')?.value.trim() || '',
     certification: document.getElementById('f_certification')?.value.trim() || '',
-    courses: document.getElementById('f_courses')?.value.trim() || '',
+    course_name: document.getElementById('f_course_name')?.value.trim() || '',
+    course_year: document.getElementById('f_course_year')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),
@@ -602,6 +618,7 @@ function collectFormFields() {
 
 async function performSubmit(fields) {
   fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
+  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
@@ -622,7 +639,7 @@ async function performSubmit(fields) {
       document.getElementById('formState').classList.add('hidden');
       document.getElementById('successState').classList.remove('hidden');
       document.getElementById('changesCountMsg').textContent =
-        d.changed > 0 ? `Изменено полей: ${d.changed}` : 'Изменений не обнаружено';
+        d.changed > 0 ? `Изменено полей: ${d.changed}` : '';
     } else {
       toast(d.error || 'Ошибка при отправке', 'error');
       btn.disabled = false;

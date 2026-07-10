@@ -126,7 +126,7 @@
     #competencyChecklist {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px 16px;
+      gap: 2px 8px;
     }
 
     .form-control:focus + .example-hint,
@@ -289,29 +289,16 @@
           <div id="educationContainer" class="edit-only"></div>
           <div id="viewEducation" class="view-only"></div>
           <button type="button" class="add-btn edit-only" id="addEducationBtn">+ Добавить учебное заведение</button>
-          <div class="template-panel" id="template_education">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Учебное заведение:</strong> [Наименование учебного заведения, без сокращения]<br>
-            <strong>Квалификация/Ученая степень:</strong> [магистр, бакалавр, специалист, аспирант]<br>
-            <strong>Направление:</strong> [специальность]<br>
-            <strong>Год окончания:</strong> [2024]<br>
-            <em style="font-size:0.78rem;color:var(--text-muted);">Каждое учебное заведение добавляется отдельно через кнопку "+"</em>
-          </div>
-          <div class="example-hint" onclick="toggleTemplate('education')">👁 Показать шаблон</div>
         </div>
       </div>
 
       <!-- ===== ДОЛЖНОСТЬ ===== -->
       <div class="form-group">
-        <div class="section-card">
+        <div class="section-card" style="min-height: 148px;">
           <div class="section-card-title">👔 Должность</div>
           <select id="f_position" name="position" class="form-control edit-only"></select>
           <div id="viewPosition" class="view-only"></div>
-          <div class="example-hint" onclick="toggleTemplate('position')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_position">
-            <strong>Шаблон заполнения:</strong> [Текущая занимаемая должность]<br>
-            <em style="font-size:0.78rem;color:var(--text-muted);">Выберите из списка. Если вашей должности нет — обратитесь к менеджеру.</em>
-          </div>
+          <div style="flex:1;"></div>
         </div>
       </div>
 
@@ -328,12 +315,6 @@
             <input id="f_email" type="email" class="form-control" placeholder="ivanov@company.ru">
           </div>
           <div id="viewContacts" class="view-only"></div>
-          <div class="example-hint edit-only" onclick="toggleTemplate('contacts')">👁 Показать шаблон</div>
-          <div class="template-panel edit-only" id="template_contacts">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Город:</strong> [Город проживания]<br>
-            <strong>Email:</strong> [Адрес эл. почты]
-          </div>
         </div>
       </div>
 
@@ -346,11 +327,6 @@
             <div class="experience-block-title">Общий стаж работы</div>
             <input id="f_total_experience" type="text" class="form-control edit-only" placeholder="Например: 12 лет">
             <div id="viewTotalExperience" class="view-only"></div>
-            <div class="example-hint edit-only" onclick="toggleTemplate('total_experience')">👁 Показать шаблон</div>
-            <div class="template-panel edit-only" id="template_total_experience">
-              <strong>Шаблон заполнения:</strong> [Общий стаж работы сотрудника]<br>
-              <em style="font-size:0.78rem;color:var(--text-muted);">Например: "12 лет" или "Общий стаж: 12 лет"</em>
-            </div>
           </div>
 
           <div class="experience-block">
@@ -358,14 +334,6 @@
             <div id="jobContainer" class="edit-only"></div>
             <div id="viewJobs" class="view-only"></div>
             <button type="button" class="add-btn edit-only" id="addJobBtn">+ Добавить место работы</button>
-            <div class="example-hint edit-only" onclick="toggleTemplate('experience')">👁 Показать шаблон</div>
-            <div class="template-panel edit-only" id="template_experience">
-              <strong>Шаблон заполнения для каждого места работы:</strong><br>
-              <strong>Компания:</strong> [Наименование компании]<br>
-              <strong>Должность:</strong> [Должность]<br>
-              <strong>Период:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
-              <em style="font-size:0.78rem;color:var(--text-muted);">Каждое место работы добавляется отдельно через кнопку "+"</em>
-            </div>
           </div>
         </div>
       </div>
@@ -376,11 +344,10 @@
           <div class="section-card-title">👤 Обо мне</div>
           <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
           <div id="viewAbout" class="view-only"></div>
-          <div class="example-hint" onclick="toggleTemplate('about')">👁 Показать шаблон</div>
+<div class="example-hint" onclick="toggleTemplate('about')">👁 Показать пример</div>
           <div class="template-panel" id="template_about">
             <strong>Пример заполнения:</strong><br>
-            Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.<br><br>
-            <strong>Шаблон:</strong> [Вводная информация о себе — опыт, специализация, ключевые навыки]
+            Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.
           </div>
         </div>
       </div>
@@ -407,18 +374,8 @@
           <div id="projectExperienceContainer" class="edit-only"></div>
           <div id="viewProjects" class="view-only"></div>
           <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
-          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать шаблон</div>
+          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать пример</div>
           <div class="template-panel" id="template_project_experience">
-            <strong>Шаблон заполнения для каждого проекта:</strong><br>
-            <strong>Период работы:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
-            <strong>Должность в проекте:</strong> [должность сотрудника в рамках проекта]<br>
-            <strong>Роль в проекте:</strong> [роль сотрудника в рамках проекта]<br>
-            <strong>Размер команды:</strong> [количество человек]<br>
-            <strong>Заказчик + отрасль:</strong> [Наименование Заказчика + отрасль]<br>
-            <strong>Описание проекта:</strong> [краткое описание проекта]<br>
-            <strong>Описание задачи:</strong> [описание задачи, реализованной сотрудником]<br>
-            <strong>Программные продукты / технологии:</strong> [Наименование + редакция, XML, JSON, REST API]<br>
-            <br>
             <strong>Пример:</strong><br>
             <strong>Период:</strong> 01.2024 - 06.2024<br>
             <strong>Должность:</strong> Консультант по внедрению 1С<br>
@@ -440,9 +397,13 @@
             <label class="form-label">Сертификаты 1С</label>
             <textarea id="f_certification" class="form-control" rows="4" placeholder="1С:Профессионал. ERP Управление предприятием 2"></textarea>
           </div>
+          <div class="form-group edit-only" style="margin-bottom:10px;">
+            <label class="form-label">Наименование курса</label>
+            <input id="f_course_name" type="text" class="form-control" placeholder="Наименование курса">
+          </div>
           <div class="form-group edit-only" style="margin-bottom:0;">
-            <label class="form-label">Обучающие курсы</label>
-            <textarea id="f_courses" class="form-control" rows="3" placeholder="Наименование курса — Год прохождения"></textarea>
+            <label class="form-label">Год прохождения</label>
+            <input id="f_course_year" type="text" class="form-control" placeholder="2024">
           </div>
           <div id="viewCertification" class="view-only"></div>
           <div class="example-hint" onclick="toggleTemplate('certification')">👁 Показать шаблон</div>
@@ -473,7 +434,6 @@
     <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">✉️ Отправить на проверку</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
-      <span id="noChangesHint" class="text-muted text-sm hidden">Изменений не обнаружено</span>
       <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
     </div>
   </form>

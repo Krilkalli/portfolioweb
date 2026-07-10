@@ -306,6 +306,40 @@ document.getElementById('templateUploadForm').addEventListener('submit', async (
   finally { btn.disabled = false; btn.textContent = '📤 Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
 });
 
+// ─── Import Excel ────────────────────────────────────────────────────────────
+document.getElementById('importFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  if (!confirm('Импорт полностью ЗАМЕНИТ текущий список сотрудников данными из файла.\nВсе существующие сотрудники будут удалены.\n\nПродолжить?')) {
+    e.target.value = '';
+    return;
+  }
+
+  const result = document.getElementById('importResult');
+  result.innerHTML = '<span class="spinner"></span> Импорт...';
+
+  const fd = new FormData();
+  fd.append('file', file);
+
+  try {
+    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
+    const d = await r.json();
+    e.target.value = '';
+    if (r.ok) {
+      result.innerHTML = '<span style="color:var(--success)">✅ Импорт завершён</span>';
+      toast(`Импорт завершён: добавлено ${d.imported} сотрудников (удалено: ${d.removed})`, 'success');
+    } else {
+      result.innerHTML = '<span style="color:var(--danger)">❌ ' + (d.error || 'Ошибка импорта') + '</span>';
+      toast(d.error || 'Ошибка импорта', 'error');
+    }
+  } catch {
+    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+    toast('Ошибка при импорте файла', 'error');
+  }
+  setTimeout(() => { result.innerHTML = ''; }, 5000);
+});
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
