@@ -43,17 +43,57 @@
       white-space: nowrap;
     }
     #employeesTable .col-resume {
-      width: 80px;
+      width: 100px;
       text-align: center;
       vertical-align: middle;
     }
     #employeesTable .col-actions {
-      width: 80px;
+      width: 100px;
+      text-align: center;
       vertical-align: middle;
     }
     #employeesTable th.col-link,
     #employeesTable th.col-resume,
     #employeesTable th.col-actions { white-space: nowrap; }
+    #employeesTable td { text-align: center; }
+    #employeesTable td:first-child + td { text-align: left; }
+    #employeesTable td.col-link { text-align: left; }
+    #employeesTable td.col-resume { text-align: center; }
+    #employeesTable td.col-actions { text-align: center; }
+
+    .resume-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 50;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 4px;
+      min-width: 150px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .resume-dropdown.show { display: block; }
+    .resume-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .resume-dropdown-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
 
     .action-dropdown {
       display: none;

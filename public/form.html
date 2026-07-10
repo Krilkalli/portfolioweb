@@ -272,6 +272,26 @@
     <span id="changedFieldsBadge" class="badge badge-warning edit-only hidden" style="margin-left:auto">0 изм.</span>
   </div>
 
+  <!-- ===== ФОТО СОТРУДНИКА ===== -->
+  <div class="form-group field-full edit-only" style="margin-bottom: 24px;">
+    <div class="section-card">
+      <div class="section-card-title">📸 Фото сотрудника</div>
+      <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <div id="photoPreview" style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-card); border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+          <span style="color: var(--text-muted); font-size: 0.8rem;">Нет фото</span>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+          <label class="btn btn-primary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+            📁 Выбрать фото
+            <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
+          </label>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Рекомендуемый формат: квадратное фото (JPG, PNG до 5 МБ)</p>
+        </div>
+      </div>
+      <input type="hidden" id="f_photo" name="photo" value="">
+    </div>
+  </div>
+
   <div id="pendingWarning" class="pending-warning edit-only hidden">
     ⚠️ У вас уже есть изменения, ожидающие проверки. Отправка новой формы заменит предыдущие.
   </div>
@@ -405,14 +425,7 @@
             <label class="form-label">Год прохождения</label>
             <input id="f_course_year" type="text" class="form-control" placeholder="2024">
           </div>
-          <div id="viewCertification" class="view-only"></div>
-          <div class="example-hint" onclick="toggleTemplate('certification')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_certification">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Сертификаты:</strong> [Полное наименование сертификата 1C]<br>
-            <em>Например: 1С:Профессионал. ERP Управление предприятием 2; 1С:Специалист-консультант</em><br><br>
-            <strong>Обучающие курсы:</strong> [Наименование курса — Год прохождения обучения]
-          </div>
+<div id="viewCertification" class="view-only"></div>
         </div>
       </div>
 

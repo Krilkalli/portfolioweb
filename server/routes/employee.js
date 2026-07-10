@@ -1,7 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { helpers } = require('../db');
-const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
+const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyManagerFeedback } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
 
@@ -180,6 +180,8 @@ router.post('/:token/feedback', (req, res) => {
     if (r < 1 || r > 5) return res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
   }
   helpers.saveFeedback(emp.id, rating ? Number(rating) : null, comment || '');
+  const feedback = { rating: rating ? Number(rating) : null, comment: comment || '' };
+  notifyManagerFeedback(emp, feedback).catch(() => {});
   res.json({ ok: true });
 });
 

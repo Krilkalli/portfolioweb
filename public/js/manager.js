@@ -140,9 +140,12 @@ function renderTable(list) {
       </td>
       <td class="col-resume">
         ${e.status !== 'archived'
-          ? `<div style="display:flex;gap:4px;">
-              <a href="/api/employees/${e.id}/resume?format=docx" class="btn btn-ghost btn-sm" title="DOCX">📄</a>
-              <a href="/api/employees/${e.id}/resume?format=pdf" class="btn btn-ghost btn-sm" title="PDF">📑</a>
+          ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
+              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
+              <div class="resume-dropdown">
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
+              </div>
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
@@ -165,6 +168,12 @@ function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
 }
 
+function toggleResumeMenu(btn) {
+  document.querySelectorAll('.resume-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
+}
+
 function toggleActionMenu(btn) {
   document.querySelectorAll('.action-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
   const menu = btn.nextElementSibling;
@@ -174,6 +183,9 @@ function toggleActionMenu(btn) {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.action-menu')) {
     document.querySelectorAll('.action-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+  if (!e.target.closest('.resume-menu')) {
+    document.querySelectorAll('.resume-dropdown.show').forEach(el => el.classList.remove('show'));
   }
 });
 

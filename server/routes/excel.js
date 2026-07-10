@@ -227,15 +227,16 @@ router.get('/export', requireAuth, (req, res) => {
     if (exp && typeof exp === 'object') {
       const lines = [];
       if (exp.total) lines.push('Общий стаж: ' + exp.total);
-      if (Array.isArray(exp.jobs)) {
+      if (Array.isArray(exp.jobs) && exp.jobs.length > 0) {
         for (const j of exp.jobs) {
           const parts = [j.company, j.position, j.period].filter(Boolean);
           if (parts.length) lines.push(parts.join(' — '));
         }
       }
+      if (lines.length === 0) return '';
       return lines.join('\n');
     }
-    return String(exp || '');
+    return '';
   }
   function fmtProject(proj) {
     if (typeof proj === 'string') return proj;

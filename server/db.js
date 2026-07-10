@@ -30,6 +30,7 @@ db.exec(`
     email TEXT DEFAULT '',
     city TEXT DEFAULT '',
     phone TEXT DEFAULT '',
+    photo TEXT DEFAULT '',
     token TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT,
@@ -79,6 +80,8 @@ db.exec(`
 try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"); } catch (e) {}
 // Миграция: добавить колонку reviewed_by в pending_changes
 try { db.exec("ALTER TABLE pending_changes ADD COLUMN reviewed_by TEXT DEFAULT ''"); } catch (e) {}
+// Миграция: добавить колонку photo в employees
+try { db.exec("ALTER TABLE employees ADD COLUMN photo TEXT DEFAULT ''"); } catch (e) {}
 
 // ─── Подготовленные запросы ──────────────────────────────────────────────────
 const stGetSetting   = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -131,7 +134,7 @@ function normalizeName(name) {
 // ─── Безопасные поля для динамического UPDATE ────────────────────────────────
 const ALLOWED_FIELDS = new Set([
   'name','education','position','contacts','experience','about','competencies',
-  'project_experience','certification','email','city','phone',
+  'project_experience','certification','email','city','phone','photo',
 ]);
 
 // ─── Парсинг legacy-текста образования в JSON-массив ──────────────────────
@@ -204,6 +207,7 @@ function prepEmployee(emp) {
     email: emp.email || '',
     city: emp.city || '',
     phone: emp.phone || '',
+    photo: emp.photo || '',
     token: emp.token || uuidv4(),
     status: emp.status === 'archived' ? 'archived' : 'active',
     created_at: emp.created_at || now,

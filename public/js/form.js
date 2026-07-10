@@ -58,7 +58,7 @@ function toggleTemplate(field) {
   if (panel) panel.classList.toggle('visible');
 }
 function setupTemplateTriggers() {
-  const templateFields = ['about', 'competencies', 'project_experience', 'certification'];
+  const templateFields = ['about', 'competencies', 'project_experience'];
   document.querySelectorAll('.form-control').forEach(el => {
     const field = el.id.replace('f_', '');
     if (templateFields.includes(field) && document.getElementById('template_' + field)) {
@@ -483,6 +483,7 @@ function showForm(emp) {
 
   trackChanges();
   renderViewContent();
+  loadEmployeePhoto(employee);
   if (isViewMode) setViewMode(true);
 }
 
@@ -610,6 +611,7 @@ function collectFormFields() {
     certification: document.getElementById('f_certification')?.value.trim() || '',
     course_name: document.getElementById('f_course_name')?.value.trim() || '',
     course_year: document.getElementById('f_course_year')?.value.trim() || '',
+    photo: document.getElementById('f_photo')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),
@@ -715,7 +717,39 @@ document.getElementById('addProjectBtn').addEventListener('click', () => {
 });
 
 function escHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
+}
+
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    toast('Выберите изображение', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Файл слишком большой (макс. 5 МБ)', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('photoPreview');
+    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    document.getElementById('f_photo').value = e.target.result;
+    trackChanges();
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadEmployeePhoto(emp) {
+  const photoEl = document.getElementById('f_photo');
+  const preview = document.getElementById('photoPreview');
+  if (emp.photo) {
+    photoEl.value = emp.photo;
+    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  }
+  originalValues.photo = emp.photo || '';
+  if (photoEl) photoEl.oninput = trackChanges;
 }
 
 // ─── Speller (Yandex) ──────────────────────────────────────────────────────
