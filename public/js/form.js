@@ -701,6 +701,38 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ─── Speller (Yandex) ──────────────────────────────────────────────────────
+document.getElementById('spellerBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('spellerBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin:0;"></span> Исправление...';
+  try {
+    const fields = collectFormFields();
+    const r = await fetch('/api/form/correct-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Ошибка'); }
+    const data = await r.json();
+    if (!data.ok) throw new Error('Ошибка ответа');
+    const c = data.corrected;
+    for (const [key, val] of Object.entries(c)) {
+      const el = document.getElementById('f_' + key);
+      if (el && val !== undefined) {
+        el.value = val;
+        el.dispatchEvent(new Event('input'));
+      }
+    }
+    trackChanges();
+    toast('Текст исправлен', 'success');
+  } catch (e) {
+    toast('Ошибка исправления: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '✨ Исправить текст';
+});
+
 // ─── Init ──────────────────────────────────────────────────────────────────
 initTheme();
 buildCompetencyChecklist();

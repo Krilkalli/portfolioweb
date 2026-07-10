@@ -74,10 +74,7 @@ app.use(session({
   },
 }));
 
-// ─── Static files ─────────────────────────────────────────────────────────────
-app.use(express.static(path.join(__dirname, '..', 'public')));
-
-// ─── Защита страниц менеджера ─────────────────────────────────────────────────
+// ─── Защита страниц менеджера (ДО статики, чтобы auth проверялся первым) ─────
 const PROTECTED_PAGES = ['/index.html', '/review.html', '/settings.html'];
 app.use((req, res, next) => {
   if (PROTECTED_PAGES.includes(req.path) && !req.session.isManager) {
@@ -85,6 +82,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// ─── Static files ─────────────────────────────────────────────────────────────
+app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Корень → редирект
 app.get('/', (req, res) => {

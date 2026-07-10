@@ -140,7 +140,8 @@ function renderTable(list) {
           ${e.status !== 'archived'
             ? `<a href="${e.link}&mode=view" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
                <button class="btn btn-ghost btn-sm" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-               <a href="/api/employees/${e.id}/resume" class="btn btn-ghost btn-sm">📄 Резюме</a>
+               <a href="/api/employees/${e.id}/resume?format=docx" class="btn btn-ghost btn-sm">📄 DOCX</a>
+               <a href="/api/employees/${e.id}/resume?format=pdf" class="btn btn-ghost btn-sm">📑 PDF</a>
                ${e.pendingCount > 0 ? `<a href="/review.html" class="btn btn-warning btn-sm">⚡ Проверить</a>` : ''}
                <button class="btn btn-ghost btn-sm" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Архивировать">📦 Архив</button>`
             : `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`}

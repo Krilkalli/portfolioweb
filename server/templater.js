@@ -1,9 +1,11 @@
-const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, BorderStyle, AlignmentType, WidthType } = require('docx');
+const { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, ImageRun, BorderStyle, AlignmentType, WidthType } = require('docx');
 const path = require('path');
 const fs = require('fs');
+const zlib = require('zlib');
 
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 const DEFAULT_TEMPLATE = path.join(TEMPLATES_DIR, 'resume_template.docx');
+const LOGO_PATH = path.join(TEMPLATES_DIR, 'default_logo.png');
 
 const FIELD_LABELS = {
   name: 'ФИО',
@@ -50,36 +52,168 @@ function formatCertification(c) {
   return String(c);
 }
 
+function crc32(buf) {
+  let crc = 0xFFFFFFFF;
+  const table = new Int32Array(256);
+  for (let i = 0; i < 256; i++) {
+    let c = i;
+    for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[i] = c;
+  }
+  for (let i = 0; i < buf.length; i++) crc = table[(crc ^ buf[i]) & 0xFF] ^ (crc >>> 8);
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4);
+  len.writeUInt32BE(data.length, 0);
+  const typeB = Buffer.from(type, 'ascii');
+  const crcData = Buffer.concat([typeB, data]);
+  const crcB = Buffer.alloc(4);
+  crcB.writeUInt32BE(crc32(crcData), 0);
+  return Buffer.concat([len, typeB, data, crcB]);
+}
+
+function createDefaultLogo() {
+  if (fs.existsSync(LOGO_PATH)) return;
+  const w = 200, h = 60;
+  const px = Buffer.alloc(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const i = (y * w + x) * 4;
+      const ratio = x / w;
+      if (ratio < 0.4) {
+        px[i] = 26; px[i+1] = 26; px[i+2] = 46; px[i+3] = 255;
+      } else if (ratio > 0.6) {
+        px[i] = 108; px[i+1] = 99; px[i+2] = 255; px[i+3] = 255;
+      } else {
+        const t = (ratio - 0.4) / 0.2;
+        px[i] = Math.round(26 + (108 - 26) * t);
+        px[i+1] = Math.round(26 + (99 - 26) * t);
+        px[i+2] = Math.round(46 + (255 - 46) * t);
+        px[i+3] = 255;
+      }
+    }
+  }
+  const raw = Buffer.alloc((w * 4 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    raw[y * (w * 4 + 1)] = 0;
+    for (let x = 0; x < w; x++) {
+      const src = (y * w + x) * 4;
+      const dst = y * (w * 4 + 1) + 1 + x * 4;
+      raw[dst] = px[src]; raw[dst+1] = px[src+1]; raw[dst+2] = px[src+2]; raw[dst+3] = px[src+3];
+    }
+  }
+  const compressed = zlib.deflateSync(raw);
+  const sig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8; ihdr[9] = 6; ihdr[10] = 0; ihdr[11] = 0; ihdr[12] = 0;
+  const png = Buffer.concat([sig, pngChunk('IHDR', ihdr), pngChunk('IDAT', compressed), pngChunk('IEND', Buffer.alloc(0))]);
+  fs.writeFileSync(LOGO_PATH, png);
+}
+
+function sectionHeader(text) {
+  return new Paragraph({
+    children: [new TextRun({ text: text.toUpperCase(), bold: true, size: 22, color: '6C63FF', font: 'Calibri' })],
+    spacing: { before: 300, after: 100 },
+    border: { bottom: { color: '6C63FF', size: 4, style: BorderStyle.SINGLE } },
+  });
+}
+
+function sectionContent(placeholder) {
+  return new Paragraph({
+    children: [new TextRun({ text: placeholder, size: 22, font: 'Calibri', color: '333333' })],
+    spacing: { after: 80 },
+  });
+}
+
 async function createDefaultTemplate() {
+  createDefaultLogo();
+  const logoData = fs.readFileSync(LOGO_PATH);
+
+  const children = [
+    // ── Header: logo + personal info in a table ──────────────────────────
+    new Table({
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              width: { size: 25, type: WidthType.PERCENTAGE },
+              verticalAlign: 'center',
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              children: [
+                new Paragraph({
+                  children: [
+                    new ImageRun({ data: logoData, transformation: { width: 100, height: 30 } }),
+                  ],
+                  alignment: AlignmentType.CENTER,
+                }),
+              ],
+            }),
+            new TableCell({
+              width: { size: 75, type: WidthType.PERCENTAGE },
+              verticalAlign: 'center',
+              margins: { top: 0, bottom: 0, left: 0, right: 0 },
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '{name}', bold: true, size: 36, font: 'Calibri', color: '1A1A2E' })], spacing: { after: 40 } }),
+                new Paragraph({ children: [new TextRun({ text: '{position}', size: 24, color: '6C63FF', font: 'Calibri', bold: true })], spacing: { after: 40 } }),
+                new Paragraph({ children: [new TextRun({ text: '{contacts}', size: 18, color: '666666', font: 'Calibri' })], spacing: { after: 0 } }),
+              ],
+            }),
+          ],
+        }),
+      ],
+    }),
+
+    // ── Divider ───────────────────────────────────────────────────────────
+    new Paragraph({
+      border: { bottom: { color: '6C63FF', size: 8, style: BorderStyle.SINGLE } },
+      spacing: { before: 200, after: 200 },
+      children: [],
+    }),
+
+    // ── Sections ──────────────────────────────────────────────────────────
+    sectionHeader('Обо мне'),
+    sectionContent('{about}'),
+
+    sectionHeader('Ключевые компетенции'),
+    sectionContent('{competencies}'),
+
+    sectionHeader('Стаж работы'),
+    sectionContent('{experience}'),
+
+    sectionHeader('Проектный опыт'),
+    sectionContent('{project_experience}'),
+
+    sectionHeader('Образование'),
+    sectionContent('{education}'),
+
+    sectionHeader('Сертификаты 1С'),
+    sectionContent('{certification}'),
+  ];
+
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Calibri', size: 22, color: '333333' },
+        },
+      },
+    },
     sections: [{
       properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 900 } } },
-      children: [
-        new Paragraph({ children: [new TextRun({ text: '{name}', bold: true, size: 40, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '{position}', size: 28, color: '6C63FF', font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: '{contacts}', size: 18, color: '666666', font: 'Calibri' })], spacing: { after: 200 } }),
-        new Paragraph({ border: { bottom: { color: '6C63FF', size: 6, style: BorderStyle.SINGLE } }, spacing: { before: 120, after: 120 }, children: [] }),
-        new Paragraph({ children: [new TextRun({ text: 'ОБО МНЕ', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{about}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: 'КЛЮЧЕВЫЕ КОМПЕТЕНЦИИ', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{competencies}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: 'СТАЖ РАБОТЫ', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{experience}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: 'ПРОЕКТНЫЙ ОПЫТ', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{project_experience}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: 'ОБРАЗОВАНИЕ', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{education}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-        new Paragraph({ children: [new TextRun({ text: 'СЕРТИФИКАТЫ 1С', bold: true, size: 22, color: '6C63FF', font: 'Calibri' })], spacing: { before: 300, after: 100 } }),
-        new Paragraph({ children: [new TextRun({ text: '{certification}', size: 22, font: 'Calibri' })], spacing: { after: 80 } }),
-      ],
+      children,
     }],
   });
+
   const buf = await Packer.toBuffer(doc);
   fs.writeFileSync(DEFAULT_TEMPLATE, buf);
-  console.log('✅ Создан базовый шаблон:', DEFAULT_TEMPLATE);
+  console.log('✅ Создан базовый шаблон с логотипом:', DEFAULT_TEMPLATE);
 }
 
 if (!fs.existsSync(TEMPLATES_DIR)) fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
+createDefaultLogo();
 if (!fs.existsSync(DEFAULT_TEMPLATE)) createDefaultTemplate().catch(console.error);
 
 function getTemplatePath() {

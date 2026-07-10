@@ -7,8 +7,9 @@ const { generatePdfResume } = require('./pdfgen');
 
 const SOFFICE_NAMES = process.platform === 'win32'
   ? [
-      'soffice.exe',
       'C:\\Program Files\\LibreOffice\\program\\soffice.exe',
+      'soffice.exe',
+      'soffice',
       'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
     ]
   : ['soffice', '/usr/bin/libreoffice', '/usr/bin/soffice'];
@@ -22,7 +23,9 @@ function findSoffice() {
         const sp = require('child_process').spawnSync(name, ['--version'], { encoding: 'utf8', timeout: 5000 });
         if (sp.status === 0) return name;
       }
-    } catch {}
+    } catch (e) {
+      // skip
+    }
   }
   return null;
 }
@@ -30,12 +33,18 @@ function findSoffice() {
 const sofficePath = findSoffice();
 const hasLibreOffice = !!sofficePath;
 
+if (hasLibreOffice) {
+  console.log(`PDF: LibreOffice найден: ${sofficePath}`);
+} else {
+  console.warn('PDF: LibreOffice не найден. Будет использован встроенный pdfkit (без шаблона).');
+}
+
 async function convertToPdf(employee) {
-  // Option 1: LibreOffice -> perfect 1:1 conversion
   if (sofficePath) {
+    let tmpDir = null;
     try {
       const docxBuf = await generateFromTemplate(employee);
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-'));
+      tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'resume-'));
       const docxPath = path.join(tmpDir, 'resume.docx');
       const pdfPath = path.join(tmpDir, 'resume.pdf');
       fs.writeFileSync(docxPath, docxBuf);
@@ -45,14 +54,20 @@ async function convertToPdf(employee) {
           else resolve();
         });
       });
+      if (!fs.existsSync(pdfPath)) {
+        throw new Error('PDF файл не был создан');
+      }
       const pdfBuf = fs.readFileSync(pdfPath);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
       return pdfBuf;
     } catch (e) {
-      console.warn('LibreOffice conversion failed, falling back to pdfkit:', e.message);
+      console.warn('PDF: LibreOffice conversion failed:', e.message);
+    } finally {
+      if (tmpDir) {
+        try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+      }
     }
+    console.warn('PDF: fallback to pdfkit (template styling will be lost)');
   }
-  // Option 2: pdfkit (built-in, with Cyrillic via Arial)
   return generatePdfResume(employee);
 }
 
