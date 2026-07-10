@@ -22,8 +22,7 @@ router.post('/login', (req, res) => {
 
 // POST /api/auth/logout
 router.post('/logout', (req, res) => {
-  req.session.destroy();
-  res.json({ ok: true });
+  req.session.destroy(() => { res.json({ ok: true }); });
 });
 
 // GET /api/auth/me
@@ -33,7 +32,7 @@ router.get('/me', (req, res) => {
     manager: req.session.isManager ? {
       id: req.session.managerId,
       name: req.session.managerName,
-      email: req.session.managerEmail,
+      email: req.session.managerLogin,
     } : null,
   });
 });

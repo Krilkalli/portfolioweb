@@ -36,6 +36,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // ─── Data ───────────────────────────────────────────────────────────────────
 let employees = [];
 let positionsList = [];
+let selectedIds = new Set();
 
 async function loadStats() {
   try {
@@ -102,11 +103,14 @@ function populatePositionSelects() {
 function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
+      <td class="col-check">
+        <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
+      </td>
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
@@ -310,6 +314,130 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = '/login.html';
+});
+
+// ─── Selection & Export ──────────────────────────────────────────────────────
+function updateSelectionUI() {
+  const toolbar = document.getElementById('exportToolbar');
+  const count = document.getElementById('selectedCount');
+  if (selectedIds.size > 0) {
+    toolbar.style.display = 'flex';
+    count.textContent = `Выбрано: ${selectedIds.size}`;
+  } else {
+    toolbar.style.display = 'none';
+  }
+  const selectAll = document.getElementById('selectAll');
+  const checks = document.querySelectorAll('.emp-check');
+  const activeChecks = Array.from(checks).filter(c => !c.disabled);
+  if (activeChecks.length > 0) {
+    selectAll.checked = activeChecks.every(c => c.checked);
+    selectAll.indeterminate = activeChecks.some(c => c.checked) && !activeChecks.every(c => c.checked);
+  } else {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+}
+
+document.getElementById('selectAll').addEventListener('change', (e) => {
+  const checks = document.querySelectorAll('.emp-check');
+  checks.forEach(c => {
+    if (!c.disabled) {
+      c.checked = e.target.checked;
+      const id = Number(c.dataset.id);
+      if (e.target.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+    }
+  });
+  updateSelectionUI();
+});
+
+document.getElementById('employeesTbody').addEventListener('change', (e) => {
+  if (e.target.classList.contains('emp-check')) {
+    const id = Number(e.target.dataset.id);
+    if (e.target.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+    updateSelectionUI();
+  }
+});
+
+document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+  selectedIds.clear();
+  document.querySelectorAll('.emp-check').forEach(c => { c.checked = false; });
+  document.getElementById('selectAll').checked = false;
+  updateSelectionUI();
+});
+
+async function exportSelected(format) {
+  if (selectedIds.size === 0) { toast('Сначала выберите сотрудников', 'warning'); return; }
+  const btn = format === 'pdf' ? document.getElementById('exportPdfBtn') : document.getElementById('exportDocxBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Генерация...';
+  try {
+    const r = await fetch('/api/employees/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds), format }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка экспорта', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resumes_${format}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`ZIP-архив с ${selectedIds.size} резюме (${format.toUpperCase()}) скачан`, 'success');
+  } catch {
+    toast('Ошибка при экспорте', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+document.getElementById('exportDocxBtn').addEventListener('click', () => exportSelected('docx'));
+document.getElementById('exportPdfBtn').addEventListener('click', () => exportSelected('pdf'));
+
+document.getElementById('exportExcelBtn').addEventListener('click', async () => {
+  if (selectedIds.size === 0) { toast('Сначала выберите сотрудников', 'warning'); return; }
+  const btn = document.getElementById('exportExcelBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Генерация...';
+  try {
+    const r = await fetch('/api/employees/export-excel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка экспорта', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `portfolio_selected_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`Excel-файл с ${selectedIds.size} сотрудниками скачан`, 'success');
+  } catch {
+    toast('Ошибка при экспорте', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 });
 
 // ─── Init ────────────────────────────────────────────────────────────────────

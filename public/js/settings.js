@@ -276,6 +276,36 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+// ─── Template Upload ─────────────────────────────────────────────────────────
+async function loadTemplateInfo() {
+  try {
+    const r = await fetch('/api/template/info');
+    const d = await r.json();
+    const el = document.getElementById('templateInfo');
+    if (d.custom) el.innerHTML = '<span style="color:var(--success)">✅ Пользовательский шаблон загружен</span>';
+    else el.innerHTML = '<span style="color:var(--text-muted)">📄 Используется базовый шаблон</span>';
+  } catch {}
+}
+
+document.getElementById('templateUploadForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const file = document.getElementById('templateFile').files[0];
+  if (!file) { toast('Выберите DOCX-файл', 'warning'); return; }
+  const btn = document.getElementById('uploadTemplateBtn');
+  const result = document.getElementById('templateResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Загрузка...';
+  const fd = new FormData();
+  fd.append('template', file);
+  try {
+    const r = await fetch('/api/template/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (r.ok) { result.textContent = '✅ Шаблон загружен'; result.style.color = 'var(--success)'; toast('Шаблон загружен', 'success'); loadTemplateInfo(); }
+    else { result.textContent = '❌ ' + (d.error || 'Ошибка'); result.style.color = 'var(--danger)'; }
+  } catch { result.textContent = '❌ Ошибка соединения'; result.style.color = 'var(--danger)'; }
+  finally { btn.disabled = false; btn.textContent = '📤 Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
+});
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
@@ -284,5 +314,5 @@ function escHtml(str) {
   document.getElementById('currentManagerLogin').textContent = currentManager?.email || '';
 
   initTheme();
-  await Promise.all([loadSettings(), loadPositions(), loadManagers()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo()]);
 })();

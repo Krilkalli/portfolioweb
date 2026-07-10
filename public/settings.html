@@ -175,6 +175,25 @@
       </div>
     </div>
 
+    <!-- Template Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📄 Шаблон резюме</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Загрузите DOCX-файл с тегами <code>{name}</code>, <code>{position}</code>, <code>{about}</code>, <code>{contacts}</code>, <code>{competencies}</code>, <code>{experience}</code>, <code>{project_experience}</code>, <code>{education}</code>, <code>{certification}</code> в нужных местах. Данные сотрудника будут подставлены автоматически.
+      </p>
+      <div id="templateInfo" style="margin-bottom:12px;font-size:0.85rem;"></div>
+      <form id="templateUploadForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <input type="file" id="templateFile" accept=".docx" class="form-control" style="padding:8px;">
+        </div>
+        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">📤 Загрузить шаблон</button>
+        <div id="templateResult" style="margin-top:10px;font-size:0.85rem;"></div>
+      </form>
+    </div>
+
     <!-- Info Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">

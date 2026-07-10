@@ -137,12 +137,24 @@
     <a href="/api/excel/export" class="btn btn-ghost btn-sm">📤 Экспорт Excel</a>
   </div>
 
+  <!-- Toolbar -->
+  <div class="toolbar" id="exportToolbar" style="display:none;">
+    <div class="toolbar-left">
+      <span id="selectedCount" style="font-size:0.82rem;color:var(--text-secondary);font-weight:600;"></span>
+      <button class="btn btn-primary btn-sm" id="exportExcelBtn">📊 Excel</button>
+      <button class="btn btn-primary btn-sm" id="exportDocxBtn">📄 DOCX</button>
+      <button class="btn btn-primary btn-sm" id="exportPdfBtn">📑 PDF</button>
+      <button class="btn btn-ghost btn-sm" id="clearSelectionBtn">✕ Снять выделение</button>
+    </div>
+  </div>
+
   <!-- Table -->
   <div class="card employees-card">
     <div class="table-wrap">
       <table class="table" id="employeesTable">
         <thead>
           <tr>
+            <th class="col-check"><input type="checkbox" id="selectAll"></th>
             <th>Сотрудник</th>
             <th>Должность</th>
             <th>Город</th>
@@ -153,7 +165,7 @@
           </tr>
         </thead>
         <tbody id="employeesTbody">
-          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">
             <span class="spinner"></span>
           </td></tr>
         </tbody>
