@@ -324,6 +324,14 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const nm = document.getElementById('navbarManager');
   if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
 
+  // Leader role: view-only, hide approve/reject buttons
+  if (auth.manager?.role === 'leader') {
+    document.querySelectorAll('.actions').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('[onclick*="approve"]').forEach(el => { el.disabled = true; el.style.opacity = '0.4'; });
+    document.querySelectorAll('[onclick*="reject"]').forEach(el => { el.disabled = true; el.style.opacity = '0.4'; });
+    document.querySelectorAll('[onclick*="openReject"]').forEach(el => { el.disabled = true; el.style.opacity = '0.4'; });
+  }
+
   initTheme();
   await loadPending();
 })();

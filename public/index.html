@@ -128,6 +128,32 @@
       background: var(--bg-card-hover);
       color: var(--text-primary);
     }
+    .filter-dropdown-menu {
+      display: none;
+      position: absolute;
+      left: 0;
+      top: calc(100% + 4px);
+      z-index: 60;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      min-width: 280px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .filter-dropdown-menu.show { display: block; }
+    .filter-cert-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 5px 12px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-radius: 4px;
+      transition: background 0.15s;
+    }
+    .filter-cert-item:hover { background: var(--bg-card-hover); }
+    .filter-cert-item input { accent-color: var(--accent); margin: 0; }
   </style>
 </head>
 <body class="page-wrapper">
@@ -175,16 +201,33 @@
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input id="searchInput" type="text" class="form-control" placeholder="Поиск по ФИО или должности..." style="width:320px">
+        <input id="searchInput" type="text" class="form-control" placeholder="Поиск по ФИО, должности, городу..." style="width:280px">
       </div>
-      <select id="filterPosition" class="form-control" style="width:auto;min-width:200px;">
+      <select id="filterPosition" class="form-control" style="width:auto;min-width:180px;">
         <option value="">— Все должности —</option>
       </select>
+      <select id="filterCity" class="form-control" style="width:auto;min-width:160px;">
+        <option value="">— Все города —</option>
+      </select>
+      <div class="filter-dropdown" id="certFilterWrap" style="position:relative;">
+        <button class="btn btn-ghost btn-sm" id="certFilterBtn" style="font-size:0.82rem;">📜 Сертификаты ▾</button>
+        <div class="filter-dropdown-menu" id="certFilterMenu">
+          <div style="padding:8px;border-bottom:1px solid var(--border);">
+            <input type="text" id="certSearchInput" class="form-control" placeholder="Поиск сертификата..." style="font-size:0.8rem;padding:6px 10px;">
+          </div>
+          <div id="certFilterList" style="max-height:260px;overflow-y:auto;padding:4px;"></div>
+          <div style="padding:8px;border-top:1px solid var(--border);display:flex;gap:6px;">
+            <button class="btn btn-ghost btn-sm" id="certSelectAll" style="font-size:0.78rem;">Все</button>
+            <button class="btn btn-ghost btn-sm" id="certClearAll" style="font-size:0.78rem;">Снять</button>
+          </div>
+        </div>
+      </div>
       <label class="filter-label">
         <input type="checkbox" id="filterArchived" checked> Показывать архив
       </label>
     </div>
     <button id="addEmployeeBtn" class="btn btn-primary btn-sm">➕ Сотрудника</button>
+    <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📥 Импорт Excel</button>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm">📤 Экспорт Excel</a>
   </div>
 
@@ -260,6 +303,31 @@
         <button type="submit" class="btn btn-primary" id="saveNewBtn">➕ Добавить и скопировать ссылку</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- Import Excel Modal -->
+<div class="modal-overlay" id="importExcelModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <span class="modal-title">📥 Импорт из Excel</span>
+      <button class="btn btn-ghost btn-icon" id="closeImportModal">✕</button>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;word-break:break-word;">
+      Выберите режим импорта. Формат файла: <code>.xlsx</code> с колонками ФИО, Образование, Должность, Контактные данные, Стаж работы, Обо мне, Компетенции, Проектный опыт, Сертификация 1С.
+    </p>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+      <button class="btn btn-primary" id="importAddBtn" style="text-align:left;padding:16px;">
+        <div style="font-weight:600;">➕ Добавить</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);font-weight:400;word-break:break-word;">Новых сотрудников. Дубликаты (по ФИО и контактам) будут пропущены.</div>
+      </button>
+      <button class="btn btn-danger" id="importReplaceBtn" style="text-align:left;padding:16px;" data-role="admin">
+        <div style="font-weight:600;">🔄 Заменить полностью</div>
+        <div style="font-size:0.8rem;color:var(--text-muted);font-weight:400;word-break:break-word;">Все текущие сотрудники будут удалены и заменены данными из файла.</div>
+      </button>
+    </div>
+    <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;">
+    <div id="importResult" style="font-size:0.85rem;"></div>
   </div>
 </div>
 

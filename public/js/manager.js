@@ -36,7 +36,10 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // ─── Data ───────────────────────────────────────────────────────────────────
 let employees = [];
 let positionsList = [];
+let filterData = { positions: [], cities: [], certifications: [] };
 let selectedIds = new Set();
+let currentManager = null;
+let selectedCerts = new Set();
 
 async function loadStats() {
   try {
@@ -72,6 +75,50 @@ async function loadPositions() {
       populatePositionSelects();
     }
   } catch {}
+}
+
+async function loadFilterData() {
+  try {
+    const r = await fetch('/api/filter-data');
+    if (r.ok) {
+      filterData = await r.json();
+      populateCitySelect();
+      populateCertFilter();
+    }
+  } catch {}
+}
+
+function populateCitySelect() {
+  const sel = document.getElementById('filterCity');
+  if (!sel) return;
+  const curr = sel.value;
+  sel.innerHTML = '<option value="">— Все города —</option>';
+  (filterData.cities || []).forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c; sel.appendChild(opt);
+  });
+  sel.value = curr;
+}
+
+function populateCertFilter() {
+  const list = document.getElementById('certFilterList');
+  if (!list) return;
+  list.innerHTML = '';
+  (filterData.certifications || []).forEach(cert => {
+    const label = document.createElement('label');
+    label.className = 'filter-cert-item';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.value = cert;
+    cb.checked = selectedCerts.has(cert);
+    cb.addEventListener('change', () => {
+      if (cb.checked) selectedCerts.add(cert); else selectedCerts.delete(cert);
+      applyFilter();
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(' ' + cert));
+    list.appendChild(label);
+  });
 }
 
 function populatePositionSelects() {
@@ -116,11 +163,11 @@ function renderTable(list) {
           <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
           <div>
             <div class="employee-name"><a href="${e.link}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
-            <div style="font-size:0.75rem;color:var(--text-muted)">${e.email || '—'}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.email || ''}">${e.email || '—'}</div>
           </div>
         </div>
       </td>
-      <td><span class="employee-pos">${e.position || '—'}</span></td>
+      <td><span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span></td>
       <td><span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span></td>
       <td>
         ${e.status === 'archived'
@@ -300,17 +347,54 @@ document.getElementById('filterArchived').addEventListener('change', (e) => {
 
 document.getElementById('searchInput').addEventListener('input', () => { applyFilter(); });
 document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
+document.getElementById('filterCity').addEventListener('change', () => { applyFilter(); });
+
+// ─── Cert Filter Dropdown ──────────────────────────────────────────────────
+document.getElementById('certFilterBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('certFilterMenu').classList.toggle('show');
+});
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#certFilterWrap')) {
+    document.getElementById('certFilterMenu').classList.remove('show');
+  }
+});
+document.getElementById('certSearchInput').addEventListener('input', (e) => {
+  const q = e.target.value.toLowerCase();
+  document.querySelectorAll('#certFilterList .filter-cert-item').forEach(el => {
+    el.style.display = el.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+document.getElementById('certSelectAll').addEventListener('click', () => {
+  (filterData.certifications || []).forEach(c => selectedCerts.add(c));
+  document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = true);
+  applyFilter();
+});
+document.getElementById('certClearAll').addEventListener('click', () => {
+  selectedCerts.clear();
+  document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = false);
+  applyFilter();
+});
 
 function applyFilter() {
   const q = document.getElementById('searchInput').value.toLowerCase().trim();
   const pos = document.getElementById('filterPosition').value;
+  const city = document.getElementById('filterCity').value;
   let list = employees;
   if (!showArchived) list = list.filter(e => e.status !== 'archived');
   if (pos) list = list.filter(e => e.position === pos);
+  if (city) list = list.filter(e => e.city === city);
+  if (selectedCerts.size > 0) {
+    list = list.filter(e => {
+      const cert = (e.certification || '').toLowerCase();
+      return [...selectedCerts].some(c => cert.includes(c.toLowerCase()));
+    });
+  }
   list = list.filter(emp =>
     emp.name.toLowerCase().includes(q) ||
     (emp.position || '').toLowerCase().includes(q) ||
-    (emp.city || '').toLowerCase().includes(q)
+    (emp.city || '').toLowerCase().includes(q) ||
+    (emp.email || '').toLowerCase().includes(q)
   );
   renderTable(list);
 }
@@ -445,14 +529,86 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
   }
 });
 
+// ─── Import Excel Modal ──────────────────────────────────────────────────────
+let importMode = null;
+
+document.getElementById('importExcelBtn').addEventListener('click', () => {
+  document.getElementById('importExcelModal').classList.add('active');
+  document.getElementById('importResult').innerHTML = '';
+  document.getElementById('importFileInput').value = '';
+  importMode = null;
+});
+
+document.getElementById('closeImportModal').addEventListener('click', () => {
+  document.getElementById('importExcelModal').classList.remove('active');
+});
+document.getElementById('importExcelModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('importExcelModal').classList.remove('active');
+});
+
+document.getElementById('importAddBtn').addEventListener('click', () => {
+  importMode = 'add';
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importReplaceBtn').addEventListener('click', () => {
+  if (!confirm('ВНИМАНИЕ! Все текущие сотрудники будут ПОЛНОСТЬЮ УДАЛЕНЫ и заменены данными из файла.\n\nЭто действие необратимо. Продолжить?')) return;
+  importMode = 'replace';
+  document.getElementById('importFileInput').click();
+});
+
+document.getElementById('importFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (!file || !importMode) return;
+
+  const result = document.getElementById('importResult');
+  result.innerHTML = '<span class="spinner"></span> Импорт...';
+
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('mode', importMode);
+
+  try {
+    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
+    const d = await r.json();
+    e.target.value = '';
+    if (r.ok) {
+      const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
+      result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
+      toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
+      await loadEmployees();
+      await loadStats();
+    } else {
+      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
+      toast(d.error || 'Ошибка импорта', 'error');
+    }
+  } catch {
+    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+    toast('Ошибка при импорте файла', 'error');
+  }
+  setTimeout(() => { result.innerHTML = ''; }, 6000);
+});
+
+// ─── Role-based UI ──────────────────────────────────────────────────────────
+function applyRoleUI(role) {
+  document.querySelectorAll('[data-role]').forEach(el => {
+    const allowed = el.dataset.role.split(',').map(r => r.trim());
+    if (!allowed.includes(role)) {
+      el.style.display = 'none';
+    }
+  });
+}
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
 
+  currentManager = auth.manager;
   const nm = document.getElementById('navbarManager');
   if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
 
   initTheme();
-  await Promise.all([loadStats(), loadEmployees(), loadPositions()]);
+  applyRoleUI(auth.manager?.role || 'admin');
+  await Promise.all([loadStats(), loadEmployees(), loadPositions(), loadFilterData()]);
 })();

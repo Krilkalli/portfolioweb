@@ -249,16 +249,22 @@
   <div style="font-size:3rem;margin-bottom:16px;">🔗</div>
   <h2 style="color:var(--text-secondary);margin-bottom:8px;">Ссылка недействительна</h2>
   <p>Обратитесь к менеджеру для получения актуальной ссылки.</p>
+  <div id="backToDashError" style="margin-top:20px;display:none;">
+    <a href="/index.html" class="btn btn-primary btn-sm">← На главную</a>
+  </div>
 </div>
 
-<div id="successState" class="form-wrap hidden">
+  <div id="successState" class="form-wrap hidden">
   <div class="success-screen">
     <div class="success-icon">✅</div>
     <h2 style="font-size:1.4rem;margin-bottom:8px;">Данные отправлены на проверку!</h2>
-    <p style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
+    <p id="successSubtitle" style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
       Менеджер рассмотрит изменения и подтвердит их.
     </p>
     <p id="changesCountMsg" style="color:var(--text-muted);font-size:0.875rem;"></p>
+    <div id="backToDashManager" style="margin-top:24px;display:none;">
+      <a href="/index.html" class="btn btn-primary btn-sm">← На главную</a>
+    </div>
   </div>
 </div>
 

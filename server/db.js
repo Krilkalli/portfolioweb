@@ -82,6 +82,8 @@ try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'ac
 try { db.exec("ALTER TABLE pending_changes ADD COLUMN reviewed_by TEXT DEFAULT ''"); } catch (e) {}
 // Миграция: добавить колонку photo в employees
 try { db.exec("ALTER TABLE employees ADD COLUMN photo TEXT DEFAULT ''"); } catch (e) {}
+// Миграция: добавить колонку role в managers
+try { db.exec("ALTER TABLE managers ADD COLUMN role TEXT DEFAULT 'admin'"); } catch (e) {}
 
 // ─── Подготовленные запросы ──────────────────────────────────────────────────
 const stGetSetting   = db.prepare('SELECT value FROM settings WHERE key = ?');
@@ -122,8 +124,8 @@ const stRejectAll     = db.prepare("UPDATE pending_changes SET status = 'rejecte
 const stInsertFeedback = db.prepare('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES (?, ?, ?, ?)');
 const stGetManagerByEmail = db.prepare('SELECT * FROM managers WHERE email = ?');
 const stGetManagerById   = db.prepare('SELECT * FROM managers WHERE id = ?');
-const stGetAllManagers   = db.prepare('SELECT id, name, email, created_at FROM managers ORDER BY name');
-const stInsertManager    = db.prepare('INSERT INTO managers (name, email, password_hash, created_at) VALUES (?, ?, ?, ?)');
+const stGetAllManagers   = db.prepare('SELECT id, name, email, role, created_at FROM managers ORDER BY name');
+const stInsertManager    = db.prepare('INSERT INTO managers (name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)');
 const stDeleteManager    = db.prepare('DELETE FROM managers WHERE id = ?');
 
 // ─── Нормализация имени для поиска дубликатов ──────────────────────────────
@@ -470,9 +472,11 @@ function init() {
   if (managerCount === 0) {
     const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 10);
     const login = 'admin';
-    stInsertManager.run('Главный администратор', login, hash, new Date().toISOString());
+    stInsertManager.run('Главный администратор', login, hash, 'admin', new Date().toISOString());
     console.log(`✅ Создан менеджер по умолчанию: ${login}`);
   }
+  // Миграция: установить роль 'admin' всем менеджерам без роли
+  db.prepare("UPDATE managers SET role = 'admin' WHERE role IS NULL OR role = ''").run();
   // Миграция: если есть старый manager_password_hash, удалить его из настроек
   if (settings.manager_password_hash) {
     db.prepare("DELETE FROM settings WHERE key = 'manager_password_hash'").run();
@@ -794,14 +798,17 @@ const helpers = {
   getAllManagers() {
     return stGetAllManagers.all();
   },
-  createManager(name, login, passwordHash) {
+  createManager(name, login, passwordHash, role) {
     const tx = db.transaction(() => {
       const existing = stGetManagerByEmail.get(String(login).trim().toLowerCase());
       if (existing) throw new Error('Менеджер с таким логином уже существует');
+      const validRoles = ['admin', 'scrum', 'leader'];
+      const managerRole = validRoles.includes(role) ? role : 'scrum';
       stInsertManager.run(
         String(name || '').trim(),
         String(login).trim().toLowerCase(),
         passwordHash,
+        managerRole,
         new Date().toISOString()
       );
       return stGetManagerByEmail.get(String(login).trim().toLowerCase());
@@ -818,6 +825,64 @@ const helpers = {
   },
   updateManagerPassword(id, newHash) {
     db.prepare('UPDATE managers SET password_hash = ? WHERE id = ?').run(newHash, Number(id));
+  },
+  updateManagerRole(id, role) {
+    const validRoles = ['admin', 'scrum', 'leader'];
+    if (!validRoles.includes(role)) throw new Error('Неверная роль');
+    db.prepare('UPDATE managers SET role = ? WHERE id = ?').run(role, Number(id));
+  },
+
+  // ── Компетенции по должностям ──────────────────────────────────────────────
+  getPositionCompetencies() {
+    const val = helpers.getSetting('position_competencies');
+    try { return JSON.parse(val || '{}'); } catch { return {}; }
+  },
+  setPositionCompetencies(obj) {
+    helpers.setSetting('position_competencies', JSON.stringify(obj));
+  },
+  addPositionCompetency(position, competency) {
+    const all = helpers.getPositionCompetencies();
+    if (!all[position]) all[position] = [];
+    if (!all[position].includes(competency)) all[position].push(competency);
+    helpers.setPositionCompetencies(all);
+    return all[position];
+  },
+  removePositionCompetency(position, competency) {
+    const all = helpers.getPositionCompetencies();
+    if (all[position]) {
+      all[position] = all[position].filter(c => c !== competency);
+      if (all[position].length === 0) delete all[position];
+    }
+    helpers.setPositionCompetencies(all);
+    return all[position] || [];
+  },
+
+  // ── Уникальные значения для фильтров ──────────────────────────────────────
+  getFilterData() {
+    const rows = db.prepare("SELECT position, city, certification FROM employees WHERE status = 'active'").all();
+    const positions = new Set();
+    const cities = new Set();
+    const certs = new Set();
+    for (const r of rows) {
+      if (r.position) positions.add(r.position);
+      if (r.city) cities.add(r.city);
+      if (r.certification) {
+        // Parse individual cert names from certification text
+        const lines = r.certification.split(/\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          // Remove common prefixes and get cert name
+          const cleaned = line.replace(/^[-•]\s*/, '').replace(/^Сертификация 1С:?\s*/i, '').trim();
+          if (cleaned && !cleaned.startsWith('Обучающие курсы') && cleaned !== '-') {
+            certs.add(cleaned);
+          }
+        }
+      }
+    }
+    return {
+      positions: [...positions].sort(),
+      cities: [...cities].sort(),
+      certifications: [...certs].sort(),
+    };
   },
 };
 

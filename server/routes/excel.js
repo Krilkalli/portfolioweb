@@ -16,6 +16,12 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (req.session.managerRole !== 'admin') return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
+  next();
+}
+
 // ─── Разбор текстовых блоков из выгрузки ────────────────────────────────────
 // Формат ячеек в реальных выгрузках — многострочный текст с подписанными
 // полями ("Учебное заведение: ...", "Общий стаж: ...", и т.д.), при этом
@@ -151,17 +157,20 @@ function resolveColumns(headerRow) {
 }
 
 // ── Импорт Excel / CSV ────────────────────────────────────────────────────────
-// ВНИМАНИЕ: импорт полностью ЗАМЕНЯЕТ текущий список сотрудников данными из
-// файла. Перед вставкой новых строк все существующие сотрудники удаляются
-// (вместе с ними — их персональные ссылки и история pending_changes,
-// т.к. на неё стоит ON DELETE CASCADE). Подтверждение показывается на клиенте
-// (public/js/manager.js) перед отправкой файла на сервер.
+// Режимы:
+//   mode=replace (по умолчанию) — полностью заменяет всех сотрудников (только admin)
+//   mode=add — добавляет новых, пропускает дубликаты (проверка по ФИО + контактам)
 router.post('/import', requireAuth, upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
   try {
+    const mode = req.body.mode || 'replace';
+    if (mode === 'replace' && req.session.managerRole !== 'admin') {
+      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
+      return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
+    }
+
     const wb   = XLSX.readFile(req.file.path);
     const ws   = wb.Sheets[wb.SheetNames[0]];
-    // header:1 — сырые строки массивами, без привязки к точному тексту заголовка
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
     if (rows.length < 2) return res.status(400).json({ error: 'Файл пуст или не содержит данных' });
 
@@ -171,9 +180,23 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
       return res.status(400).json({ error: 'Не найдена колонка "ФИО" — проверьте формат файла' });
     }
 
-    const removed = helpers.deleteAllEmployees();
+    function normalizeContacts(raw) {
+      return String(raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    }
 
-    let imported = 0, skipped = 0;
+    let removed = 0, imported = 0, skipped = 0;
+
+    if (mode === 'replace') {
+      removed = helpers.deleteAllEmployees();
+    }
+
+    // В режиме add — собираем существующие для проверки дубликатов
+    let existingEmployees = [];
+    if (mode === 'add') {
+      const { helpers: h } = require('../db');
+      existingEmployees = h.getAllEmployees();
+    }
+
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
       const name = String(row[col.name] ?? '').trim();
@@ -195,12 +218,23 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
       };
       data.contacts = [city, email].filter(Boolean).join('\n');
 
+      if (mode === 'add') {
+        const normName = String(name).toLowerCase().replace(/\s+/g, ' ').trim();
+        const normContacts = normalizeContacts(data.contacts);
+        const isDuplicate = existingEmployees.some(e => {
+          const eName = String(e.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
+          const eContacts = normalizeContacts(e.contacts || '');
+          return eName === normName && eContacts === normContacts;
+        });
+        if (isDuplicate) { skipped++; continue; }
+      }
+
       helpers.createEmployee(data);
       imported++;
     }
 
     fs.unlinkSync(req.file.path);
-    res.json({ ok: true, imported, removed, skipped, total: rows.length - 1 });
+    res.json({ ok: true, imported, removed, skipped, total: rows.length - 1, mode });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: `Ошибка импорта: ${err.message}` });

@@ -22,12 +22,32 @@ function requireAuth(req, res, next) {
   next();
 }
 
+function requireAdmin(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (req.session.managerRole !== 'admin') return res.status(403).json({ error: 'Только главный администратор может выполнять это действие' });
+  next();
+}
+
+function requireCanReview(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  const role = req.session.managerRole || 'admin';
+  if (role !== 'admin' && role !== 'scrum') return res.status(403).json({ error: 'Недостаточно прав для проверки изменений' });
+  next();
+}
+
+function requireCanEdit(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  const role = req.session.managerRole || 'admin';
+  if (role === 'leader') return res.status(403).json({ error: 'Руководитель не может редактировать данные' });
+  next();
+}
+
 // ── Список сотрудников ────────────────────────────────────────────────────────
 router.get('/employees', requireAuth, (req, res) => {
   const base = `${req.protocol}://${req.get('host')}`;
   const list = helpers.getAllEmployees().map(e => ({
     ...e,
-    link: `${base}/form.html?token=${e.token}`,
+    link: `${base}/form.html?token=${e.token}&as=manager`,
   }));
   res.json(list);
 });
@@ -40,35 +60,35 @@ router.get('/employees/:id', requireAuth, (req, res) => {
   res.json({
     ...emp,
     pendingChanges: helpers.getPendingByEmployee(emp.id),
-    link: `${base}/form.html?token=${emp.token}`,
+    link: `${base}/form.html?token=${emp.token}&as=manager`,
   });
 });
 
 // ── Прямое редактирование менеджером ─────────────────────────────────────────
-router.put('/employees/:id', requireAuth, (req, res) => {
+router.put('/employees/:id', requireCanEdit, (req, res) => {
   const updated = helpers.updateEmployee(Number(req.params.id), req.body);
   if (!updated) return res.status(404).json({ error: 'Сотрудник не найден' });
   res.json({ ok: true, employee: updated });
 });
 
 // ── Архивировать / восстановить сотрудника ───────────────────────────────────
-router.delete('/employees/:id', requireAuth, (req, res) => {
+router.delete('/employees/:id', requireCanEdit, (req, res) => {
   const ok = helpers.archiveEmployee(Number(req.params.id));
   if (!ok) return res.status(404).json({ error: 'Сотрудник не найден' });
   res.json({ ok: true, status: 'archived' });
 });
-router.post('/employees/:id/restore', requireAuth, (req, res) => {
+router.post('/employees/:id/restore', requireCanEdit, (req, res) => {
   const ok = helpers.restoreEmployee(Number(req.params.id));
   if (!ok) return res.status(404).json({ error: 'Сотрудник не найден' });
   res.json({ ok: true, status: 'active' });
 });
 
 // ── Новый токен ───────────────────────────────────────────────────────────────
-router.post('/employees/:id/new-token', requireAuth, (req, res) => {
+router.post('/employees/:id/new-token', requireCanEdit, (req, res) => {
   const emp = helpers.regenerateToken(Number(req.params.id));
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}`, employee: emp });
+  res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as=manager`, employee: emp });
 });
 
 // ── Все ожидающие изменения ───────────────────────────────────────────────────
@@ -77,21 +97,21 @@ router.get('/pending', requireAuth, (req, res) => {
 });
 
 // ── Подтвердить одно изменение ────────────────────────────────────────────────
-router.post('/pending/:changeId/approve', requireAuth, async (req, res) => {
+router.post('/pending/:changeId/approve', requireCanReview, async (req, res) => {
   const ok = helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
   res.json({ ok: true });
 });
 
 // ── Отклонить одно изменение ──────────────────────────────────────────────────
-router.post('/pending/:changeId/reject', requireAuth, (req, res) => {
+router.post('/pending/:changeId/reject', requireCanReview, (req, res) => {
   const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
   res.json({ ok: true });
 });
 
 // ── Подтвердить все изменения сотрудника ─────────────────────────────────────
-router.post('/employees/:id/approve-all', requireAuth, async (req, res) => {
+router.post('/employees/:id/approve-all', requireCanReview, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
@@ -101,7 +121,7 @@ router.post('/employees/:id/approve-all', requireAuth, async (req, res) => {
 });
 
 // ── Отклонить все изменения сотрудника ───────────────────────────────────────
-router.post('/employees/:id/reject-all', requireAuth, async (req, res) => {
+router.post('/employees/:id/reject-all', requireCanReview, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
@@ -111,10 +131,10 @@ router.post('/employees/:id/reject-all', requireAuth, async (req, res) => {
 });
 
 // ── Создать сотрудника ──────────────────────────────────────────────────────
-router.post('/employees', requireAuth, (req, res) => {
+router.post('/employees', requireCanEdit, (req, res) => {
   const emp = helpers.createEmployee(req.body);
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}` } });
+  res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as=manager` } });
 });
 
 // ── Должности: список ────────────────────────────────────────────────────────
@@ -275,8 +295,18 @@ router.get('/settings', requireAuth, (req, res) => {
 
 // ── Настройки: сохранить ─────────────────────────────────────────────────────
 router.put('/settings', requireAuth, (req, res) => {
-  const allowed = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from','manager_email'];
-  for (const k of allowed) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
+  const role = req.session.managerRole || 'admin';
+  // SMTP настройки — только для админа
+  const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from'];
+  // Email менеджера — для админа и скрама
+  const canEdit = ['manager_email'];
+  if (role === 'admin') {
+    for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
+  } else if (role === 'scrum') {
+    for (const k of canEdit) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
+  } else {
+    return res.status(403).json({ error: 'Недостаточно прав для изменения настроек' });
+  }
   res.json({ ok: true });
 });
 
@@ -296,27 +326,39 @@ router.get('/stats', requireAuth, (req, res) => {
 });
 
 // ── Менеджеры: список ─────────────────────────────────────────────────────────
-router.get('/managers', requireAuth, (req, res) => {
+router.get('/managers', requireAdmin, (req, res) => {
   res.json({ managers: helpers.getAllManagers() });
 });
 
 // ── Менеджеры: создать ────────────────────────────────────────────────────────
-router.post('/managers', requireAuth, (req, res) => {
-  const { name, login, password } = req.body;
+router.post('/managers', requireAdmin, (req, res) => {
+  const { name, login, password, role } = req.body;
   if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
   if (!login || !login.trim()) return res.status(400).json({ error: 'Логин обязателен' });
   if (!password || password.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
   try {
     const hash = require('bcryptjs').hashSync(password, 10);
-    const manager = helpers.createManager(name.trim(), login.trim(), hash);
-    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email } });
+    const manager = helpers.createManager(name.trim(), login.trim(), hash, role);
+    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role } });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+// ── Менеджеры: изменить роль ──────────────────────────────────────────────────
+router.put('/managers/:id/role', requireAdmin, (req, res) => {
+  const { role } = req.body;
+  if (!role) return res.status(400).json({ error: 'Укажите роль' });
+  try {
+    helpers.updateManagerRole(Number(req.params.id), role);
+    res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
 // ── Менеджеры: удалить ────────────────────────────────────────────────────────
-router.delete('/managers/:id', requireAuth, (req, res) => {
+router.delete('/managers/:id', requireAdmin, (req, res) => {
   try {
     helpers.deleteManager(Number(req.params.id));
     res.json({ ok: true });
@@ -345,7 +387,7 @@ router.put('/managers/me/password', requireAuth, (req, res) => {
 });
 
 // ── Загрузка шаблона резюме ──────────────────────────────────────────────
-router.post('/template/upload', requireAuth, upload.single('template'), (req, res) => {
+router.post('/template/upload', requireAdmin, upload.single('template'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
   const dest = path.join(templatesDir, 'custom_template.docx');
   fs.copyFileSync(req.file.path, dest);
@@ -354,7 +396,7 @@ router.post('/template/upload', requireAuth, upload.single('template'), (req, re
 });
 
 // ── Массовая рассылка ────────────────────────────────────────────────────────
-router.post('/mass-mailing', requireAuth, async (req, res) => {
+router.post('/mass-mailing', requireCanEdit, async (req, res) => {
   const { subject, htmlContent, recipientIds, sendToAll } = req.body;
   if (!subject || !htmlContent) {
     return res.status(400).json({ error: 'Тема и содержание письма обязательны' });
@@ -399,6 +441,30 @@ router.post('/feedback/notify-manager', requireAuth, async (req, res) => {
 router.get('/template/info', requireAuth, (req, res) => {
   const custom = fs.existsSync(path.join(templatesDir, 'custom_template.docx'));
   res.json({ custom, placeholders: ['name','position','contacts','about','competencies','experience','project_experience','education','certification'] });
+});
+
+// ── Компетенции по должностям ────────────────────────────────────────────────
+router.get('/position-competencies', requireAuth, (req, res) => {
+  res.json(helpers.getPositionCompetencies());
+});
+
+router.post('/position-competencies', requireCanEdit, (req, res) => {
+  const { position, competency } = req.body;
+  if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });
+  const list = helpers.addPositionCompetency(position.trim(), competency.trim());
+  res.json({ ok: true, competencies: list });
+});
+
+router.delete('/position-competencies', requireCanEdit, (req, res) => {
+  const { position, competency } = req.body;
+  if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });
+  const list = helpers.removePositionCompetency(position.trim(), competency.trim());
+  res.json({ ok: true, competencies: list });
+});
+
+// ── Данные для фильтров ──────────────────────────────────────────────────────
+router.get('/filter-data', requireAuth, (req, res) => {
+  res.json(helpers.getFilterData());
 });
 
 module.exports = router;

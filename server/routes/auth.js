@@ -17,7 +17,8 @@ router.post('/login', (req, res) => {
   req.session.managerId = manager.id;
   req.session.managerName = manager.name;
   req.session.managerLogin = manager.email;
-  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email } });
+  req.session.managerRole = manager.role || 'admin';
+  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'admin' } });
 });
 
 // POST /api/auth/logout
@@ -33,6 +34,7 @@ router.get('/me', (req, res) => {
       id: req.session.managerId,
       name: req.session.managerName,
       email: req.session.managerLogin,
+      role: req.session.managerRole || 'admin',
     } : null,
   });
 });

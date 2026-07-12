@@ -72,6 +72,10 @@ router.get('/positions', (req, res) => {
   res.json({ positions: helpers.getPositions() });
 });
 
+router.get('/position-competencies', (req, res) => {
+  res.json(helpers.getPositionCompetencies());
+});
+
 router.get('/:token', (req, res) => {
   const emp = helpers.getEmployeeByToken(req.params.token);
   if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
