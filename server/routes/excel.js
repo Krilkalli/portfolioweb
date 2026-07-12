@@ -263,11 +263,13 @@ router.get('/export', requireAuth, (req, res) => {
       if (exp.total) lines.push('Общий стаж: ' + exp.total);
       if (Array.isArray(exp.jobs) && exp.jobs.length > 0) {
         for (const j of exp.jobs) {
-          const parts = [j.company, j.position, j.period].filter(Boolean);
-          if (parts.length) lines.push(parts.join(' — '));
+          const parts = [];
+          if (j.company) parts.push('Компания: ' + j.company);
+          if (j.position) parts.push('Должность: ' + j.position);
+          if (j.period) parts.push('Период: ' + j.period);
+          if (parts.length) lines.push(parts.join('\n'));
         }
       }
-      if (lines.length === 0) return '';
       return lines.join('\n');
     }
     return '';
@@ -277,14 +279,14 @@ router.get('/export', requireAuth, (req, res) => {
     if (Array.isArray(proj)) {
       return proj.map(p => {
         const lines = [];
-        if (p.period) lines.push('Период: ' + p.period);
-        if (p.client) lines.push('Заказчик: ' + p.client);
+        if (p.period) lines.push('Период работы: ' + p.period);
         if (p.position) lines.push('Должность: ' + p.position);
         if (p.role) lines.push('Роль: ' + p.role);
         if (p.team_size) lines.push('Размер команды: ' + p.team_size);
-        if (p.project_description) lines.push('Описание: ' + p.project_description);
-        if (p.task_description) lines.push('Задачи: ' + p.task_description);
-        if (p.technologies) lines.push('Технологии: ' + p.technologies);
+        if (p.client) lines.push('Заказчик: ' + p.client);
+        if (p.project_description) lines.push('Описание проекта: ' + p.project_description);
+        if (p.task_description) lines.push('Задача, реализованная сотрудником: ' + p.task_description);
+        if (p.technologies) lines.push('Программные продукты / Технологии: ' + p.technologies);
         return lines.join('\n');
       }).join('\n\n');
     }

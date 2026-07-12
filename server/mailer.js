@@ -149,21 +149,27 @@ async function notifyManagerFeedback(employee, feedback) {
   });
 }
 
-async function notifyMassMailing(employees, subject, htmlContent) {
+async function notifyMassMailing(employees, subject, htmlContent, serverUrl) {
   const results = [];
   for (const emp of employees) {
     if (emp.email) {
       try {
-        await sendMail({
+        const link = serverUrl ? `${serverUrl}/form.html?token=${emp.token}` : '';
+        const sent = await sendMail({
           to: emp.email,
           subject,
           html: htmlContent
             .replace(/{{name}}/g, emp.name.split(' ')[1] || emp.name)
             .replace(/{{fullName}}/g, emp.name)
             .replace(/{{position}}/g, emp.position || '')
-            .replace(/{{city}}/g, emp.city || ''),
+            .replace(/{{city}}/g, emp.city || '')
+            .replace(/{{link}}/g, link),
         });
-        results.push({ email: emp.email, success: true });
+        if (sent) {
+          results.push({ email: emp.email, success: true });
+        } else {
+          results.push({ email: emp.email, success: false, error: 'SMTP не настроен или ошибка отправки' });
+        }
       } catch (err) {
         results.push({ email: emp.email, success: false, error: err.message });
       }

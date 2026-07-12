@@ -220,19 +220,32 @@ router.post('/employees/export-excel', requireAuth, (req, res) => {
   const fmtEducation = (e) => {
     if (!e) return '';
     if (typeof e === 'string') return e;
-    if (Array.isArray(e)) return e.map(x => [x.institution, x.degree, x.specialty, x.year].filter(Boolean).join(', ')).join('\n');
+    if (Array.isArray(e)) {
+      return e.map(x => [
+        x.institution ? `Учебное заведение: ${x.institution}` : '',
+        x.degree ? `Степень: ${x.degree}` : '',
+        x.specialty ? `Специальность: ${x.specialty}` : '',
+        x.year ? `Год окончания: ${x.year}` : '',
+      ].filter(Boolean).join('\n')).join('\n\n');
+    }
     return String(e);
   };
   const fmtExperience = (e) => {
     if (!e) return '';
     if (typeof e === 'string') return e;
-    if (e.total) {
-      const jobs = (e.jobs || []).map(j => [j.company, j.position, j.period].filter(Boolean).join(' | ')).join('\n');
-      return `Общий стаж: ${e.total}${jobs ? '\n' + jobs : ''}`;
-    }
-    if (Array.isArray(e.jobs) && e.jobs.length > 0) {
-      const jobs = e.jobs.map(j => [j.company, j.position, j.period].filter(Boolean).join(' | ')).join('\n');
-      return jobs;
+    if (e && typeof e === 'object') {
+      const lines = [];
+      if (e.total) lines.push('Общий стаж: ' + e.total);
+      if (Array.isArray(e.jobs) && e.jobs.length > 0) {
+        for (const j of e.jobs) {
+          const parts = [];
+          if (j.company) parts.push('Компания: ' + j.company);
+          if (j.position) parts.push('Должность: ' + j.position);
+          if (j.period) parts.push('Период: ' + j.period);
+          if (parts.length) lines.push(parts.join('\n'));
+        }
+      }
+      return lines.join('\n');
     }
     return '';
   };
@@ -240,13 +253,15 @@ router.post('/employees/export-excel', requireAuth, (req, res) => {
     if (!p) return '';
     if (typeof p === 'string') return p;
     if (Array.isArray(p)) return p.map(x => {
-      const fields = [
-        x.period && `Период: ${x.period}`,
-        x.client && `Заказчик: ${x.client}`,
-        x.project_description && `Описание: ${x.project_description}`,
-        x.task_description && `Задача: ${x.task_description}`,
-        x.technologies && `Технологии: ${x.technologies}`,
-      ].filter(Boolean);
+      const fields = [];
+      if (x.period) fields.push('Период работы: ' + x.period);
+      if (x.position) fields.push('Должность: ' + x.position);
+      if (x.role) fields.push('Роль: ' + x.role);
+      if (x.team_size) fields.push('Размер команды: ' + x.team_size);
+      if (x.client) fields.push('Заказчик: ' + x.client);
+      if (x.project_description) fields.push('Описание проекта: ' + x.project_description);
+      if (x.task_description) fields.push('Задача, реализованная сотрудником: ' + x.task_description);
+      if (x.technologies) fields.push('Программные продукты / Технологии: ' + x.technologies);
       return fields.join('\n');
     }).join('\n\n');
     return String(p);
@@ -416,7 +431,8 @@ router.post('/mass-mailing', requireCanEdit, async (req, res) => {
   }
 
   const { notifyMassMailing } = require('../mailer');
-  const results = await notifyMassMailing(employees, subject, htmlContent);
+  const base = `${req.protocol}://${req.get('host')}`;
+  const results = await notifyMassMailing(employees, subject, htmlContent, base);
 
   const successCount = results.filter(r => r.success).length;
   const failCount = results.filter(r => !r.success).length;

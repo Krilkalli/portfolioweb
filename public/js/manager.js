@@ -349,15 +349,27 @@ document.getElementById('searchInput').addEventListener('input', () => { applyFi
 document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
 document.getElementById('filterCity').addEventListener('change', () => { applyFilter(); });
 
-// ─── Cert Filter Dropdown ──────────────────────────────────────────────────
-document.getElementById('certFilterBtn').addEventListener('click', (e) => {
+// ─── Filter Popup ───────────────────────────────────────────────────────────
+document.getElementById('filterBtn').addEventListener('click', (e) => {
   e.stopPropagation();
-  document.getElementById('certFilterMenu').classList.toggle('show');
+  document.getElementById('filterMenu').classList.toggle('show');
 });
 document.addEventListener('click', (e) => {
-  if (!e.target.closest('#certFilterWrap')) {
-    document.getElementById('certFilterMenu').classList.remove('show');
+  if (!e.target.closest('#filterWrap')) {
+    document.getElementById('filterMenu').classList.remove('show');
   }
+});
+document.getElementById('filterResetBtn').addEventListener('click', () => {
+  document.getElementById('filterPosition').value = '';
+  document.getElementById('filterCity').value = '';
+  selectedCerts.clear();
+  document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = false);
+  document.getElementById('certSearchInput').value = '';
+  document.getElementById('searchInput').value = '';
+  showArchived = true;
+  document.getElementById('filterArchived').checked = true;
+  applyFilter();
+  document.getElementById('filterMenu').classList.remove('show');
 });
 document.getElementById('certSearchInput').addEventListener('input', (e) => {
   const q = e.target.value.toLowerCase();
@@ -587,6 +599,59 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
     toast('Ошибка при импорте файла', 'error');
   }
   setTimeout(() => { result.innerHTML = ''; }, 6000);
+});
+
+// ─── Mass Mail ────────────────────────────────────────────────────────────────
+document.getElementById('massMailBtn').addEventListener('click', () => {
+  document.getElementById('massMailModal').classList.add('active');
+  document.getElementById('massMailResult').innerHTML = '';
+});
+
+document.getElementById('closeMassMailModal').addEventListener('click', () => {
+  document.getElementById('massMailModal').classList.remove('active');
+});
+document.getElementById('cancelMassMailBtn').addEventListener('click', () => {
+  document.getElementById('massMailModal').classList.remove('active');
+});
+document.getElementById('massMailModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) document.getElementById('massMailModal').classList.remove('active');
+});
+
+document.getElementById('massMailForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const subject = document.getElementById('mailSubject').value.trim();
+  const body = document.getElementById('mailBody').value.trim();
+  if (!subject || !body) { toast('Заполните тему и текст письма', 'warning'); return; }
+
+  const btn = document.getElementById('sendMassMailBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Отправка...';
+
+  try {
+    const r = await fetch('/api/mass-mailing', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        subject,
+        htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
+          body.replace(/\n/g, '<br>') + '</div>',
+        sendToAll: true,
+      }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
+      toast(`Рассылка завершена: ${d.sent} успешно, ${d.failed} с ошибками`, d.failed === 0 ? 'success' : 'warning');
+    } else {
+      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
+      toast(d.error || 'Ошибка рассылки', 'error');
+    }
+  } catch (err) {
+    document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
+    toast('Ошибка соединения', 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '📧 Отправить всем';
 });
 
 // ─── Role-based UI ──────────────────────────────────────────────────────────

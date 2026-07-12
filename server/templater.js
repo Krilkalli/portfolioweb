@@ -128,18 +128,28 @@ function sectionContent(placeholder) {
   });
 }
 
+function imageFromBase64(base64) {
+  if (!base64 || !base64.startsWith('data:')) return null;
+  const matches = base64.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+  if (!matches) return null;
+  const ext = matches[1] === 'jpeg' ? 'jpg' : matches[1];
+  const data = Buffer.from(matches[2], 'base64');
+  const size = 120;
+  return { data, ext, size, width: size, height: size };
+}
+
 async function createDefaultTemplate() {
   createDefaultLogo();
   const logoData = fs.readFileSync(LOGO_PATH);
 
   const children = [
-    // ── Header: logo + personal info in a table ──────────────────────────
+    // ── Header: photo + logo + personal info in a table ─────────────────
     new Table({
       rows: [
         new TableRow({
           children: [
             new TableCell({
-              width: { size: 25, type: WidthType.PERCENTAGE },
+              width: { size: 15, type: WidthType.PERCENTAGE },
               verticalAlign: 'center',
               margins: { top: 0, bottom: 0, left: 0, right: 0 },
               children: [
@@ -149,10 +159,14 @@ async function createDefaultTemplate() {
                   ],
                   alignment: AlignmentType.CENTER,
                 }),
+                new Paragraph({
+                  children: [new TextRun({ text: '{photo}', size: 1, color: 'FFFFFF' })],
+                  spacing: { before: 0, after: 0 },
+                }),
               ],
             }),
             new TableCell({
-              width: { size: 75, type: WidthType.PERCENTAGE },
+              width: { size: 85, type: WidthType.PERCENTAGE },
               verticalAlign: 'center',
               margins: { top: 0, bottom: 0, left: 0, right: 0 },
               children: [
@@ -232,21 +246,115 @@ function prepareData(employee) {
     experience: formatExperience(employee.experience),
     project_experience: formatProject(employee.project_experience),
     certification: formatCertification(employee.certification),
+    photo: employee.photo || '',
   };
 }
 
+function parsePhoto(base64Str) {
+  if (!base64Str || !base64Str.startsWith('data:image/')) return null;
+  const m = base64Str.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+  if (!m) return null;
+  const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
+  return Buffer.from(m[2], 'base64');
+}
+
 async function generateFromTemplate(employee) {
+  const tplPath = getTemplatePath();
+  const isDefault = tplPath === DEFAULT_TEMPLATE;
+
+  // Default template: generate directly for full control (photo, layout)
+  if (isDefault) return generateDocx(employee);
+
+  // Custom template: use docxtemplater
   const PizZip = require('pizzip');
   const Docxtemplater = require('docxtemplater');
-
-  const tplPath = getTemplatePath();
   const content = fs.readFileSync(tplPath, 'binary');
   const zip = new PizZip(content);
   const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
-
   doc.render(prepareData(employee));
-
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
-module.exports = { generateFromTemplate, getTemplatePath, prepareData, createDefaultTemplate };
+async function generateDocx(employee) {
+  const logoData = fs.readFileSync(LOGO_PATH);
+  const photoBuf = parsePhoto(employee.photo);
+
+  const childParagraphs = [];
+
+  // ── Header: photo (if exists) + logo + personal info ─────────────────
+  const infoChildren = [
+    new Paragraph({ children: [new TextRun({ text: employee.name || '', bold: true, size: 36, font: 'Calibri', color: '1A1A2E' })], spacing: { after: 40 } }),
+    new Paragraph({ children: [new TextRun({ text: employee.position || '', size: 24, color: '6C63FF', font: 'Calibri', bold: true })], spacing: { after: 40 } }),
+    new Paragraph({ children: [new TextRun({ text: (employee.contacts || '').split('\n').filter(l => l.trim()).join(' | '), size: 18, color: '666666', font: 'Calibri' })], spacing: { after: 0 } }),
+  ];
+  const infoCell = new TableCell({
+    width: { size: photoBuf ? 70 : 75, type: WidthType.PERCENTAGE },
+    verticalAlign: 'center',
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    children: infoChildren,
+  });
+  const cells = [
+    new TableCell({
+      width: { size: photoBuf ? 15 : 25, type: WidthType.PERCENTAGE },
+      verticalAlign: 'center',
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      children: [
+        new Paragraph({
+          children: [new ImageRun({ data: logoData, transformation: { width: 100, height: 30 } })],
+          alignment: AlignmentType.CENTER,
+        }),
+      ],
+    }),
+  ];
+  if (photoBuf) {
+    cells.unshift(new TableCell({
+      width: { size: 15, type: WidthType.PERCENTAGE },
+      verticalAlign: 'center',
+      margins: { top: 0, bottom: 0, left: 0, right: 0 },
+      children: [new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [new ImageRun({ data: photoBuf, transformation: { width: 80, height: 80 } })],
+      })],
+    }));
+  }
+  cells.push(infoCell);
+  childParagraphs.push(new Table({
+    rows: [new TableRow({ children: cells })],
+  }));
+
+  const addSection = (title, content) => {
+    childParagraphs.push(sectionHeader(title));
+    childParagraphs.push(sectionContent(content || '—'));
+  };
+
+  childParagraphs.push(new Paragraph({
+    border: { bottom: { color: '6C63FF', size: 8, style: BorderStyle.SINGLE } },
+    spacing: { before: 200, after: 200 },
+    children: [],
+  }));
+
+  addSection('Обо мне', employee.about);
+  addSection('Ключевые компетенции', employee.competencies);
+  addSection('Стаж работы', formatExperience(employee.experience));
+  addSection('Проектный опыт', formatProject(employee.project_experience));
+  addSection('Образование', formatEducation(employee.education));
+  addSection('Сертификаты 1С', formatCertification(employee.certification));
+
+  const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Calibri', size: 22, color: '333333' },
+        },
+      },
+    },
+    sections: [{
+      properties: { page: { margin: { top: 720, right: 720, bottom: 720, left: 900 } } },
+      children: childParagraphs,
+    }],
+  });
+
+  return Packer.toBuffer(doc);
+}
+
+module.exports = { generateFromTemplate, generateDocx, getTemplatePath, prepareData, createDefaultTemplate };

@@ -65,7 +65,7 @@ function collectTextFields(fields) {
 
 const EDITABLE_FIELDS = [
   'education','position','contacts','experience',
-  'about','competencies','project_experience','certification',
+  'about','competencies','project_experience','certification','photo',
 ];
 
 router.get('/positions', (req, res) => {
@@ -140,11 +140,17 @@ router.post('/:token/submit', async (req, res) => {
   const changes = [];
   for (const fieldName of EDITABLE_FIELDS) {
     if (submitFields[fieldName] === undefined) continue;
+    if (fieldName === 'photo') continue; // photos saved directly
     const newNorm = normalizeForComparison(fieldName, submitFields[fieldName]);
     const oldNorm = normalizeForComparison(fieldName, emp[fieldName]);
     if (newNorm !== oldNorm) {
       changes.push({ field_name: fieldName, old_value: storeValue(fieldName, emp[fieldName]), new_value: storeValue(fieldName, submitFields[fieldName]) });
     }
+  }
+
+  // Save photo directly if changed
+  if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
+    helpers.updateEmployee(emp.id, { photo: submitFields.photo });
   }
 
   if (changes.length === 0)

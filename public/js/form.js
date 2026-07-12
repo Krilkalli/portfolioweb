@@ -24,6 +24,7 @@ const FIELD_NAMES = {
   certification: 'Сертификация',
   course_name: 'Наименование курса',
   course_year: 'Год прохождения курса',
+  photo: 'Фото',
 };
 
 let originalValues = {};
@@ -591,6 +592,7 @@ function trackChanges() {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+    photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -634,6 +636,7 @@ function getChangedFieldNames() {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+    photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -691,6 +694,7 @@ async function performSubmit(fields) {
       }
       if (fields.city !== undefined) payload.city = fields.city;
       if (fields.email !== undefined) payload.email = fields.email;
+      if (fields.photo !== undefined && fields.photo !== originalValues.photo) payload.photo = fields.photo;
 
       const r = await fetch(`/api/employees/${empId}`, {
         method: 'PUT',
@@ -818,6 +822,8 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
 
+let cropper = null;
+
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -831,13 +837,48 @@ function handlePhotoUpload(event) {
   }
   const reader = new FileReader();
   reader.onload = (e) => {
-    const preview = document.getElementById('photoPreview');
-    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-    document.getElementById('f_photo').value = e.target.result;
-    trackChanges();
+    const cropImg = document.getElementById('cropImage');
+    cropImg.src = e.target.result;
+    document.getElementById('photoCropModal').classList.add('active');
+    if (cropper) cropper.destroy();
+    cropper = new Cropper(cropImg, {
+      aspectRatio: 1,
+      viewMode: 1,
+      dragMode: 'move',
+      autoCropArea: 1,
+      cropBoxMovable: true,
+      cropBoxResizable: false,
+      toggleDragModeOnDblclick: false,
+      minCropBoxWidth: 100,
+      minCropBoxHeight: 100,
+    });
   };
   reader.readAsDataURL(file);
+  event.target.value = '';
 }
+
+document.getElementById('applyCropBtn').addEventListener('click', () => {
+  if (!cropper) return;
+  const canvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  const preview = document.getElementById('photoPreview');
+  preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  document.getElementById('f_photo').value = dataUrl;
+  document.getElementById('photoCropModal').classList.remove('active');
+  cropper.destroy();
+  cropper = null;
+  trackChanges();
+});
+
+function closeCropModal() {
+  document.getElementById('photoCropModal').classList.remove('active');
+  if (cropper) { cropper.destroy(); cropper = null; }
+}
+document.getElementById('closeCropModal').addEventListener('click', closeCropModal);
+document.getElementById('cancelCropBtn').addEventListener('click', closeCropModal);
+document.getElementById('photoCropModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeCropModal();
+});
 
 function loadEmployeePhoto(emp) {
   const photoEl = document.getElementById('f_photo');
