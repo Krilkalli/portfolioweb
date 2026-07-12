@@ -257,6 +257,25 @@ select.form-control option {
 .table tbody tr:hover { background: var(--bg-card-hover); }
 body.light-theme .table tbody tr:nth-child(even) { background: rgba(0,0,0,0.015); }
 
+.col-date { padding-left: 12px; }
+
+.col-check { width: 40px; text-align: center; }
+.col-check input[type="checkbox"] {
+  width: 16px; height: 16px; cursor: pointer;
+  accent-color: var(--accent);
+}
+#exportToolbar {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 10px 20px;
+  margin-bottom: 16px;
+  animation: fadeIn 0.2s ease;
+}
+#exportToolbar .toolbar-left {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
+
 .link-cell {
   font-size: 0.78rem;
   color: var(--accent-light);

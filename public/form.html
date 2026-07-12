@@ -126,7 +126,7 @@
     #competencyChecklist {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px 16px;
+      gap: 2px 8px;
     }
 
     .form-control:focus + .example-hint,
@@ -151,6 +151,72 @@
       gap: 8px;
     }
 
+    .experience-block {
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      margin-bottom: 16px;
+    }
+    .experience-block:last-child { margin-bottom: 0; }
+    .experience-block-title {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed var(--border);
+    }
+
+    .accordion-entry {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      margin-bottom: 12px;
+      overflow: hidden;
+      position: relative;
+    }
+    .accordion-entry > summary {
+      padding: 12px 40px 12px 16px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.875rem;
+      color: var(--text-primary);
+      list-style: none;
+    }
+    .accordion-entry > summary::-webkit-details-marker { display: none; }
+    .accordion-entry > summary::before {
+      content: '›';
+      display: inline-block;
+      margin-right: 8px;
+      color: var(--accent-light);
+      transition: transform 0.2s;
+    }
+    .accordion-entry[open] > summary::before { transform: rotate(90deg); }
+    .accordion-body { padding: 0 16px 16px; border-top: 1px solid var(--border); }
+
+    .view-mode .edit-only { display: none !important; }
+    .view-only { display: none; }
+    .view-mode .view-only { display: block; }
+    .view-field { margin-bottom: 12px; }
+    .view-field-label { font-size: 0.78rem; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
+    .view-field-value { font-size: 0.9rem; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
+    .view-empty { color: var(--text-muted); font-style: italic; font-size: 0.875rem; }
+
+    .feedback-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+    .star-rating { display: flex; gap: 4px; margin: 8px 0 12px; }
+    .star-rating button {
+      background: none; border: none; font-size: 1.6rem; cursor: pointer;
+      color: var(--text-muted); padding: 0; line-height: 1;
+    }
+    .star-rating button:hover, .star-rating button.active { color: var(--warning); }
+
     @media (max-width: 768px) {
       .fields-grid { grid-template-columns: 1fr; }
     }
@@ -165,9 +231,13 @@
       <path d="M8 16h16M16 8v16" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
     </svg>
     <span style="font-weight:700;font-size:1rem;">IS1C Портфолио</span>
-    <span style="color:var(--text-muted);font-size:0.85rem;">— Обновление профиля</span>
+    <span style="color:var(--text-muted);font-size:0.85rem;" id="headerSubtitle">— Обновление профиля</span>
   </div>
-  <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+  <div style="display:flex;align-items:center;gap:8px;">
+    <button id="editModeBtn" class="btn btn-primary btn-sm hidden">✏️ Редактировать</button>
+    <button id="spellerBtn" class="btn btn-ghost btn-sm edit-only" title="Исправить грамматические и пунктуационные ошибки">✨ Исправить текст</button>
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+  </div>
 </header>
 
 <div id="loadingState" style="text-align:center;padding:100px 20px;">
@@ -199,13 +269,33 @@
       <h2 id="employeeName">Загрузка...</h2>
       <p id="employeePos"></p>
     </div>
-    <span id="changedFieldsBadge" class="badge badge-warning hidden" style="margin-left:auto">0 изм.</span>
+    <span id="changedFieldsBadge" class="badge badge-warning edit-only hidden" style="margin-left:auto">0 изм.</span>
   </div>
 
-  <div id="pendingWarning" class="pending-warning hidden">
+  <!-- ===== ФОТО СОТРУДНИКА ===== -->
+  <div class="form-group field-full edit-only" style="margin-bottom: 24px;">
+    <div class="section-card">
+      <div class="section-card-title">📸 Фото сотрудника</div>
+      <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+        <div id="photoPreview" style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-card); border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
+          <span style="color: var(--text-muted); font-size: 0.8rem;">Нет фото</span>
+        </div>
+        <div style="flex: 1; min-width: 200px;">
+          <label class="btn btn-primary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+            📁 Выбрать фото
+            <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
+          </label>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Рекомендуемый формат: квадратное фото (JPG, PNG до 5 МБ)</p>
+        </div>
+      </div>
+      <input type="hidden" id="f_photo" name="photo" value="">
+    </div>
+  </div>
+
+  <div id="pendingWarning" class="pending-warning edit-only hidden">
     ⚠️ У вас уже есть изменения, ожидающие проверки. Отправка новой формы заменит предыдущие.
   </div>
-  <div id="changesSummary" class="changes-summary">
+  <div id="changesSummary" class="changes-summary edit-only">
     Изменены поля: <span id="changedFieldsList"></span>
   </div>
 
@@ -216,30 +306,19 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">🎓 Образование</div>
-          <div id="educationContainer"></div>
-          <button type="button" class="add-btn" id="addEducationBtn">+ Добавить учебное заведение</button>
-          <div class="template-panel" id="template_education">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Учебное заведение:</strong> [Наименование учебного заведения, без сокращения]<br>
-            <strong>Квалификация/Ученая степень:</strong> [магистр, бакалавр, специалист, аспирант]<br>
-            <strong>Направление:</strong> [специальность]<br>
-            <strong>Год окончания:</strong> [2024]<br>
-            <em style="font-size:0.78rem;color:var(--text-muted);">Каждое учебное заведение добавляется отдельно через кнопку "+"</em>
-          </div>
-          <div class="example-hint" onclick="toggleTemplate('education')">👁 Показать шаблон</div>
+          <div id="educationContainer" class="edit-only"></div>
+          <div id="viewEducation" class="view-only"></div>
+          <button type="button" class="add-btn edit-only" id="addEducationBtn">+ Добавить учебное заведение</button>
         </div>
       </div>
 
       <!-- ===== ДОЛЖНОСТЬ ===== -->
       <div class="form-group">
-        <div class="section-card">
+        <div class="section-card" style="min-height: 148px;">
           <div class="section-card-title">👔 Должность</div>
-          <select id="f_position" name="position" class="form-control"></select>
-          <div class="example-hint" onclick="toggleTemplate('position')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_position">
-            <strong>Шаблон заполнения:</strong> [Текущая занимаемая должность]<br>
-            <em style="font-size:0.78rem;color:var(--text-muted);">Выберите из списка. Если вашей должности нет — обратитесь к менеджеру.</em>
-          </div>
+          <select id="f_position" name="position" class="form-control edit-only"></select>
+          <div id="viewPosition" class="view-only"></div>
+          <div style="flex:1;"></div>
         </div>
       </div>
 
@@ -247,25 +326,15 @@
       <div class="form-group">
         <div class="section-card">
           <div class="section-card-title">📞 Контактные данные</div>
-          <div class="form-group" style="margin-bottom:10px;">
+          <div class="form-group edit-only" style="margin-bottom:10px;">
             <label class="form-label">Город</label>
             <input id="f_city" type="text" class="form-control" placeholder="Москва">
           </div>
-          <div class="form-group" style="margin-bottom:10px;">
+          <div class="form-group edit-only" style="margin-bottom:0;">
             <label class="form-label">Email</label>
             <input id="f_email" type="email" class="form-control" placeholder="ivanov@company.ru">
           </div>
-          <div class="form-group" style="margin-bottom:0;">
-            <label class="form-label">Телефон</label>
-            <input id="f_phone" type="text" class="form-control" placeholder="+7 (999) 123-45-67">
-          </div>
-          <div class="example-hint" onclick="toggleTemplate('contacts')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_contacts">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Город:</strong> [Город проживания]<br>
-            <strong>Email:</strong> [Адрес эл. почты]<br>
-            <strong>Телефон:</strong> [Номер телефона]
-          </div>
+          <div id="viewContacts" class="view-only"></div>
         </div>
       </div>
 
@@ -274,26 +343,17 @@
         <div class="section-card">
           <div class="section-card-title">⏳ Стаж работы</div>
 
-          <div class="form-group">
-            <label class="form-label">Общий стаж работы</label>
-            <input id="f_total_experience" type="text" class="form-control" placeholder="Например: 12 лет">
-            <div class="example-hint" onclick="toggleTemplate('total_experience')">👁 Показать шаблон</div>
-            <div class="template-panel" id="template_total_experience">
-              <strong>Шаблон заполнения:</strong> [Общий стаж работы сотрудника]<br>
-              <em style="font-size:0.78rem;color:var(--text-muted);">Например: "12 лет" или "Общий стаж: 12 лет"</em>
-            </div>
+          <div class="experience-block">
+            <div class="experience-block-title">Общий стаж работы</div>
+            <input id="f_total_experience" type="text" class="form-control edit-only" placeholder="Например: 12 лет">
+            <div id="viewTotalExperience" class="view-only"></div>
           </div>
 
-          <div style="margin:16px 0 8px;font-weight:600;font-size:0.85rem;color:var(--text-secondary);">Стаж работы в 1С / История мест работы</div>
-          <div id="jobContainer"></div>
-          <button type="button" class="add-btn" id="addJobBtn">+ Добавить место работы</button>
-          <div class="example-hint" onclick="toggleTemplate('experience')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_experience">
-            <strong>Шаблон заполнения для каждого места работы:</strong><br>
-            <strong>Компания:</strong> [Наименование компании]<br>
-            <strong>Должность:</strong> [Должность]<br>
-            <strong>Период:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
-            <em style="font-size:0.78rem;color:var(--text-muted);">Каждое место работы добавляется отдельно через кнопку "+"</em>
+          <div class="experience-block">
+            <div class="experience-block-title">Стаж работы в 1С / История мест работы</div>
+            <div id="jobContainer" class="edit-only"></div>
+            <div id="viewJobs" class="view-only"></div>
+            <button type="button" class="add-btn edit-only" id="addJobBtn">+ Добавить место работы</button>
           </div>
         </div>
       </div>
@@ -302,12 +362,12 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">👤 Обо мне</div>
-          <textarea id="f_about" class="form-control" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
-          <div class="example-hint" onclick="toggleTemplate('about')">👁 Показать шаблон</div>
+          <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
+          <div id="viewAbout" class="view-only"></div>
+<div class="example-hint" onclick="toggleTemplate('about')">👁 Показать пример</div>
           <div class="template-panel" id="template_about">
             <strong>Пример заполнения:</strong><br>
-            Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.<br><br>
-            <strong>Шаблон:</strong> [Вводная информация о себе — опыт, специализация, ключевые навыки]
+            Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.
           </div>
         </div>
       </div>
@@ -316,7 +376,8 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">📋 Ключевые компетенции</div>
-          <textarea id="f_competencies" class="form-control" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
+          <textarea id="f_competencies" class="form-control edit-only" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
+          <div id="viewCompetencies" class="view-only"></div>
           <div class="example-hint" onclick="toggleTemplate('competencies')">👁 Показать чек-лист компетенций</div>
           <div class="template-panel" id="template_competencies">
             <p style="margin-bottom:8px;color:var(--text-muted);font-size:0.78rem;">Чек-лист помогает в заполнении. Отметьте подходящие пункты — они добавятся в поле выше.</p>
@@ -330,20 +391,11 @@
         <div class="section-card">
           <div class="section-card-title">📁 Проектный опыт</div>
           <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту сотрудника</p>
-          <div id="projectExperienceContainer"></div>
-          <button type="button" class="add-btn" id="addProjectBtn">+ Добавить проект</button>
-          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать шаблон</div>
+          <div id="projectExperienceContainer" class="edit-only"></div>
+          <div id="viewProjects" class="view-only"></div>
+          <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
+          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать пример</div>
           <div class="template-panel" id="template_project_experience">
-            <strong>Шаблон заполнения для каждого проекта:</strong><br>
-            <strong>Период работы:</strong> [ММ.ГГГГ - ММ.ГГГГ]<br>
-            <strong>Должность в проекте:</strong> [должность сотрудника в рамках проекта]<br>
-            <strong>Роль в проекте:</strong> [роль сотрудника в рамках проекта]<br>
-            <strong>Размер команды:</strong> [количество человек]<br>
-            <strong>Заказчик + отрасль:</strong> [Наименование Заказчика + отрасль]<br>
-            <strong>Описание проекта:</strong> [краткое описание проекта]<br>
-            <strong>Описание задачи:</strong> [описание задачи, реализованной сотрудником]<br>
-            <strong>Программные продукты / технологии:</strong> [Наименование + редакция, XML, JSON, REST API]<br>
-            <br>
             <strong>Пример:</strong><br>
             <strong>Период:</strong> 01.2024 - 06.2024<br>
             <strong>Должность:</strong> Консультант по внедрению 1С<br>
@@ -361,33 +413,59 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">📜 Сертификация 1С и обучение</div>
-          <div class="form-group" style="margin-bottom:10px;">
+          <div class="form-group edit-only" style="margin-bottom:10px;">
             <label class="form-label">Сертификаты 1С</label>
             <textarea id="f_certification" class="form-control" rows="4" placeholder="1С:Профессионал. ERP Управление предприятием 2"></textarea>
           </div>
-          <div class="form-group" style="margin-bottom:10px;">
-            <label class="form-label">Обучающие курсы</label>
-            <textarea id="f_courses" class="form-control" rows="3" placeholder="Наименование курса — Год прохождения"></textarea>
+          <div class="form-group edit-only" style="margin-bottom:10px;">
+            <label class="form-label">Наименование курса</label>
+            <input id="f_course_name" type="text" class="form-control" placeholder="Наименование курса">
           </div>
-          <div class="example-hint" onclick="toggleTemplate('certification')">👁 Показать шаблон</div>
-          <div class="template-panel" id="template_certification">
-            <strong>Шаблон заполнения:</strong><br>
-            <strong>Сертификаты:</strong> [Полное наименование сертификата 1C]<br>
-            <em>Например: 1С:Профессионал. ERP Управление предприятием 2; 1С:Специалист-консультант</em><br><br>
-            <strong>Обучающие курсы:</strong> [Наименование курса — Год прохождения обучения]
+          <div class="form-group edit-only" style="margin-bottom:0;">
+            <label class="form-label">Год прохождения</label>
+            <input id="f_course_year" type="text" class="form-control" placeholder="2024">
           </div>
+<div id="viewCertification" class="view-only"></div>
         </div>
       </div>
 
     </div>
 
-    <div style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
+    <div class="feedback-section edit-only" id="feedbackSection">
+      <div class="section-card-title" style="border:none;padding:0;margin-bottom:12px;">💬 Обратная связь</div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;">Оцените удобство заполнения профиля (необязательно)</p>
+      <div class="star-rating" id="starRating">
+        <button type="button" data-star="1">★</button>
+        <button type="button" data-star="2">★</button>
+        <button type="button" data-star="3">★</button>
+        <button type="button" data-star="4">★</button>
+        <button type="button" data-star="5">★</button>
+      </div>
+      <textarea id="f_feedback" class="form-control" rows="2" placeholder="Комментарий или пожелания (необязательно)"></textarea>
+    </div>
+
+    <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">✉️ Отправить на проверку</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
-      <span id="noChangesHint" class="text-muted text-sm hidden">Изменений не обнаружено</span>
       <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
     </div>
   </form>
+</div>
+
+<div class="modal-overlay" id="confirmSubmitModal">
+  <div class="modal" style="max-width:520px;">
+    <div class="modal-header">
+      <span class="modal-title">Подтверждение отправки</span>
+      <button type="button" class="btn btn-ghost btn-icon" id="closeConfirmModal">✕</button>
+    </div>
+    <p style="color:var(--text-secondary);font-size:0.9rem;margin-bottom:16px;">Проверьте изменения перед отправкой менеджеру:</p>
+    <div id="confirmChangesList" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px;margin-bottom:16px;font-size:0.875rem;"></div>
+    <div id="confirmFeedbackNote" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;display:none;"></div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button type="button" class="btn btn-ghost" id="cancelConfirmBtn">Отмена</button>
+      <button type="button" class="btn btn-primary" id="confirmSubmitBtn">✉️ Отправить</button>
+    </div>
+  </div>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>

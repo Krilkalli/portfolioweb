@@ -22,11 +22,20 @@ const FIELD_NAMES = {
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
   certification: 'Сертификация',
+  course_name: 'Наименование курса',
+  course_year: 'Год прохождения курса',
 };
 
 let originalValues = {};
 let token = null;
 let employee = null;
+let isViewMode = false;
+let selectedRating = 0;
+let pendingSubmitFields = null;
+
+function getAllChecklistItems() {
+  return Array.from(document.querySelectorAll('#competencyChecklist input[type="checkbox"]')).map(c => c.value);
+}
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
 function initTheme() {
@@ -49,9 +58,10 @@ function toggleTemplate(field) {
   if (panel) panel.classList.toggle('visible');
 }
 function setupTemplateTriggers() {
+  const templateFields = ['about', 'competencies', 'project_experience'];
   document.querySelectorAll('.form-control').forEach(el => {
     const field = el.id.replace('f_', '');
-    if (document.getElementById('template_' + field)) {
+    if (templateFields.includes(field) && document.getElementById('template_' + field)) {
       el.addEventListener('focus', () => {
         const panel = document.getElementById('template_' + field);
         if (panel) panel.classList.add('visible');
@@ -141,13 +151,15 @@ function buildCompetencyChecklist() {
 }
 
 function updateCompetencies() {
-  const checks = document.querySelectorAll('#competencyChecklist input:checked');
-  const values = Array.from(checks).map(c => c.value);
+  const allItems = getAllChecklistItems();
+  const checked = Array.from(document.querySelectorAll('#competencyChecklist input:checked')).map(c => c.value);
   const ta = document.getElementById('f_competencies');
   if (!ta) return;
-  const existing = ta.value.split('\n').filter(l => l.trim()).filter(l => !values.includes(l));
-  ta.value = [...new Set([...existing, ...values])].join('\n');
-  trackChanges(); autoResize(ta);
+  const lines = ta.value.split('\n').filter(l => l.trim());
+  const kept = lines.filter(line => !allItems.includes(line.trim()) || checked.includes(line.trim()));
+  ta.value = [...new Set([...kept, ...checked])].join('\n');
+  trackChanges();
+  autoResize(ta);
 }
 
 function syncChecklist(text) {
@@ -156,23 +168,76 @@ function syncChecklist(text) {
   });
 }
 
+function confirmRemoveEntry(btn, className) {
+  if (!confirm('Удалить эту запись?')) return;
+  btn.closest('.' + className)?.remove();
+  trackChanges();
+}
+
+function projectTitle(data) {
+  return data?.client?.trim() || data?.project_description?.trim()?.slice(0, 80) || data?.position?.trim() || 'Новый проект';
+}
+function jobTitle(data) {
+  return data?.company?.trim() || data?.position?.trim() || 'Новое место работы';
+}
+function eduTitle(data) {
+  return data?.institution?.trim() || 'Новое учебное заведение';
+}
+function updateAccordionTitle(entry, selector, titleFn) {
+  const summary = entry.querySelector(selector);
+  if (!summary) return;
+  if (entry.classList.contains('proj-entry')) {
+    summary.textContent = projectTitle({
+      client: entry.querySelector('.proj-client')?.value.trim(),
+      project_description: entry.querySelector('.proj-descr')?.value.trim(),
+      position: entry.querySelector('.proj-position')?.value.trim(),
+    });
+  } else if (entry.classList.contains('job-entry')) {
+    summary.textContent = jobTitle({
+      company: entry.querySelector('.job-company')?.value.trim(),
+      position: entry.querySelector('.job-position')?.value.trim(),
+    });
+  } else {
+    summary.textContent = eduTitle({ institution: entry.querySelector('.edu-institution')?.value.trim() });
+  }
+}
+
+function viewValue(text) {
+  const val = (text || '').trim();
+  return val ? `<div class="view-field-value">${escHtml(val)}</div>` : '<div class="view-empty">—</div>';
+}
+function viewField(label, text) {
+  return `<div class="view-field"><div class="view-field-label">${escHtml(label)}</div>${viewValue(text)}</div>`;
+}
+function renderAccordionView(items, getTitle, getBody, emptyText) {
+  if (!items.length) return `<div class="view-empty">${emptyText}</div>`;
+  return items.map(item =>
+    `<details class="accordion-entry"><summary>${escHtml(getTitle(item))}</summary><div class="accordion-body">${getBody(item)}</div></details>`
+  ).join('');
+}
+
 // ─── Education Entries ─────────────────────────────────────────────────────
 function addEducationEntry(data) {
   const c = document.getElementById('educationContainer');
-  const e = document.createElement('div'); e.className = 'edu-entry';
+  const e = document.createElement('details');
+  e.className = 'edu-entry accordion-entry';
+  e.open = !data?.institution;
   const v = (s) => (/^уточнить$/i.test(s || '') ? '' : escHtml(s || ''));
   e.innerHTML = `
-    <button type="button" class="remove-btn" onclick="this.closest('.edu-entry').remove(); trackChanges();">✕</button>
-    <div class="form-group"><label class="form-label">Учебное заведение</label>
-      <input type="text" class="form-control edu-institution" placeholder="Полное наименование вуза" value="${v(data?.institution)}"></div>
-    <div class="form-group"><label class="form-label">Квалификация / Ученая степень</label>
-      <input type="text" class="form-control edu-degree" placeholder="магистр, бакалавр, специалист" value="${v(data?.degree)}"></div>
-    <div class="form-group"><label class="form-label">Направление / Специальность</label>
-      <input type="text" class="form-control edu-specialty" placeholder="Направление подготовки" value="${v(data?.specialty)}"></div>
-    <div class="form-group"><label class="form-label">Год окончания</label>
-      <input type="text" class="form-control edu-year" placeholder="2024" value="${v(data?.year)}"></div>`;
+    <summary class="edu-summary">${escHtml(eduTitle(data))}</summary>
+    <div class="accordion-body">
+      <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'edu-entry')">✕</button>
+      <div class="form-group"><label class="form-label">Учебное заведение</label>
+        <input type="text" class="form-control edu-institution" placeholder="Полное наименование вуза" value="${v(data?.institution)}"></div>
+      <div class="form-group"><label class="form-label">Квалификация / Ученая степень</label>
+        <input type="text" class="form-control edu-degree" placeholder="магистр, бакалавр, специалист" value="${v(data?.degree)}"></div>
+      <div class="form-group"><label class="form-label">Направление / Специальность</label>
+        <input type="text" class="form-control edu-specialty" placeholder="Направление подготовки" value="${v(data?.specialty)}"></div>
+      <div class="form-group"><label class="form-label">Год окончания</label>
+        <input type="text" class="form-control edu-year" placeholder="2024" value="${v(data?.year)}"></div>
+    </div>`;
   c.appendChild(e);
-  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', trackChanges));
+  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.edu-summary'); trackChanges(); }));
 }
 
 function loadEducationData(arr) {
@@ -208,17 +273,22 @@ function getEducationData() {
 // ─── Job Entries (Experience) ──────────────────────────────────────────────
 function addJobEntry(data) {
   const c = document.getElementById('jobContainer');
-  const e = document.createElement('div'); e.className = 'job-entry';
+  const e = document.createElement('details');
+  e.className = 'job-entry accordion-entry';
+  e.open = !data?.company;
   e.innerHTML = `
-    <button type="button" class="remove-btn" onclick="this.closest('.job-entry').remove(); trackChanges();">✕</button>
-    <div class="form-group"><label class="form-label">Компания</label>
-      <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
-    <div class="form-group"><label class="form-label">Должность</label>
-      <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
-    <div class="form-group"><label class="form-label">Период работы</label>
-      <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>`;
+    <summary class="job-summary">${escHtml(jobTitle(data))}</summary>
+    <div class="accordion-body">
+      <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'job-entry')">✕</button>
+      <div class="form-group"><label class="form-label">Компания</label>
+        <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
+      <div class="form-group"><label class="form-label">Должность</label>
+        <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
+      <div class="form-group"><label class="form-label">Период работы</label>
+        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
+    </div>`;
   c.appendChild(e);
-  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', trackChanges));
+  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.job-summary'); trackChanges(); }));
 }
 
 function loadJobData(exp) {
@@ -251,27 +321,32 @@ function getJobData() {
 // ─── Project Entries ───────────────────────────────────────────────────────
 function addProjectEntry(data) {
   const c = document.getElementById('projectExperienceContainer');
-  const e = document.createElement('div'); e.className = 'proj-entry';
+  const e = document.createElement('details');
+  e.className = 'proj-entry accordion-entry';
+  e.open = !(data?.client || data?.project_description);
   e.innerHTML = `
-    <button type="button" class="remove-btn" onclick="this.closest('.proj-entry').remove(); trackChanges();">✕</button>
-    <div class="form-group"><label class="form-label">Период работы на проекте</label>
-      <input type="text" class="form-control proj-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
-    <div class="form-group"><label class="form-label">Должность в рамках проекта</label>
-      <input type="text" class="form-control proj-position" placeholder="Консультант по внедрению 1С" value="${escHtml(data?.position||'')}"></div>
-    <div class="form-group"><label class="form-label">Роль в рамках проекта</label>
-      <input type="text" class="form-control proj-role" placeholder="Разработчик / Архитектор / Аналитик" value="${escHtml(data?.role||'')}"></div>
-    <div class="form-group"><label class="form-label">Размер команды</label>
-      <input type="text" class="form-control proj-team" placeholder="5 человек" value="${escHtml(data?.team_size||'')}"></div>
-    <div class="form-group"><label class="form-label">Заказчик + отрасль</label>
-      <input type="text" class="form-control proj-client" placeholder="ООО «Пример» (нефтегазовая отрасль)" value="${escHtml(data?.client||'')}"></div>
-    <div class="form-group"><label class="form-label">Описание проекта</label>
-      <textarea class="form-control proj-descr" rows="2" placeholder="Краткое описание проекта">${escHtml(data?.project_description||'')}</textarea></div>
-    <div class="form-group"><label class="form-label">Описание задачи, реализованной сотрудником</label>
-      <textarea class="form-control proj-task" rows="2" placeholder="Что было сделано?">${escHtml(data?.task_description||'')}</textarea></div>
-    <div class="form-group"><label class="form-label">Программные продукты / Технологии</label>
-      <input type="text" class="form-control proj-tech" placeholder="1С:ERP 2.5, XML, JSON, REST API" value="${escHtml(data?.technologies||'')}"></div>`;
+    <summary class="proj-summary">${escHtml(projectTitle(data))}</summary>
+    <div class="accordion-body">
+      <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'proj-entry')">✕</button>
+      <div class="form-group"><label class="form-label">Период работы на проекте</label>
+        <input type="text" class="form-control proj-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
+      <div class="form-group"><label class="form-label">Должность в рамках проекта</label>
+        <input type="text" class="form-control proj-position" placeholder="Консультант по внедрению 1С" value="${escHtml(data?.position||'')}"></div>
+      <div class="form-group"><label class="form-label">Роль в рамках проекта</label>
+        <input type="text" class="form-control proj-role" placeholder="Разработчик / Архитектор / Аналитик" value="${escHtml(data?.role||'')}"></div>
+      <div class="form-group"><label class="form-label">Размер команды</label>
+        <input type="text" class="form-control proj-team" placeholder="5 человек" value="${escHtml(data?.team_size||'')}"></div>
+      <div class="form-group"><label class="form-label">Заказчик + отрасль</label>
+        <input type="text" class="form-control proj-client" placeholder="ООО «Пример» (нефтегазовая отрасль)" value="${escHtml(data?.client||'')}"></div>
+      <div class="form-group"><label class="form-label">Описание проекта</label>
+        <textarea class="form-control proj-descr" rows="2" placeholder="Краткое описание проекта">${escHtml(data?.project_description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">Описание задачи, реализованной сотрудником</label>
+        <textarea class="form-control proj-task" rows="2" placeholder="Что было сделано?">${escHtml(data?.task_description||'')}</textarea></div>
+      <div class="form-group"><label class="form-label">Программные продукты / Технологии</label>
+        <input type="text" class="form-control proj-tech" placeholder="1С:ERP 2.5, XML, JSON, REST API" value="${escHtml(data?.technologies||'')}"></div>
+    </div>`;
   c.appendChild(e);
-  e.querySelectorAll('input, textarea').forEach(inp => inp.addEventListener('input', trackChanges));
+  e.querySelectorAll('input, textarea').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.proj-summary'); trackChanges(); }));
 }
 
 function loadProjectData(arr) {
@@ -298,6 +373,7 @@ function getProjectData() {
 async function loadEmployee() {
   token = new URLSearchParams(location.search).get('token');
   if (!token) { showError(); return; }
+  isViewMode = new URLSearchParams(location.search).get('mode') === 'view';
   try {
     const r = await fetch(`/api/form/${token}`);
     if (!r.ok) { showError(); return; }
@@ -324,6 +400,7 @@ function showError() {
 }
 
 function showForm(emp) {
+  originalValues = {};
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('formState').classList.remove('hidden');
 
@@ -333,83 +410,127 @@ function showForm(emp) {
 
   if (emp.hasPending) document.getElementById('pendingWarning').classList.remove('hidden');
 
-  // Education
   loadEducationData(emp.education);
   originalValues._educationParsed = getEducationData();
 
-  // Position
   const posField = document.getElementById('f_position');
   if (posField) {
     if (emp.position) posField.value = emp.position;
     originalValues.position = emp.position || '';
-    posField.addEventListener('change', trackChanges);
+    posField.onchange = trackChanges;
   }
 
-  // Contacts (parse from old contacts field or use direct fields)
-  const contactsText = emp.contacts || '';
-  const contactLines = contactsText.split('\n').filter(l => l.trim());
   const cityEl = document.getElementById('f_city');
   const emailEl = document.getElementById('f_email');
-  const phoneEl = document.getElementById('f_phone');
-  if (cityEl) { cityEl.value = emp.city || contactLines[0] || ''; originalValues.city = cityEl.value; cityEl.addEventListener('input', trackChanges); }
-  if (emailEl) { emailEl.value = emp.email || contactLines.find(l => l.includes('@')) || ''; originalValues.email = emailEl.value; emailEl.addEventListener('input', trackChanges); }
-  if (phoneEl) {
-    const phone = contactLines.find(l => l.includes('+') || l.includes('(') || /^\d/.test(l));
-    phoneEl.value = phone || '';
-    originalValues.phone = phoneEl.value;
-    phoneEl.addEventListener('input', trackChanges);
-  }
+  if (cityEl) { cityEl.value = emp.city || ''; originalValues.city = cityEl.value; cityEl.oninput = trackChanges; }
+  if (emailEl) { emailEl.value = emp.email || ''; originalValues.email = emailEl.value; emailEl.oninput = trackChanges; }
 
-  // Experience
   loadJobData(emp.experience || { total: '', jobs: [] });
   originalValues._experienceParsed = getJobData();
-  document.getElementById('f_total_experience')?.addEventListener('input', trackChanges);
+  originalValues.total_experience = document.getElementById('f_total_experience')?.value || '';
+  const totalEl = document.getElementById('f_total_experience');
+  if (totalEl) totalEl.oninput = trackChanges;
 
-  // About
   const aboutEl = document.getElementById('f_about');
   if (aboutEl) {
     aboutEl.value = emp.about || '';
     originalValues.about = emp.about || '';
-    aboutEl.addEventListener('input', () => { autoResize(aboutEl); trackChanges(); });
+    aboutEl.oninput = () => { autoResize(aboutEl); trackChanges(); };
   }
 
-  // Competencies
   const compEl = document.getElementById('f_competencies');
   if (compEl) {
     compEl.value = emp.competencies || '';
     originalValues.competencies = emp.competencies || '';
-    compEl.addEventListener('input', () => { trackChanges(); });
+    compEl.oninput = trackChanges;
     syncChecklist(emp.competencies);
   }
 
-  // Project experience
   loadProjectData(emp.project_experience);
   originalValues._projectParsed = getProjectData();
 
-  // Certification (parse legacy or use split fields)
   const certText = emp.certification || '';
   const certParts = certText.split(/\n\s*\n/);
   const certEl = document.getElementById('f_certification');
-  const coursesEl = document.getElementById('f_courses');
+  const courseNameEl = document.getElementById('f_course_name');
+  const courseYearEl = document.getElementById('f_course_year');
   if (certEl) {
-    certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^(Сертификация 1С:?|Обучающие курсы:?)[\s\S]*/i, m => '') : '') || '';
+    certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^Сертификация 1С:?\s*/i, '').trim() : '') || '';
     originalValues.certification = certEl.value;
-    certEl.addEventListener('input', trackChanges);
+    certEl.oninput = trackChanges;
   }
-  if (coursesEl) {
-    coursesEl.value = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
-    originalValues.courses = coursesEl.value;
-    coursesEl.addEventListener('input', trackChanges);
+  if (courseNameEl) {
+    // Try to split courses by " — " to get name and year
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseNameEl.value = parts[0]?.trim() || '';
+    originalValues.course_name = courseNameEl.value;
+    courseNameEl.oninput = trackChanges;
   }
-  // Display last updated date
+  if (courseYearEl) {
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseYearEl.value = parts[1]?.trim() || '';
+    originalValues.course_year = courseYearEl.value;
+    courseYearEl.oninput = trackChanges;
+  }
+
   const dateEl = document.getElementById('lastUpdatedDate');
   if (dateEl && emp.updated_at) {
     const d = new Date(emp.updated_at);
-    const formatted = d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
-    dateEl.textContent = '📅 Дата актуализации: ' + formatted;
+    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   trackChanges();
+  renderViewContent();
+  loadEmployeePhoto(employee);
+  if (isViewMode) setViewMode(true);
+}
+
+function renderViewContent() {
+  document.getElementById('viewPosition').innerHTML = viewValue(document.getElementById('f_position')?.value);
+  document.getElementById('viewContacts').innerHTML =
+    viewField('Город', document.getElementById('f_city')?.value) +
+    viewField('Email', document.getElementById('f_email')?.value);
+  document.getElementById('viewTotalExperience').innerHTML = viewValue(document.getElementById('f_total_experience')?.value);
+  document.getElementById('viewAbout').innerHTML = viewValue(document.getElementById('f_about')?.value);
+  document.getElementById('viewCompetencies').innerHTML = viewValue(document.getElementById('f_competencies')?.value);
+  document.getElementById('viewCertification').innerHTML =
+    viewField('Сертификаты 1С', document.getElementById('f_certification')?.value) +
+    viewField('Наименование курса', document.getElementById('f_course_name')?.value) +
+    viewField('Год прохождения', document.getElementById('f_course_year')?.value);
+  document.getElementById('viewEducation').innerHTML = renderAccordionView(getEducationData(),
+    d => d.institution || 'Образование',
+    d => viewField('Квалификация', d.degree) + viewField('Направление', d.specialty) + viewField('Год окончания', d.year),
+    'Образование не указано');
+  document.getElementById('viewJobs').innerHTML = renderAccordionView(getJobData().jobs,
+    d => d.company || d.position || 'Место работы',
+    d => viewField('Должность', d.position) + viewField('Период', d.period),
+    'История мест работы не указана');
+  document.getElementById('viewProjects').innerHTML = renderAccordionView(getProjectData(),
+    projectTitle,
+    d => viewField('Период', d.period) + viewField('Должность', d.position) + viewField('Роль', d.role) +
+      viewField('Размер команды', d.team_size) + viewField('Заказчик + отрасль', d.client) +
+      viewField('Описание проекта', d.project_description) + viewField('Описание задачи', d.task_description) +
+      viewField('Технологии', d.technologies),
+    'Проектный опыт не указан');
+}
+
+function setViewMode(view) {
+  isViewMode = view;
+  const formState = document.getElementById('formState');
+  document.getElementById('editModeBtn')?.classList.toggle('hidden', !view);
+  document.getElementById('headerSubtitle').textContent = view ? '— Просмотр профиля' : '— Обновление профиля';
+  formState.classList.toggle('view-mode', view);
+  if (view) {
+    document.getElementById('changedFieldsBadge')?.classList.add('hidden');
+    document.getElementById('changesSummary').style.display = 'none';
+    document.getElementById('pendingWarning')?.classList.add('hidden');
+    renderViewContent();
+  } else if (employee?.hasPending) {
+    document.getElementById('pendingWarning')?.classList.remove('hidden');
+    trackChanges();
+  }
 }
 
 function autoResize(el) {
@@ -421,9 +542,9 @@ function autoResize(el) {
 function trackChanges() {
   const changedFields = [];
   const checks = {
-    about: 'f_about', city: 'f_city', email: 'f_email', phone: 'f_phone',
+    about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -461,50 +582,127 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 });
 
 // ─── Submit ────────────────────────────────────────────────────────────────
-document.getElementById('profileForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
+function getChangedFieldNames() {
+  const changedFields = [];
+  const checks = {
+    about: 'f_about', city: 'f_city', email: 'f_email',
+    total_experience: 'f_total_experience', competencies: 'f_competencies',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+  };
+  for (const [field, id] of Object.entries(checks)) {
+    const el = document.getElementById(id);
+    if (el && el.value.trim() !== (originalValues[field] || '').trim()) changedFields.push(FIELD_NAMES[field] || field);
+  }
+  const posEl = document.getElementById('f_position');
+  if (posEl && posEl.value !== (originalValues.position || '')) changedFields.push(FIELD_NAMES.position);
+  if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
+  if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
+  if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
+  return changedFields;
+}
 
-  const fields = {
+function collectFormFields() {
+  return {
     position: document.getElementById('f_position').value,
     city: document.getElementById('f_city')?.value.trim() || '',
     email: document.getElementById('f_email')?.value.trim() || '',
-    phone: document.getElementById('f_phone')?.value.trim() || '',
     about: document.getElementById('f_about')?.value.trim() || '',
     competencies: document.getElementById('f_competencies')?.value.trim() || '',
     certification: document.getElementById('f_certification')?.value.trim() || '',
-    courses: document.getElementById('f_courses')?.value.trim() || '',
+    course_name: document.getElementById('f_course_name')?.value.trim() || '',
+    course_year: document.getElementById('f_course_year')?.value.trim() || '',
+    photo: document.getElementById('f_photo')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),
   };
+}
 
-  // Build contacts from city/email/phone
-  fields.contacts = [fields.city, fields.email, fields.phone].filter(Boolean).join('\n');
-
+async function performSubmit(fields) {
+  fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
+  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
-
   try {
     const r = await fetch(`/api/form/${token}/submit`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     });
     const d = await r.json();
     if (r.ok) {
+      const feedback = document.getElementById('f_feedback')?.value.trim();
+      if (selectedRating || feedback) {
+        await fetch(`/api/form/${token}/feedback`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rating: selectedRating || null, comment: feedback || '' }),
+        }).catch(() => {});
+      }
       document.getElementById('formState').classList.add('hidden');
       document.getElementById('successState').classList.remove('hidden');
       document.getElementById('changesCountMsg').textContent =
-        d.changed > 0 ? `Изменено полей: ${d.changed}` : 'Изменений не обнаружено';
+        d.changed > 0 ? `Изменено полей: ${d.changed}` : '';
     } else {
       toast(d.error || 'Ошибка при отправке', 'error');
-      btn.disabled = false; btn.innerHTML = '✉️ Отправить на проверку';
+      btn.disabled = false;
+      btn.innerHTML = '✉️ Отправить на проверку';
     }
   } catch {
     toast('Ошибка соединения с сервером', 'error');
-    btn.disabled = false; btn.innerHTML = '✉️ Отправить на проверку';
+    btn.disabled = false;
+    btn.innerHTML = '✉️ Отправить на проверку';
   }
+}
+
+document.getElementById('profileForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (isViewMode) return;
+  const changed = getChangedFieldNames();
+  if (!changed.length) { toast('Изменений не обнаружено', 'warning'); return; }
+  pendingSubmitFields = collectFormFields();
+  document.getElementById('confirmChangesList').innerHTML =
+    '<ul style="margin:0;padding-left:18px;">' + changed.map(f => `<li>${escHtml(f)}</li>`).join('') + '</ul>';
+  const note = document.getElementById('confirmFeedbackNote');
+  const fb = document.getElementById('f_feedback')?.value.trim();
+  if (selectedRating || fb) {
+    note.style.display = 'block';
+    note.textContent = selectedRating ? `Обратная связь: ${selectedRating} ★${fb ? ' — ' + fb : ''}` : `Комментарий: ${fb}`;
+  } else note.style.display = 'none';
+  document.getElementById('confirmSubmitModal').classList.add('active');
+});
+
+document.getElementById('confirmSubmitBtn').addEventListener('click', async () => {
+  document.getElementById('confirmSubmitModal').classList.remove('active');
+  if (pendingSubmitFields) await performSubmit(pendingSubmitFields);
+  pendingSubmitFields = null;
+});
+['closeConfirmModal', 'cancelConfirmBtn'].forEach(id => {
+  document.getElementById(id).addEventListener('click', () => {
+    document.getElementById('confirmSubmitModal').classList.remove('active');
+    pendingSubmitFields = null;
+  });
+});
+document.getElementById('confirmSubmitModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('confirmSubmitModal').classList.remove('active');
+    pendingSubmitFields = null;
+  }
+});
+
+document.getElementById('editModeBtn').addEventListener('click', () => {
+  const url = new URL(location.href);
+  url.searchParams.delete('mode');
+  history.replaceState({}, '', url);
+  setViewMode(false);
+});
+
+document.querySelectorAll('#starRating button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedRating = Number(btn.dataset.star);
+    document.querySelectorAll('#starRating button').forEach(b => {
+      b.classList.toggle('active', Number(b.dataset.star) <= selectedRating);
+    });
+  });
 });
 
 // ─── Event listeners ──────────────────────────────────────────────────────
@@ -519,8 +717,72 @@ document.getElementById('addProjectBtn').addEventListener('click', () => {
 });
 
 function escHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
+
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    toast('Выберите изображение', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Файл слишком большой (макс. 5 МБ)', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('photoPreview');
+    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    document.getElementById('f_photo').value = e.target.result;
+    trackChanges();
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadEmployeePhoto(emp) {
+  const photoEl = document.getElementById('f_photo');
+  const preview = document.getElementById('photoPreview');
+  if (emp.photo) {
+    photoEl.value = emp.photo;
+    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  }
+  originalValues.photo = emp.photo || '';
+  if (photoEl) photoEl.oninput = trackChanges;
+}
+
+// ─── Speller (Yandex) ──────────────────────────────────────────────────────
+document.getElementById('spellerBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('spellerBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin:0;"></span> Исправление...';
+  try {
+    const fields = collectFormFields();
+    const r = await fetch('/api/form/correct-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Ошибка'); }
+    const data = await r.json();
+    if (!data.ok) throw new Error('Ошибка ответа');
+    const c = data.corrected;
+    for (const [key, val] of Object.entries(c)) {
+      const el = document.getElementById('f_' + key);
+      if (el && val !== undefined) {
+        el.value = val;
+        el.dispatchEvent(new Event('input'));
+      }
+    }
+    trackChanges();
+    toast('Текст исправлен', 'success');
+  } catch (e) {
+    toast('Ошибка исправления: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '✨ Исправить текст';
+});
 
 // ─── Init ──────────────────────────────────────────────────────────────────
 initTheme();

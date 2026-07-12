@@ -16,17 +16,139 @@ function requireAuth(req, res, next) {
   next();
 }
 
-const EXCEL_TO_DB = {
-  'ФИО':                 'name',
-  'Образование':         'education',
-  'Должность':           'position',
-  'Контактные данные':   'contacts',
-  'Стаж работы':         'experience',
-  'Обо мне':             'about',
-  'Компетенции':         'competencies',
-  'Проектный опыт':      'project_experience',
-  'Сертификация 1С':     'certification',
-};
+// ─── Разбор текстовых блоков из выгрузки ────────────────────────────────────
+// Формат ячеек в реальных выгрузках — многострочный текст с подписанными
+// полями ("Учебное заведение: ...", "Общий стаж: ...", и т.д.), при этом
+// заголовки колонок в файле могут не совпадать 1-в-1 с ожидаемыми (лишние
+// пробелы, отсутствующий заголовок у колонки с контактами). Поэтому вместо
+// прямого копирования текста в поле БД мы разбираем эти блоки на структуру,
+// которую ожидает остальная часть приложения (education: массив, experience:
+// {total, jobs}, project_experience: массив).
+
+function extractField(line, label) {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+  const re = new RegExp('^\\s*' + escaped + '\\s*:\\s*(.*)$', 'i');
+  const m = line.match(re);
+  return m ? m[1].trim() : null;
+}
+
+function parseEducation(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  const blocks = String(raw).split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  return blocks.map(block => {
+    const entry = { institution: '', degree: '', specialty: '', year: '' };
+    for (const line of block.split('\n')) {
+      let v;
+      if ((v = extractField(line, 'Учебное заведение')) !== null) entry.institution = v;
+      else if ((v = extractField(line, 'Степень')) !== null) entry.degree = v;
+      else if ((v = extractField(line, 'Специальность')) !== null) entry.specialty = v;
+      else if ((v = extractField(line, 'Год окончания')) !== null) entry.year = v;
+    }
+    return entry;
+  }).filter(e => e.institution || e.degree || e.specialty || e.year);
+}
+
+function parseContacts(raw) {
+  const lines = String(raw || '').split('\n');
+  let city = '', email = '';
+  for (const line of lines) {
+    let v;
+    if ((v = extractField(line, 'Город')) !== null) city = v;
+    else if ((v = extractField(line, 'Email')) !== null) email = v;
+    else if (!email && line.includes('@')) email = line.trim();
+    else if (!city && line.trim()) city = line.trim();
+  }
+  return { city, email };
+}
+
+function parseExperience(raw) {
+  if (!raw || !String(raw).trim()) return { total: '', jobs: [] };
+  const job = { company: '', position: '', period: '' };
+  let total = '';
+  for (const line of String(raw).split('\n')) {
+    let v;
+    if ((v = extractField(line, 'Общий стаж')) !== null) total = v;
+    else if ((v = extractField(line, 'Компания')) !== null) job.company = v;
+    else if ((v = extractField(line, 'Должность')) !== null) job.position = v;
+    else if ((v = extractField(line, 'Период')) !== null) job.period = v;
+  }
+  const jobs = (job.company || job.position || job.period) ? [job] : [];
+  return { total, jobs };
+}
+
+function parseProjects(raw) {
+  if (!raw || !String(raw).trim()) return [];
+  const blocks = String(raw).split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  return blocks.map(block => {
+    const p = { period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' };
+    for (const line of block.split('\n')) {
+      let v;
+      if ((v = extractField(line, 'Период работы')) !== null) p.period = v;
+      else if ((v = extractField(line, 'Должность')) !== null) p.position = v;
+      else if ((v = extractField(line, 'Роль')) !== null) p.role = v;
+      else if ((v = extractField(line, 'Размер команды')) !== null) p.team_size = v;
+      else if ((v = extractField(line, 'Заказчик')) !== null) p.client = v;
+      else if ((v = extractField(line, 'Описание проекта')) !== null) p.project_description = v;
+      else if ((v = extractField(line, 'Задача, реализованная сотрудником')) !== null) p.task_description = v;
+      else if ((v = extractField(line, 'Программные продукты / Технологии')) !== null) p.technologies = v;
+    }
+    return p;
+  }).filter(p => p.period || p.position || p.role || p.client || p.project_description || p.task_description || p.technologies);
+}
+
+function parseAbout(raw) {
+  const t = String(raw || '').trim();
+  if (!t || /^уточнить$/i.test(t)) return '';
+  return t;
+}
+
+function parseCompetencies(raw) {
+  if (!raw) return '';
+  return String(raw).split(/\n|;/).map(s => s.trim()).filter(Boolean).join('\n');
+}
+
+function cleanCertification(raw) {
+  let t = String(raw || '').trim();
+  // Убираем пустой раздел "Обучающие курсы: -" (означает "нет курсов")
+  t = t.replace(/\n\s*\n\s*Обучающие курсы:\s*\n?\s*-\s*$/i, '');
+  return t;
+}
+
+// ─── Определение колонок по заголовку (устойчиво к опечаткам/пробелам) ─────
+function buildHeaderMap(headerRow) {
+  const map = {};
+  headerRow.forEach((h, idx) => {
+    const key = String(h || '').trim();
+    if (key && map[key] === undefined) map[key] = idx;
+  });
+  return map;
+}
+
+function resolveColumns(headerRow) {
+  const map = buildHeaderMap(headerRow);
+  const idx = {
+    name: map['ФИО'],
+    education: map['Образование'],
+    position: map['Должность'],
+    experience: map['Стаж работы'],
+    about: map['Обо мне'],
+    competencies: map['Компетенции'],
+    project_experience: map['Проектный опыт'],
+    certification: map['Сертификация 1С'],
+    contacts: map['Контактные данные'],
+  };
+  // Колонка с контактами (Город/Email) в реальных выгрузках может идти без
+  // заголовка вовсе — тогда ищем пустой заголовок между "Должность" и
+  // "Стаж работы".
+  if (idx.contacts === undefined) {
+    const from = (idx.position ?? -1) + 1;
+    const to = idx.experience !== undefined ? idx.experience : headerRow.length;
+    for (let i = from; i < to; i++) {
+      if (!String(headerRow[i] || '').trim()) { idx.contacts = i; break; }
+    }
+  }
+  return idx;
+}
 
 // ── Импорт Excel / CSV ────────────────────────────────────────────────────────
 // ВНИМАНИЕ: импорт полностью ЗАМЕНЯЕТ текущий список сотрудников данными из
@@ -39,28 +161,46 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
   try {
     const wb   = XLSX.readFile(req.file.path);
     const ws   = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    // header:1 — сырые строки массивами, без привязки к точному тексту заголовка
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });
+    if (rows.length < 2) return res.status(400).json({ error: 'Файл пуст или не содержит данных' });
+
+    const headerRow = rows[0];
+    const col = resolveColumns(headerRow);
+    if (col.name === undefined) {
+      return res.status(400).json({ error: 'Не найдена колонка "ФИО" — проверьте формат файла' });
+    }
 
     const removed = helpers.deleteAllEmployees();
 
     let imported = 0, skipped = 0;
-    for (const row of rows) {
-      const data = {};
-      for (const [col, field] of Object.entries(EXCEL_TO_DB))
-        data[field] = String(row[col] || '').trim();
-      if (!data.name) { skipped++; continue; }
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r];
+      const name = String(row[col.name] ?? '').trim();
+      if (!name) { skipped++; continue; }
 
-      // Извлечь email из contacts
-      const emailMatch = data.contacts.match(/[\w.+-]+@[\w.-]+\.\w+/);
-      data.email = emailMatch ? emailMatch[0] : '';
-      data.city  = data.contacts.split('\n')[0] || '';
+      const { city, email } = parseContacts(col.contacts !== undefined ? row[col.contacts] : '');
+
+      const data = {
+        name,
+        position: col.position !== undefined ? String(row[col.position] ?? '').trim() : '',
+        education: parseEducation(col.education !== undefined ? row[col.education] : ''),
+        experience: parseExperience(col.experience !== undefined ? row[col.experience] : ''),
+        about: parseAbout(col.about !== undefined ? row[col.about] : ''),
+        competencies: parseCompetencies(col.competencies !== undefined ? row[col.competencies] : ''),
+        project_experience: parseProjects(col.project_experience !== undefined ? row[col.project_experience] : ''),
+        certification: cleanCertification(col.certification !== undefined ? row[col.certification] : ''),
+        city,
+        email,
+      };
+      data.contacts = [city, email].filter(Boolean).join('\n');
 
       helpers.createEmployee(data);
       imported++;
     }
 
     fs.unlinkSync(req.file.path);
-    res.json({ ok: true, imported, removed, skipped, total: rows.length });
+    res.json({ ok: true, imported, removed, skipped, total: rows.length - 1 });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: `Ошибка импорта: ${err.message}` });
@@ -73,7 +213,12 @@ router.get('/export', requireAuth, (req, res) => {
   function fmtEducation(edu) {
     if (typeof edu === 'string') return edu;
     if (Array.isArray(edu)) {
-      return edu.map(e => [e.institution, e.degree, e.specialty, e.year].filter(Boolean).join(',')).join(';');
+      return edu.map(e => [
+        e.institution ? `Учебное заведение: ${e.institution}` : '',
+        e.degree ? `Степень: ${e.degree}` : '',
+        e.specialty ? `Специальность: ${e.specialty}` : '',
+        e.year ? `Год окончания: ${e.year}` : '',
+      ].filter(Boolean).join('\n')).join('\n\n');
     }
     return String(edu || '');
   }
@@ -82,15 +227,16 @@ router.get('/export', requireAuth, (req, res) => {
     if (exp && typeof exp === 'object') {
       const lines = [];
       if (exp.total) lines.push('Общий стаж: ' + exp.total);
-      if (Array.isArray(exp.jobs)) {
+      if (Array.isArray(exp.jobs) && exp.jobs.length > 0) {
         for (const j of exp.jobs) {
           const parts = [j.company, j.position, j.period].filter(Boolean);
           if (parts.length) lines.push(parts.join(' — '));
         }
       }
+      if (lines.length === 0) return '';
       return lines.join('\n');
     }
-    return String(exp || '');
+    return '';
   }
   function fmtProject(proj) {
     if (typeof proj === 'string') return proj;

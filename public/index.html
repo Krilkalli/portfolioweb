@@ -12,7 +12,13 @@
     .employee-pos  { font-size: 0.78rem; color: var(--text-muted); }
     /* .link-cell теперь оформляется как ссылка в /css/styles.css */
     .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-    .toolbar-left { flex: 1; }
+    .toolbar-left { flex: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+    .filter-label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.875rem; font-weight: 500; color: var(--text-secondary);
+      cursor: pointer; white-space: nowrap;
+    }
+    #importFile { display: none; }
     #pendingBadge {
       background: var(--danger);
       color: #fff;
@@ -22,47 +28,106 @@
       font-weight: 700;
       margin-left: 4px;
     }
-    .import-label {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      padding: 9px 18px;
-      border-radius: var(--radius-sm);
-      background: transparent;
-      color: var(--text-secondary);
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+
+    .employees-card { padding: 0; }
+    .employees-card .table-wrap { overflow-x: auto; }
+    #employeesTable { width: 100%; table-layout: fixed; }
+    #employeesTable .col-link { width: 200px; overflow: hidden; }
+    #employeesTable .col-link .link-cell {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    #employeesTable .col-resume {
+      width: 100px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    #employeesTable .col-actions {
+      width: 100px;
+      text-align: center;
+      vertical-align: middle;
+    }
+    #employeesTable th.col-link,
+    #employeesTable th.col-resume,
+    #employeesTable th.col-actions { white-space: nowrap; }
+    #employeesTable td { text-align: center; }
+    #employeesTable td:first-child + td { text-align: left; }
+    #employeesTable td.col-link { text-align: left; }
+    #employeesTable td.col-resume { text-align: center; }
+    #employeesTable td.col-actions { text-align: center; }
+
+    .resume-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 50;
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
-      font-size: 0.875rem;
-      font-weight: 500;
+      border-radius: var(--radius-md);
+      padding: 4px;
+      min-width: 150px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+    .resume-dropdown.show { display: block; }
+    .resume-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
       cursor: pointer;
       transition: all var(--transition);
     }
-    .import-label:hover { background: var(--bg-card-hover); color: var(--text-primary); }
-    #importFile { display: none; }
-    .progress-overlay {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,0.6);
-      backdrop-filter: blur(4px);
-      z-index: 400;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.25s;
+    .resume-dropdown-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
     }
-    .progress-overlay.active { opacity: 1; visibility: visible; }
-    .progress-box {
-      background: #16163a;
+
+    .action-dropdown {
+      display: none;
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 50;
+      background: var(--bg-secondary);
       border: 1px solid var(--border);
-      border-radius: var(--radius-xl);
-      padding: 32px 40px;
-      text-align: center;
-      min-width: 280px;
+      border-radius: var(--radius-md);
+      padding: 4px;
+      min-width: 170px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
     }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 768px) { .form-row { grid-template-columns: 1fr; } }
+    .action-dropdown.show { display: block; }
+    .action-dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .action-dropdown-item:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
   </style>
 </head>
 <body class="page-wrapper">
@@ -79,6 +144,7 @@
       ⚡ Проверить изменения <span id="pendingBadge" class="hidden">0</span>
     </a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
 </nav>
@@ -114,34 +180,44 @@
       <select id="filterPosition" class="form-control" style="width:auto;min-width:200px;">
         <option value="">— Все должности —</option>
       </select>
-      <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;white-space:nowrap;">
+      <label class="filter-label">
         <input type="checkbox" id="filterArchived" checked> Показывать архив
       </label>
     </div>
     <button id="addEmployeeBtn" class="btn btn-primary btn-sm">➕ Сотрудника</button>
-    <label class="import-label" for="importFile">
-      📥 Импорт Excel
-      <input type="file" id="importFile" accept=".xlsx,.xls">
-    </label>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm">📤 Экспорт Excel</a>
   </div>
 
+  <!-- Toolbar -->
+  <div class="toolbar" id="exportToolbar" style="display:none;">
+    <div class="toolbar-left">
+      <span id="selectedCount" style="font-size:0.82rem;color:var(--text-secondary);font-weight:600;"></span>
+      <button class="btn btn-primary btn-sm" id="exportExcelBtn">📊 Excel</button>
+      <button class="btn btn-primary btn-sm" id="exportDocxBtn">📄 DOCX</button>
+      <button class="btn btn-primary btn-sm" id="exportPdfBtn">📑 PDF</button>
+      <button class="btn btn-ghost btn-sm" id="clearSelectionBtn">✕ Снять выделение</button>
+    </div>
+  </div>
+
   <!-- Table -->
-  <div class="card" style="padding:0;overflow:hidden;">
+  <div class="card employees-card">
     <div class="table-wrap">
       <table class="table" id="employeesTable">
         <thead>
           <tr>
+            <th class="col-check"><input type="checkbox" id="selectAll"></th>
             <th>Сотрудник</th>
             <th>Должность</th>
             <th>Город</th>
             <th>Статус</th>
-            <th>Персональная ссылка</th>
-            <th style="text-align:right">Действия</th>
+            <th class="col-date">Дата актуализации</th>
+            <th class="col-link">Персональная ссылка</th>
+            <th class="col-resume">Резюме</th>
+            <th class="col-actions">Действия</th>
           </tr>
         </thead>
         <tbody id="employeesTbody">
-          <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">
             <span class="spinner"></span>
           </td></tr>
         </tbody>
@@ -184,14 +260,6 @@
         <button type="submit" class="btn btn-primary" id="saveNewBtn">➕ Добавить и скопировать ссылку</button>
       </div>
     </form>
-  </div>
-</div>
-
-<!-- Progress overlay -->
-<div class="progress-overlay" id="progressOverlay">
-  <div class="progress-box">
-    <div class="spinner" style="width:36px;height:36px;border-width:3px;margin:0 auto 16px;"></div>
-    <div id="progressMsg" style="color:var(--text-secondary);font-size:0.9rem;">Импорт...</div>
   </div>
 </div>
 

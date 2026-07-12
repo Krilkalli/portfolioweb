@@ -14,7 +14,7 @@ function initials(name) {
 
 function formatDate(str) {
   if (!str) return '—';
-  return new Date(str).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(str).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 // ─── Data ───────────────────────────────────────────────────────────────────
 let employees = [];
 let positionsList = [];
+let selectedIds = new Set();
 
 async function loadStats() {
   try {
@@ -102,16 +103,19 @@ function populatePositionSelects() {
 function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
+      <td class="col-check">
+        <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
+      </td>
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
           <div>
-            <div class="employee-name">${e.name}${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
+            <div class="employee-name"><a href="${e.link}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">${e.email || '—'}</div>
           </div>
         </div>
@@ -125,41 +129,65 @@ function renderTable(list) {
             ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
-      <td>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${e.status !== 'archived'
-            ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="Открыть: ${e.link}">${e.link}</a>
-               <button class="btn btn-ghost btn-icon btn-sm" title="Скопировать ссылку" onclick="copyLink(${e.id})">
-                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
-               </button>`
-            : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
-        </div>
+      <td style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
+      <td class="col-link">
+        ${e.status !== 'archived'
+          ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
+              <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
+              <button class="btn btn-ghost btn-icon" style="width:26px;height:26px;font-size:0.7rem;flex-shrink:0;" onclick="copyToClipboard('${e.link}')" title="Скопировать ссылку">📋</button>
+            </div>`
+          : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td>
-        <div style="display:flex;gap:6px;justify-content:flex-end;flex-wrap:wrap;">
-          ${e.status !== 'archived'
-            ? `<a href="${e.link}" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
-               <button class="btn btn-ghost btn-sm" onclick="copyLink(${e.id})">🔗 Скопировать</button>
-               <button class="btn btn-ghost btn-sm" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-               <a href="/api/employees/${e.id}/resume" class="btn btn-ghost btn-sm">📄 Резюме</a>
-               ${e.pendingCount > 0 ? `<a href="/review.html" class="btn btn-warning btn-sm">⚡ Проверить</a>` : ''}
-               <button class="btn btn-ghost btn-sm" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Архивировать">📦 Архив</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`}
+      <td class="col-resume">
+        ${e.status !== 'archived'
+          ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
+              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
+              <div class="resume-dropdown">
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
+              </div>
+            </div>`
+          : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
+      </td>
+      <td class="col-actions">
+        <div class="action-menu" style="position:relative;display:inline-flex;">
+          ${e.status === 'archived'
+            ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
+            : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
+               <div class="action-dropdown">
+                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
+                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+               </div>`}
         </div>
       </td>
     </tr>
   `).join('');
-
-  window._employeeLinks = Object.fromEntries(list.map(e => [e.id, e.link]));
 }
 
-// ─── Actions ─────────────────────────────────────────────────────────────────
-function copyLink(id) {
-  const link = window._employeeLinks?.[id];
-  if (!link) return;
-  navigator.clipboard.writeText(link).then(() => toast('Ссылка скопирована в буфер обмена', 'success'))
-    .catch(() => { prompt('Скопируйте ссылку:', link); });
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
 }
+
+function toggleResumeMenu(btn) {
+  document.querySelectorAll('.resume-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
+}
+
+function toggleActionMenu(btn) {
+  document.querySelectorAll('.action-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.action-menu')) {
+    document.querySelectorAll('.action-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+  if (!e.target.closest('.resume-menu')) {
+    document.querySelectorAll('.resume-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+});
 
 async function regenerateToken(id, name) {
   if (!confirm(`Сгенерировать новую ссылку для ${name}?\nСтарая ссылка перестанет работать.`)) return;
@@ -287,50 +315,143 @@ function applyFilter() {
   renderTable(list);
 }
 
-// ─── Import Excel ─────────────────────────────────────────────────────────────
-document.getElementById('importFile').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  if (!confirm('Импорт полностью ЗАМЕНИТ текущий список сотрудников данными из файла.\nВсе существующие сотрудники будут удалены.\n\nПродолжить?')) {
-    e.target.value = '';
-    return;
-  }
-
-  const overlay = document.getElementById('progressOverlay');
-  const msg = document.getElementById('progressMsg');
-  overlay.classList.add('active');
-  msg.textContent = 'Импорт файла...';
-
-  const fd = new FormData();
-  fd.append('file', file);
-
-  try {
-    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
-    const d = await r.json();
-    overlay.classList.remove('active');
-    e.target.value = '';
-    if (r.ok) {
-      toast(`Импорт завершён: список заменён, добавлено ${d.imported} сотрудников (было удалено: ${d.removed})`, 'success');
-      await loadEmployees();
-      await loadStats();
-    } else { toast(d.error || 'Ошибка импорта', 'error'); }
-  } catch {
-    overlay.classList.remove('active');
-    toast('Ошибка при импорте файла', 'error');
-  }
-});
-
 // ─── Logout ──────────────────────────────────────────────────────────────────
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await fetch('/api/auth/logout', { method: 'POST' });
   location.href = '/login.html';
 });
 
+// ─── Selection & Export ──────────────────────────────────────────────────────
+function updateSelectionUI() {
+  const toolbar = document.getElementById('exportToolbar');
+  const count = document.getElementById('selectedCount');
+  if (selectedIds.size > 0) {
+    toolbar.style.display = 'flex';
+    count.textContent = `Выбрано: ${selectedIds.size}`;
+  } else {
+    toolbar.style.display = 'none';
+  }
+  const selectAll = document.getElementById('selectAll');
+  const checks = document.querySelectorAll('.emp-check');
+  const activeChecks = Array.from(checks).filter(c => !c.disabled);
+  if (activeChecks.length > 0) {
+    selectAll.checked = activeChecks.every(c => c.checked);
+    selectAll.indeterminate = activeChecks.some(c => c.checked) && !activeChecks.every(c => c.checked);
+  } else {
+    selectAll.checked = false;
+    selectAll.indeterminate = false;
+  }
+}
+
+document.getElementById('selectAll').addEventListener('change', (e) => {
+  const checks = document.querySelectorAll('.emp-check');
+  checks.forEach(c => {
+    if (!c.disabled) {
+      c.checked = e.target.checked;
+      const id = Number(c.dataset.id);
+      if (e.target.checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+    }
+  });
+  updateSelectionUI();
+});
+
+document.getElementById('employeesTbody').addEventListener('change', (e) => {
+  if (e.target.classList.contains('emp-check')) {
+    const id = Number(e.target.dataset.id);
+    if (e.target.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+    updateSelectionUI();
+  }
+});
+
+document.getElementById('clearSelectionBtn').addEventListener('click', () => {
+  selectedIds.clear();
+  document.querySelectorAll('.emp-check').forEach(c => { c.checked = false; });
+  document.getElementById('selectAll').checked = false;
+  updateSelectionUI();
+});
+
+async function exportSelected(format) {
+  if (selectedIds.size === 0) { toast('Сначала выберите сотрудников', 'warning'); return; }
+  const btn = format === 'pdf' ? document.getElementById('exportPdfBtn') : document.getElementById('exportDocxBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Генерация...';
+  try {
+    const r = await fetch('/api/employees/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds), format }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка экспорта', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resumes_${format}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`ZIP-архив с ${selectedIds.size} резюме (${format.toUpperCase()}) скачан`, 'success');
+  } catch {
+    toast('Ошибка при экспорте', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
+document.getElementById('exportDocxBtn').addEventListener('click', () => exportSelected('docx'));
+document.getElementById('exportPdfBtn').addEventListener('click', () => exportSelected('pdf'));
+
+document.getElementById('exportExcelBtn').addEventListener('click', async () => {
+  if (selectedIds.size === 0) { toast('Сначала выберите сотрудников', 'warning'); return; }
+  const btn = document.getElementById('exportExcelBtn');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Генерация...';
+  try {
+    const r = await fetch('/api/employees/export-excel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка экспорта', 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `portfolio_selected_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast(`Excel-файл с ${selectedIds.size} сотрудниками скачан`, 'success');
+  } catch {
+    toast('Ошибка при экспорте', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+});
+
 // ─── Init ────────────────────────────────────────────────────────────────────
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
+
+  const nm = document.getElementById('navbarManager');
+  if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
 
   initTheme();
   await Promise.all([loadStats(), loadEmployees(), loadPositions()]);

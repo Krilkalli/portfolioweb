@@ -64,6 +64,7 @@
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
     <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
 </nav>
@@ -137,7 +138,12 @@
         <span class="card-title">🔑 Смена пароля</span>
         <span class="collapse-icon">−</span>
       </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Изменение пароля для вашей учётной записи (<span id="currentManagerLogin"></span>).</p>
       <form id="passwordForm">
+        <div class="form-group">
+          <label class="form-label" for="current_password">Текущий пароль</label>
+          <input id="current_password" type="password" class="form-control" placeholder="Введите текущий пароль" autocomplete="current-password">
+        </div>
         <div class="form-group">
           <label class="form-label" for="new_password">Новый пароль</label>
           <input id="new_password" type="password" class="form-control" placeholder="Минимум 8 символов" autocomplete="new-password">
@@ -148,6 +154,60 @@
         </div>
         <button type="submit" class="btn btn-primary" id="savePasswordBtn">🔑 Сменить пароль</button>
         <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
+      </form>
+    </div>
+
+    <!-- Managers Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">👥 Управление менеджерами</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
+      <div id="managerList" style="margin-bottom:16px;"></div>
+      <hr class="divider">
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <input type="text" class="form-control" id="newManagerName" placeholder="Имя менеджера">
+        <input type="text" class="form-control" id="newManagerLogin" placeholder="Логин">
+        <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 8 символов)">
+        <button class="btn btn-primary" id="addManagerBtn">➕ Добавить менеджера</button>
+        <div id="managerResult" style="font-size:0.85rem;"></div>
+      </div>
+    </div>
+
+    <!-- Import Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📥 Импорт сотрудников из Excel</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Импорт полностью <strong style="color:var(--danger)">ЗАМЕНИТ</strong> текущий список сотрудников данными из файла.
+        Все существующие сотрудники будут удалены.
+      </p>
+      <label class="btn btn-primary" for="importFile" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+        📥 Выбрать файл и импортировать
+        <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none;">
+      </label>
+      <div id="importResult" style="margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+
+    <!-- Template Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📄 Шаблон резюме</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Загрузите DOCX-файл с тегами <code>{name}</code>, <code>{position}</code>, <code>{about}</code>, <code>{contacts}</code>, <code>{competencies}</code>, <code>{experience}</code>, <code>{project_experience}</code>, <code>{education}</code>, <code>{certification}</code> в нужных местах. Данные сотрудника будут подставлены автоматически.
+      </p>
+      <div id="templateInfo" style="margin-bottom:12px;font-size:0.85rem;"></div>
+      <form id="templateUploadForm" enctype="multipart/form-data">
+        <div class="form-group">
+          <input type="file" id="templateFile" accept=".docx" class="form-control" style="padding:8px;">
+        </div>
+        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">📤 Загрузить шаблон</button>
+        <div id="templateResult" style="margin-top:10px;font-size:0.85rem;"></div>
       </form>
     </div>
 
