@@ -75,7 +75,7 @@
 
   <div class="settings-list">
     <!-- SMTP Card -->
-    <div class="card">
+    <div class="card" data-role="admin">
       <div class="card-header">
         <span class="card-title">📧 SMTP / Email — настройка почтовых уведомлений</span>
       </div>
@@ -118,6 +118,22 @@
       </form>
     </div>
 
+    <!-- Scrum-only email section -->
+    <div class="card" data-role="scrum" style="display:none;">
+      <div class="card-header">
+        <span class="card-title">📧 Email менеджера</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">На этот адрес приходят уведомления о новых изменениях.</p>
+      <form id="scrumEmailForm">
+        <div class="form-group">
+          <label class="form-label" for="scrum_manager_email">Email менеджера</label>
+          <input id="scrum_manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru">
+        </div>
+        <button type="submit" class="btn btn-primary" id="saveScrumEmailBtn">💾 Сохранить</button>
+        <div id="scrumEmailResult" style="margin-top:12px;font-size:0.875rem;"></div>
+      </form>
+    </div>
+
     <!-- Positions Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
@@ -131,6 +147,30 @@
         <button class="btn btn-primary" id="addPositionBtn">Добавить</button>
       </div>
       <div id="positionResult" style="margin-top:8px;font-size:0.85rem;"></div>
+    </div>
+
+    <!-- Competencies per Position Card -->
+    <div class="card collapsible" data-role="admin,scrum">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📋 Компетенции по должностям</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Укажите ключевые компетенции для каждой должности. Сотрудники увидят их в чек-листе при заполнении профиля.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <select class="form-control" id="compPositionSelect" style="flex:1;min-width:200px;">
+          <option value="">— Выберите должность —</option>
+        </select>
+      </div>
+      <div id="compForPosition" style="display:none;">
+        <div class="position-list" id="compList"></div>
+        <div class="add-position-row">
+          <input type="text" class="form-control" id="newCompInput" placeholder="Новая компетенция">
+          <button class="btn btn-primary" id="addCompBtn">Добавить</button>
+        </div>
+      </div>
+      <div id="compResult" style="margin-top:8px;font-size:0.85rem;"></div>
     </div>
 
     <!-- Password Card -->
@@ -159,7 +199,7 @@
     </div>
 
     <!-- Managers Card -->
-    <div class="card collapsible">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title">👥 Управление менеджерами</span>
         <span class="collapse-icon">−</span>
@@ -167,17 +207,22 @@
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
       <div id="managerList" style="margin-bottom:16px;"></div>
       <hr class="divider">
-      <div style="display:flex;flex-direction:column;gap:12px;">
+      <div style="display:flex;flex-direction:column;gap:12px;" data-role="admin">
         <input type="text" class="form-control" id="newManagerName" placeholder="Имя менеджера">
         <input type="text" class="form-control" id="newManagerLogin" placeholder="Логин">
         <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 8 символов)">
+        <select class="form-control" id="newManagerRole">
+          <option value="scrum">Скрам-мастер</option>
+          <option value="leader">Руководитель</option>
+          <option value="admin">Главный администратор</option>
+        </select>
         <button class="btn btn-primary" id="addManagerBtn">➕ Добавить менеджера</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>
       </div>
     </div>
 
     <!-- Import Card -->
-    <div class="card collapsible">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title">📥 Импорт сотрудников из Excel</span>
         <span class="collapse-icon">−</span>
@@ -194,7 +239,7 @@
     </div>
 
     <!-- Template Card -->
-    <div class="card collapsible">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title">📄 Шаблон резюме</span>
         <span class="collapse-icon">−</span>

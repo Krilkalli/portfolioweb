@@ -6,6 +6,7 @@
   <title>Обновление профиля — IS1C</title>
   <meta name="description" content="Форма обновления профиля сотрудника IS1C">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
   <style>
     .form-page {
       min-height: 100vh;
@@ -247,16 +248,22 @@
   <div style="font-size:3rem;margin-bottom:16px;">🔗</div>
   <h2 style="color:var(--text-secondary);margin-bottom:8px;">Ссылка недействительна</h2>
   <p>Обратитесь к менеджеру для получения актуальной ссылки.</p>
+  <div id="backToDashError" style="margin-top:20px;display:none;">
+    <a href="/index.html" class="btn btn-primary btn-sm">← На главную</a>
+  </div>
 </div>
 
-<div id="successState" class="form-wrap hidden">
+  <div id="successState" class="form-wrap hidden">
   <div class="success-screen">
     <div class="success-icon">✅</div>
     <h2 style="font-size:1.4rem;margin-bottom:8px;">Данные отправлены на проверку!</h2>
-    <p style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
+    <p id="successSubtitle" style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
       Менеджер рассмотрит изменения и подтвердит их.
     </p>
     <p id="changesCountMsg" style="color:var(--text-muted);font-size:0.875rem;"></p>
+    <div id="backToDashManager" style="margin-top:24px;display:none;">
+      <a href="/index.html" class="btn btn-primary btn-sm">← На главную</a>
+    </div>
   </div>
 </div>
 
@@ -466,7 +473,26 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="photoCropModal">
+  <div class="modal" style="max-width:600px;">
+    <div class="modal-header">
+      <span class="modal-title">Кадрирование фото</span>
+      <button type="button" class="btn btn-ghost btn-icon" id="closeCropModal">✕</button>
+    </div>
+    <div style="padding:16px;">
+      <div id="cropContainer" style="max-height:400px;overflow:hidden;">
+        <img id="cropImage" src="" style="max-width:100%;">
+      </div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border);">
+      <button type="button" class="btn btn-ghost" id="cancelCropBtn">Отмена</button>
+      <button type="button" class="btn btn-primary" id="applyCropBtn">✅ Применить</button>
+    </div>
+  </div>
+</div>
+
 <div class="toast-container" id="toastContainer"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
 <script src="/js/form.js"></script>
 </body>
 </html>

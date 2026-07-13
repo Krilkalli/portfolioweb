@@ -24,6 +24,7 @@ const FIELD_NAMES = {
   certification: 'Сертификация',
   course_name: 'Наименование курса',
   course_year: 'Год прохождения курса',
+  photo: 'Фото',
 };
 
 let originalValues = {};
@@ -32,6 +33,7 @@ let employee = null;
 let isViewMode = false;
 let selectedRating = 0;
 let pendingSubmitFields = null;
+let managerUser = null; // if logged in as manager
 
 function getAllChecklistItems() {
   return Array.from(document.querySelectorAll('#competencyChecklist input[type="checkbox"]')).map(c => c.value);
@@ -126,10 +128,34 @@ const COMPETENCY_GROUPS = [
   ]},
 ];
 
-function buildCompetencyChecklist() {
+function buildCompetencyChecklist(positionOverride) {
   const container = document.getElementById('competencyChecklist');
   if (!container) return;
   container.innerHTML = '';
+
+  // If position has custom competencies, show only those
+  const pos = positionOverride || document.getElementById('f_position')?.value || '';
+  const posComps = positionCompetencies[pos];
+  if (posComps && posComps.length > 0) {
+    const label = document.createElement('div');
+    label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-bottom:4px;';
+    label.textContent = pos;
+    container.appendChild(label);
+    posComps.forEach(item => {
+      const wrapper = document.createElement('label');
+      wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.value = item;
+      cb.style.cssText = 'margin-top:3px;accent-color:var(--accent);';
+      cb.addEventListener('change', updateCompetencies);
+      wrapper.appendChild(cb);
+      wrapper.appendChild(document.createTextNode(' ' + item));
+      container.appendChild(wrapper);
+    });
+    return;
+  }
+
+  // Fallback: show default competency groups
   COMPETENCY_GROUPS.forEach(group => {
     const label = document.createElement('div');
     label.className = 'competency-group-label';
@@ -378,8 +404,12 @@ async function loadEmployee() {
     const r = await fetch(`/api/form/${token}`);
     if (!r.ok) { showError(); return; }
     employee = await r.json();
-    const posR = await fetch('/api/form/positions');
+    const [posR, compR] = await Promise.all([
+      fetch('/api/form/positions'),
+      fetch('/api/form/position-competencies'),
+    ]);
     if (posR.ok) { const d = await posR.json(); populatePositions(d.positions); }
+    if (compR.ok) { positionCompetencies = await compR.json(); }
     showForm(employee);
   } catch { showError(); }
 }
@@ -394,9 +424,22 @@ function populatePositions(positions) {
   });
 }
 
+let positionCompetencies = {};
+
+async function loadPositionCompetencies() {
+  try {
+    const r = await fetch('/api/form/position-competencies');
+    if (r.ok) positionCompetencies = await r.json();
+  } catch {}
+}
+
 function showError() {
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('errorState').classList.remove('hidden');
+  if (managerUser) {
+    const bd = document.getElementById('backToDashError');
+    if (bd) bd.style.display = 'block';
+  }
 }
 
 function showForm(emp) {
@@ -417,7 +460,11 @@ function showForm(emp) {
   if (posField) {
     if (emp.position) posField.value = emp.position;
     originalValues.position = emp.position || '';
-    posField.onchange = trackChanges;
+    posField.onchange = () => {
+      trackChanges();
+      buildCompetencyChecklist(posField.value);
+      syncChecklist(document.getElementById('f_competencies')?.value || '');
+    };
   }
 
   const cityEl = document.getElementById('f_city');
@@ -545,6 +592,7 @@ function trackChanges() {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+    photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -588,6 +636,7 @@ function getChangedFieldNames() {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+    photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -619,11 +668,64 @@ function collectFormFields() {
 }
 
 async function performSubmit(fields) {
-  fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
-  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
+
+  const asManager = new URLSearchParams(location.search).get('as') === 'manager';
+
+  // Если менеджер открыл форму через дашборд (?as=manager) — применяем напрямую
+  if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
+    try {
+      const empId = employee.id;
+      const payload = {};
+      if (fields.position !== undefined) payload.position = fields.position;
+      if (fields.about !== undefined) payload.about = fields.about;
+      if (fields.competencies !== undefined) payload.competencies = fields.competencies;
+      if (fields.certification !== undefined) {
+        const certParts = [fields.certification, fields.courses ? 'Обучающие курсы: ' + fields.courses : ''].filter(Boolean);
+        payload.certification = certParts.length ? 'Сертификация 1С:\n' + certParts.join('\n\n') : '';
+      }
+      if (fields.education !== undefined) payload.education = fields.education;
+      if (fields.experience !== undefined) payload.experience = fields.experience;
+      if (fields.project_experience !== undefined) payload.project_experience = fields.project_experience;
+      if (fields.city !== undefined || fields.email !== undefined) {
+        payload.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
+      }
+      if (fields.city !== undefined) payload.city = fields.city;
+      if (fields.email !== undefined) payload.email = fields.email;
+      if (fields.photo !== undefined && fields.photo !== originalValues.photo) payload.photo = fields.photo;
+
+      const r = await fetch(`/api/employees/${empId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const d = await r.json();
+      if (r.ok) {
+        document.getElementById('formState').classList.add('hidden');
+        document.getElementById('successState').classList.remove('hidden');
+        document.querySelector('#successState h2').textContent = 'Данные сохранены!';
+        document.querySelector('#successState p').textContent = 'Изменения применены напрямую без отправки на проверку.';
+        document.getElementById('changesCountMsg').textContent = '';
+        const bd = document.getElementById('backToDashManager');
+        if (bd) bd.style.display = 'block';
+      } else {
+        toast(d.error || 'Ошибка при сохранении', 'error');
+        btn.disabled = false;
+        btn.innerHTML = '💾 Сохранить';
+      }
+    } catch {
+      toast('Ошибка соединения с сервером', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '💾 Сохранить';
+    }
+    return;
+  }
+
+  // Обычный сотрудник — отправка на проверку
+  fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
+  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
   try {
     const r = await fetch(`/api/form/${token}/submit`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -720,6 +822,8 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
 
+let cropper = null;
+
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -733,13 +837,48 @@ function handlePhotoUpload(event) {
   }
   const reader = new FileReader();
   reader.onload = (e) => {
-    const preview = document.getElementById('photoPreview');
-    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-    document.getElementById('f_photo').value = e.target.result;
-    trackChanges();
+    const cropImg = document.getElementById('cropImage');
+    cropImg.src = e.target.result;
+    document.getElementById('photoCropModal').classList.add('active');
+    if (cropper) cropper.destroy();
+    cropper = new Cropper(cropImg, {
+      aspectRatio: 1,
+      viewMode: 1,
+      dragMode: 'move',
+      autoCropArea: 1,
+      cropBoxMovable: true,
+      cropBoxResizable: false,
+      toggleDragModeOnDblclick: false,
+      minCropBoxWidth: 100,
+      minCropBoxHeight: 100,
+    });
   };
   reader.readAsDataURL(file);
+  event.target.value = '';
 }
+
+document.getElementById('applyCropBtn').addEventListener('click', () => {
+  if (!cropper) return;
+  const canvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+  const preview = document.getElementById('photoPreview');
+  preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  document.getElementById('f_photo').value = dataUrl;
+  document.getElementById('photoCropModal').classList.remove('active');
+  cropper.destroy();
+  cropper = null;
+  trackChanges();
+});
+
+function closeCropModal() {
+  document.getElementById('photoCropModal').classList.remove('active');
+  if (cropper) { cropper.destroy(); cropper = null; }
+}
+document.getElementById('closeCropModal').addEventListener('click', closeCropModal);
+document.getElementById('cancelCropBtn').addEventListener('click', closeCropModal);
+document.getElementById('photoCropModal').addEventListener('click', (e) => {
+  if (e.target === e.currentTarget) closeCropModal();
+});
 
 function loadEmployeePhoto(emp) {
   const photoEl = document.getElementById('f_photo');
@@ -785,7 +924,36 @@ document.getElementById('spellerBtn').addEventListener('click', async () => {
 });
 
 // ─── Init ──────────────────────────────────────────────────────────────────
-initTheme();
-buildCompetencyChecklist();
-setupTemplateTriggers();
-loadEmployee();
+async function initForm() {
+  initTheme();
+  await loadPositionCompetencies();
+  buildCompetencyChecklist();
+  setupTemplateTriggers();
+
+  // Check if user is a logged-in manager
+  try {
+    const auth = await fetch('/api/auth/me').then(r => r.json());
+    if (auth.authenticated && auth.manager) {
+      managerUser = auth.manager;
+    }
+  } catch {}
+
+  await loadEmployee();
+
+  // If manager opened via dashboard, update submit button text
+  const asManager = new URLSearchParams(location.search).get('as') === 'manager';
+  if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
+    const submitBtn = document.getElementById('submitBtn');
+    if (submitBtn) submitBtn.innerHTML = '💾 Сохранить';
+    // Hide feedback section for managers
+    const fb = document.getElementById('feedbackSection');
+    if (fb) fb.style.display = 'none';
+    // Hide "pending" warning — managers don't create pending changes
+    const pw = document.getElementById('pendingWarning');
+    if (pw) pw.style.display = 'none';
+    // Show back-to-dashboard link
+    const bd = document.getElementById('backToDashManager');
+    if (bd) bd.style.display = 'block';
+  }
+}
+initForm();

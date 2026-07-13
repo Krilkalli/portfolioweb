@@ -28,12 +28,101 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 
 // ─── Positions ──────────────────────────────────────────────────────────────
 let positions = [];
+let positionCompetencies = {};
 
 async function loadPositions() {
   try {
     const r = await fetch('/api/positions');
-    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); }
+    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); populateCompPositionSelect(); }
   } catch {}
+}
+
+async function loadPositionCompetencies() {
+  try {
+    const r = await fetch('/api/position-competencies');
+    if (r.ok) { positionCompetencies = await r.json(); }
+  } catch {}
+}
+
+function populateCompPositionSelect() {
+  const sel = document.getElementById('compPositionSelect');
+  if (!sel) return;
+  const curr = sel.value;
+  sel.innerHTML = '<option value="">— Выберите должность —</option>';
+  positions.forEach(p => {
+    const opt = document.createElement('option');
+    opt.value = p; opt.textContent = p; sel.appendChild(opt);
+  });
+  sel.value = curr;
+}
+
+document.getElementById('compPositionSelect')?.addEventListener('change', (e) => {
+  const pos = e.target.value;
+  const wrap = document.getElementById('compForPosition');
+  if (!pos) { wrap.style.display = 'none'; return; }
+  wrap.style.display = 'block';
+  renderCompList(pos);
+});
+
+function renderCompList(position) {
+  const list = document.getElementById('compList');
+  if (!list) return;
+  const comps = positionCompetencies[position] || [];
+  if (comps.length === 0) {
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:8px 0;">Нет компетенций для этой должности</p>';
+    return;
+  }
+  list.innerHTML = comps.map(c => `
+    <div class="position-item">
+      <span>${escHtml(c)}</span>
+      <button class="remove-pos" onclick="removeComp('${escHtml(position).replace(/'/g, "\\'")}', '${escHtml(c).replace(/'/g, "\\'")}')">✕</button>
+    </div>
+  `).join('');
+}
+
+document.getElementById('addCompBtn')?.addEventListener('click', async () => {
+  const pos = document.getElementById('compPositionSelect').value;
+  const comp = document.getElementById('newCompInput').value.trim();
+  if (!pos) { toast('Выберите должность', 'warning'); return; }
+  if (!comp) { toast('Введите компетенцию', 'warning'); return; }
+  try {
+    const r = await fetch('/api/position-competencies', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: pos, competency: comp }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      positionCompetencies[pos] = d.competencies;
+      renderCompList(pos);
+      document.getElementById('newCompInput').value = '';
+      toast('Компетенция добавлена', 'success');
+    } else {
+      const d = await r.json();
+      toast(d.error || 'Ошибка', 'error');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
+});
+
+document.getElementById('newCompInput')?.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addCompBtn').click(); }
+});
+
+async function removeComp(position, competency) {
+  if (!confirm(`Удалить компетенцию «${competency}» из должности «${position}»?`)) return;
+  try {
+    const r = await fetch('/api/position-competencies', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position, competency }),
+    });
+    if (r.ok) {
+      const d = await r.json();
+      positionCompetencies[position] = d.competencies;
+      renderCompList(position);
+      toast('Компетенция удалена', 'info');
+    }
+  } catch { toast('Ошибка соединения', 'error'); }
 }
 
 function renderPositions() {
@@ -200,6 +289,8 @@ async function loadManagers() {
   } catch {}
 }
 
+const ROLE_LABELS = { admin: 'Администратор', scrum: 'Скрам-мастер', leader: 'Руководитель' };
+
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
   if (!list) return;
@@ -207,11 +298,24 @@ function renderManagers(managers) {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет менеджеров</p>';
     return;
   }
+  const isAdmin = currentManager?.role === 'admin';
   list.innerHTML = managers.map(m => `
     <div class="position-item">
       <div>
         <div style="font-weight:600;font-size:0.9rem;">${escHtml(m.name)}</div>
-        <div style="font-size:0.75rem;color:var(--text-muted);">${escHtml(m.email)}${m.id === currentManager?.id ? ' <span class="badge badge-accent" style="font-size:0.65rem;">Вы</span>' : ''}</div>
+        <div style="font-size:0.75rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span>${escHtml(m.email)}</span>
+          <span class="badge badge-accent" style="font-size:0.65rem;">${ROLE_LABELS[m.role] || m.role}</span>
+          ${m.id === currentManager?.id ? '<span class="badge badge-accent" style="font-size:0.65rem;">Вы</span>' : ''}
+        </div>
+        ${isAdmin && m.id !== currentManager?.id ? `
+        <div style="margin-top:6px;">
+          <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
+            <option value="admin" ${m.role==='admin'?'selected':''}>Администратор</option>
+            <option value="scrum" ${m.role==='scrum'?'selected':''}>Скрам-мастер</option>
+            <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель</option>
+          </select>
+        </div>` : ''}
       </div>
       ${m.id !== currentManager?.id
         ? `<button class="remove-pos" onclick="confirmDeleteManager(${m.id}, '${escHtml(m.name)}')">✕</button>`
@@ -242,6 +346,7 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
   const name = document.getElementById('newManagerName').value.trim();
   const login = document.getElementById('newManagerLogin').value.trim();
   const password = document.getElementById('newManagerPass').value;
+  const role = document.getElementById('newManagerRole')?.value || 'scrum';
 
   if (!name) { toast('Введите имя менеджера', 'warning'); return; }
   if (!login) { toast('Введите логин', 'warning'); return; }
@@ -251,7 +356,7 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
     const r = await fetch('/api/managers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, login, password }),
+      body: JSON.stringify({ name, login, password, role }),
     });
     if (r.ok) {
       toast(`Менеджер «${name}» добавлен`, 'success');
@@ -348,5 +453,73 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   document.getElementById('currentManagerLogin').textContent = currentManager?.email || '';
 
   initTheme();
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo()]);
+  applyRoleUI(currentManager?.role);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies()]);
 })();
+
+function applyRoleUI(role) {
+  document.querySelectorAll('[data-role]').forEach(el => {
+    const allowed = el.getAttribute('data-role');
+    if (role === 'admin') return; // admin sees everything
+    if (allowed === role) { el.style.display = ''; return; }
+    // scrum: sees cards marked data-role="scrum"; leader: sees nothing marked
+    el.style.display = 'none';
+  });
+  // leader also hides positions, import, template, managers management
+  if (role === 'leader') {
+    document.querySelectorAll('.collapsible').forEach(c => c.style.display = 'none');
+  }
+  // scrum: hide positions card, import, template, managers
+  if (role === 'scrum') {
+    document.querySelectorAll('.collapsible').forEach(c => {
+      const title = c.querySelector('.card-title')?.textContent || '';
+      if (title.includes('Должности') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
+        c.style.display = 'none';
+      }
+    });
+    // load scrum email
+    loadScrumEmail();
+  }
+}
+
+// ─── Scrum email save ─────────────────────────────────────────────────────
+async function loadScrumEmail() {
+  try {
+    const r = await fetch('/api/settings');
+    const s = await r.json();
+    document.getElementById('scrum_manager_email').value = s.manager_email || '';
+  } catch {}
+}
+
+const scrumEmailForm = document.getElementById('scrumEmailForm');
+if (scrumEmailForm) {
+  scrumEmailForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = document.getElementById('saveScrumEmailBtn');
+    const result = document.getElementById('scrumEmailResult');
+    btn.disabled = true;
+    try {
+      const r = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manager_email: document.getElementById('scrum_manager_email').value.trim() }),
+      });
+      if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Сохранено'; toast('Email сохранён', 'success'); }
+      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = '❌ ' + (d.error || 'Ошибка'); }
+    } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
+    finally { btn.disabled = false; btn.textContent = '💾 Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
+  });
+}
+
+// ─── Role change on manager list ────────────────────────────────────────────
+async function changeManagerRole(id, newRole) {
+  try {
+    const r = await fetch(`/api/managers/${id}/role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ role: newRole }),
+    });
+    if (r.ok) { toast('Роль обновлена', 'success'); await loadManagers(); }
+    else { const d = await r.json(); toast(d.error || 'Ошибка', 'error'); }
+  } catch { toast('Ошибка соединения', 'error'); }
+}
