@@ -100,13 +100,23 @@ router.get('/pending', requireAuth, (req, res) => {
 router.post('/pending/:changeId/approve', requireCanReview, async (req, res) => {
   const ok = helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
+  const ch = helpers.getChangeById(Number(req.params.changeId));
+  if (ch) {
+    const emp = helpers.getEmployee(ch.employee_id);
+    if (emp) notifyEmployeeApproved(emp, req.body.comment || '').catch(() => {});
+  }
   res.json({ ok: true });
 });
 
 // ── Отклонить одно изменение ──────────────────────────────────────────────────
-router.post('/pending/:changeId/reject', requireCanReview, (req, res) => {
+router.post('/pending/:changeId/reject', requireCanReview, async (req, res) => {
   const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
+  const ch = helpers.getChangeById(Number(req.params.changeId));
+  if (ch) {
+    const emp = helpers.getEmployee(ch.employee_id);
+    if (emp) notifyEmployeeRejected(emp, req.body.reason || '').catch(() => {});
+  }
   res.json({ ok: true });
 });
 
@@ -116,7 +126,7 @@ router.post('/employees/:id/approve-all', requireCanReview, async (req, res) => 
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
   const applied = helpers.approveAllForEmployee(id, req.session.managerName || '');
-  notifyEmployeeApproved(emp).catch(() => {});
+  notifyEmployeeApproved(emp, req.body.comment || '').catch(() => {});
   res.json({ ok: true, applied });
 });
 
@@ -474,6 +484,15 @@ router.post('/position-competencies', requireCanEdit, (req, res) => {
   const { position, competency } = req.body;
   if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });
   const list = helpers.addPositionCompetency(position.trim(), competency.trim());
+  res.json({ ok: true, competencies: list });
+});
+
+router.put('/position-competencies/:position/:index', requireCanEdit, (req, res) => {
+  const { position, index } = req.params;
+  const { competency } = req.body;
+  if (!position || index === undefined || !competency) return res.status(400).json({ error: 'Должность, индекс и компетенция обязательны' });
+  const list = helpers.editPositionCompetency(position.trim(), Number(index), competency.trim());
+  if (!list) return res.status(404).json({ error: 'Компетенция не найдена' });
   res.json({ ok: true, competencies: list });
 });
 

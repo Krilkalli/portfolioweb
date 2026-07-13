@@ -40,6 +40,8 @@ let filterData = { positions: [], cities: [], certifications: [] };
 let selectedIds = new Set();
 let currentManager = null;
 let selectedCerts = new Set();
+let mailRecipientMode = 'all'; // 'all' | 'selected' | single employee id
+
 
 async function loadStats() {
   try {
@@ -187,12 +189,9 @@ function renderTable(list) {
       </td>
       <td class="col-resume">
         ${e.status !== 'archived'
-          ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
-              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
-              <div class="resume-dropdown">
-                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
-                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
-              </div>
+          ? `<div class="resume-menu" style="position:relative;display:inline-flex;gap:4px;">
+              <a class="btn btn-primary btn-sm" href="/api/employees/${e.id}/resume?format=docx" target="_blank" style="min-width:55px;">📄 DOCX</a>
+              <a class="btn btn-primary btn-sm" href="/api/employees/${e.id}/resume?format=pdf" target="_blank" style="min-width:55px;">📑 PDF</a>
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
@@ -201,10 +200,11 @@ function renderTable(list) {
           ${e.status === 'archived'
             ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
-               <div class="action-dropdown">
-                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
-               </div>`}
+                <div class="action-dropdown">
+                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
+                  <button class="action-dropdown-item" onclick="openMailForEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📧 Отправить письмо</button>
+                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+                </div>`}
         </div>
       </td>
     </tr>
@@ -213,12 +213,6 @@ function renderTable(list) {
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
-}
-
-function toggleResumeMenu(btn) {
-  document.querySelectorAll('.resume-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
-  const menu = btn.nextElementSibling;
-  if (menu) menu.classList.toggle('show');
 }
 
 function toggleActionMenu(btn) {
@@ -230,9 +224,6 @@ function toggleActionMenu(btn) {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.action-menu')) {
     document.querySelectorAll('.action-dropdown.show').forEach(el => el.classList.remove('show'));
-  }
-  if (!e.target.closest('.resume-menu')) {
-    document.querySelectorAll('.resume-dropdown.show').forEach(el => el.classList.remove('show'));
   }
 });
 
@@ -602,10 +593,41 @@ document.getElementById('importFileInput').addEventListener('change', async (e) 
 });
 
 // ─── Mass Mail ────────────────────────────────────────────────────────────────
-document.getElementById('massMailBtn').addEventListener('click', () => {
+function openMailModal() {
+  mailRecipientMode = 'all';
+  document.getElementById('massMailSubtitle').textContent = 'Будут отправлены письма всем активным сотрудникам.';
+  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить всем';
   document.getElementById('massMailModal').classList.add('active');
   document.getElementById('massMailResult').innerHTML = '';
-});
+  const listEl = document.getElementById('massMailRecipientList');
+  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = ''; }
+}
+
+function openMailForEmployee(id, name) {
+  mailRecipientMode = id;
+  document.getElementById('massMailSubtitle').textContent = `Будет отправлено письмо сотруднику: ${name}`;
+  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить';
+  document.getElementById('massMailModal').classList.add('active');
+  document.getElementById('massMailResult').innerHTML = '';
+  const listEl = document.getElementById('massMailRecipientList');
+  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = ''; }
+}
+
+function openMailForSelected() {
+  mailRecipientMode = 'selected';
+  document.getElementById('massMailSubtitle').textContent = `Будет отправлено писем: ${selectedIds.size}`;
+  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить выбранным';
+  document.getElementById('massMailModal').classList.add('active');
+  document.getElementById('massMailResult').innerHTML = '';
+  const listEl = document.getElementById('massMailRecipientList');
+  if (listEl) {
+    const names = employees.filter(e => selectedIds.has(e.id)).map(e => e.name);
+    listEl.innerHTML = names.map(n => `<div>• ${escHtml(n)}</div>`).join('');
+    listEl.style.display = names.length ? 'block' : 'none';
+  }
+}
+
+document.getElementById('massMailBtn').addEventListener('click', openMailModal);
 
 document.getElementById('closeMassMailModal').addEventListener('click', () => {
   document.getElementById('massMailModal').classList.remove('active');
@@ -615,6 +637,11 @@ document.getElementById('cancelMassMailBtn').addEventListener('click', () => {
 });
 document.getElementById('massMailModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) document.getElementById('massMailModal').classList.remove('active');
+});
+
+document.getElementById('massMailSelectedBtn')?.addEventListener('click', () => {
+  if (selectedIds.size === 0) { toast('Нет выбранных сотрудников', 'warning'); return; }
+  openMailForSelected();
 });
 
 document.getElementById('massMailForm').addEventListener('submit', async (e) => {
@@ -627,16 +654,25 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
 
+  const payload = {
+    subject,
+    htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
+      body.replace(/\n/g, '<br>') + '</div>',
+  };
+
+  if (mailRecipientMode === 'all') {
+    payload.sendToAll = true;
+  } else if (mailRecipientMode === 'selected') {
+    payload.recipientIds = Array.from(selectedIds);
+  } else {
+    payload.recipientIds = [mailRecipientMode];
+  }
+
   try {
     const r = await fetch('/api/mass-mailing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        subject,
-        htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
-          body.replace(/\n/g, '<br>') + '</div>',
-        sendToAll: true,
-      }),
+      body: JSON.stringify(payload),
     });
     const d = await r.json();
     if (r.ok) {
@@ -657,7 +693,7 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
     toast('Ошибка соединения', 'error');
   }
   btn.disabled = false;
-  btn.innerHTML = '📧 Отправить всем';
+  btn.textContent = mailRecipientMode === 'all' ? '📧 Отправить всем' : '📧 Отправить';
 });
 
 // ─── Role-based UI ──────────────────────────────────────────────────────────

@@ -248,8 +248,9 @@
       <span id="selectedCount" style="font-size:0.82rem;color:var(--text-secondary);font-weight:600;"></span>
       <button class="btn btn-primary btn-sm" id="exportExcelBtn">📊 Excel</button>
       <button class="btn btn-primary btn-sm" id="exportDocxBtn">📄 DOCX</button>
-      <button class="btn btn-primary btn-sm" id="exportPdfBtn">📑 PDF</button>
-      <button class="btn btn-ghost btn-sm" id="clearSelectionBtn">✕ Снять выделение</button>
+    <button class="btn btn-primary btn-sm" id="exportPdfBtn">📑 PDF</button>
+    <button class="btn btn-primary btn-sm" id="massMailSelectedBtn">📧 Отправить выбранным</button>
+    <button class="btn btn-ghost btn-sm" id="clearSelectionBtn">✕ Снять выделение</button>
     </div>
   </div>
 
@@ -350,9 +351,10 @@
       <button class="btn btn-ghost btn-icon" id="closeMassMailModal">✕</button>
     </div>
     <div style="padding:8px 0;">
-      <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
-        Отправить уведомление всем активным сотрудникам с персональной ссылкой для обновления резюме.
+      <p id="massMailSubtitle" style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
+        Будут отправлены письма всем активным сотрудникам.
       </p>
+      <div id="massMailRecipientList" style="font-size:0.82rem;color:var(--text-secondary);margin-bottom:12px;padding:8px 12px;background:var(--bg-card);border-radius:var(--radius-md);border:1px solid var(--border);max-height:120px;overflow-y:auto;display:none;"></div>
       <form id="massMailForm">
         <div class="form-group">
           <label class="form-label">Тема письма</label>

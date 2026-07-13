@@ -90,7 +90,8 @@ router.get('/:token', (req, res) => {
     emp.courses = parts[1]?.replace(/^Обучающие курсы:?\s*/i, '').trim() || '';
     emp.cert_date = parts[2]?.replace(/^Дата актуализации:?\s*/i, '').trim() || '';
   }
-  res.json({ ...emp, hasPending: helpers.hasPendingForEmployee(emp.id) });
+  const lastReview = helpers.getLastReview(emp.id);
+  res.json({ ...emp, hasPending: helpers.hasPendingForEmployee(emp.id), lastReview });
 });
 
 router.post('/:token/submit', async (req, res) => {

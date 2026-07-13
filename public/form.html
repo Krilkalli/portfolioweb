@@ -68,6 +68,22 @@
       font-size: 0.875rem;
       color: var(--warning);
     }
+    .review-banner {
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
+      margin-bottom: 24px;
+      font-size: 0.875rem;
+    }
+    .review-banner-approved {
+      background: rgba(34,197,94,0.08);
+      border: 1px solid rgba(34,197,94,0.3);
+      color: var(--success);
+    }
+    .review-banner-rejected {
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: var(--danger);
+    }
     .error-screen { text-align: center; padding: 80px 20px; color: var(--text-muted); }
 
     .edu-entry, .job-entry, .proj-entry {
@@ -269,6 +285,8 @@
   </div>
 </div>
 
+<div id="reviewBanner" class="review-banner hidden"><span id="reviewBannerMsg"></span></div>
+
 <div id="formState" class="form-wrap hidden">
   <div class="employee-header">
     <div class="employee-avatar" id="avatarEl">?</div>
@@ -276,7 +294,10 @@
       <h2 id="employeeName">Загрузка...</h2>
       <p id="employeePos"></p>
     </div>
-    <span id="changedFieldsBadge" class="badge badge-warning edit-only hidden" style="margin-left:auto">0 изм.</span>
+    <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+      <span id="changedFieldsBadge" class="badge badge-warning edit-only hidden">0 изм.</span>
+      <a id="pdfResumeLink" class="btn btn-primary btn-sm" target="_blank" style="display:none;">📑 PDF-резюме</a>
+    </div>
   </div>
 
   <!-- ===== ФОТО СОТРУДНИКА ===== -->

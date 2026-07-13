@@ -107,6 +107,7 @@ const stUpdateEmployee = db.prepare(`UPDATE employees SET
   email=@email, city=@city, phone=@phone, updated_at=@updated_at WHERE id=@id`);
 const stArchiveEmployee = db.prepare("UPDATE employees SET status='archived', updated_at=? WHERE id=?");
 const stRestoreEmployee = db.prepare("UPDATE employees SET status='active', updated_at=? WHERE id=?");
+const stGetLastReviewed = db.prepare("SELECT status, reviewed_at, reject_reason FROM pending_changes WHERE employee_id = ? AND status != 'pending' ORDER BY reviewed_at DESC LIMIT 1");
 const stGetChanges    = db.prepare('SELECT * FROM pending_changes WHERE status = ? ORDER BY submitted_at');
 const stGetChangesAll = db.prepare('SELECT * FROM pending_changes ORDER BY submitted_at');
 const stGetChangesByEmp = db.prepare('SELECT * FROM pending_changes WHERE employee_id = ? AND status = ?');
@@ -462,10 +463,61 @@ function init() {
   const defs = { smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'' };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
   if (!settings.positions || !Array.isArray(settings.positions) || settings.positions.length === 0) {
-    settings.positions = ['Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];
+    settings.positions = ['Архитектор','Разработчик','Аналитик','Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];
     changed = true;
   }
   if (changed) saveSettings(settings);
+
+  // Seed default position competencies if empty (matches form.js COMPETENCY_GROUPS)
+  const existingComps = helpers.getPositionCompetencies();
+  if (!existingComps || Object.keys(existingComps).length === 0) {
+    const defaultComps = {
+      'Архитектор': [
+        'Формирование функциональной архитектуры системы',
+        'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+        'Проектирование миграции данных из legacy-систем',
+        'Управление требованиями на уровне бизнес-целей',
+        'Организация приемки и сдачи функциональности',
+        'Оценка трудоемкости и ресурсное планирование',
+        'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+        'Знание отраслевого учета (МСФО, регламентированный учет)',
+        'Стратегическое видение проекта',
+        'Управление командой аналитиков и разработчиков',
+        'Презентация решений перед заказчиком',
+        'Управление функциональными и техническими рисками',
+      ],
+      'Разработчик': [
+        'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
+        'Понимание клиент-серверной архитектуры и транзакций',
+        'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
+        'Модификация через расширения и подписки на события',
+        'Веб-сервисы и HTTP-сервисы (SOAP/REST)',
+        'Обмены данными XML/JSON',
+        'Работа с Git, SVN',
+        'Автотестирование (Vanessa Automation) / статанализ (SonarQube, BSL LS)',
+        'Написание читаемого, структурированного кода',
+        'Работа с чужим кодом, диагностика ошибок',
+        'Самостоятельный анализ задач и оценка сроков',
+        'Функциональное тестирование и регресс по чек-листу',
+      ],
+      'Аналитик': [
+        'Проведение обследования и интервьюирование пользователей',
+        'Анализ бизнес-процессов (AS IS / TO BE)',
+        'Моделирование в нотациях BPMN, EPC',
+        'GAP-анализ',
+        'Сбор и формализация требований',
+        'Разработка проектной документации (ТЗ, ЧТЗ, инструкции, ПМИ)',
+        'Знание бухгалтерского, налогового, кадрового учета',
+        'Постановка задач разработчикам',
+        'Участие в тестировании функционала',
+        'Навыки деловой переписки и коммуникации',
+        'Обучение и консультирование пользователей',
+        'Написание базовых SQL/1С-запросов',
+      ],
+    };
+    helpers.setPositionCompetencies(defaultComps);
+    console.log('✅ Засеяны компетенции по умолчанию');
+  }
 
   // Создать первого менеджера, если нет ни одного
   const managerCount = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
@@ -716,6 +768,10 @@ const helpers = {
     return r ? r.cnt : 0;
   },
 
+  getLastReview(employeeId) {
+    return stGetLastReviewed.get(Number(employeeId)) || null;
+  },
+
   getChangeById(id) {
     return stGetChange.get(Number(id)) || null;
   },
@@ -855,6 +911,13 @@ const helpers = {
     }
     helpers.setPositionCompetencies(all);
     return all[position] || [];
+  },
+  editPositionCompetency(position, index, newCompetency) {
+    const all = helpers.getPositionCompetencies();
+    if (!all[position] || !all[position][index]) return null;
+    all[position][index] = newCompetency;
+    helpers.setPositionCompetencies(all);
+    return all[position];
   },
 
   // ── Уникальные значения для фильтров ──────────────────────────────────────

@@ -401,13 +401,13 @@ async function loadEmployee() {
   if (!token) { showError(); return; }
   isViewMode = new URLSearchParams(location.search).get('mode') === 'view';
   try {
-    const r = await fetch(`/api/form/${token}`);
-    if (!r.ok) { showError(); return; }
-    employee = await r.json();
-    const [posR, compR] = await Promise.all([
+    const [empR, posR, compR] = await Promise.all([
+      fetch(`/api/form/${token}`),
       fetch('/api/form/positions'),
       fetch('/api/form/position-competencies'),
     ]);
+    if (!empR.ok) { showError(); return; }
+    employee = await empR.json();
     if (posR.ok) { const d = await posR.json(); populatePositions(d.positions); }
     if (compR.ok) { positionCompetencies = await compR.json(); }
     showForm(employee);
@@ -426,13 +426,6 @@ function populatePositions(positions) {
 
 let positionCompetencies = {};
 
-async function loadPositionCompetencies() {
-  try {
-    const r = await fetch('/api/form/position-competencies');
-    if (r.ok) positionCompetencies = await r.json();
-  } catch {}
-}
-
 function showError() {
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('errorState').classList.remove('hidden');
@@ -446,12 +439,36 @@ function showForm(emp) {
   originalValues = {};
   document.getElementById('loadingState').classList.add('hidden');
   document.getElementById('formState').classList.remove('hidden');
+  document.getElementById('reviewBanner')?.classList.add('hidden');
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
   document.getElementById('avatarEl').textContent = initials(emp.name);
 
-  if (emp.hasPending) document.getElementById('pendingWarning').classList.remove('hidden');
+  const pdfLink = document.getElementById('pdfResumeLink');
+  if (pdfLink && emp.id) {
+    pdfLink.href = `/api/employees/${emp.id}/resume?format=pdf`;
+    pdfLink.style.display = '';
+  }
+
+  if (emp.hasPending) {
+    document.getElementById('pendingWarning').classList.remove('hidden');
+    document.getElementById('reviewBanner')?.classList.add('hidden');
+  } else if (emp.lastReview) {
+    const banner = document.getElementById('reviewBanner');
+    const msgEl = document.getElementById('reviewBannerMsg');
+    if (banner && msgEl) {
+      if (emp.lastReview.status === 'approved') {
+        banner.className = 'review-banner review-banner-approved';
+        msgEl.textContent = '✅ Ваши последние изменения были одобрены менеджером.';
+      } else if (emp.lastReview.status === 'rejected') {
+        banner.className = 'review-banner review-banner-rejected';
+        const reason = emp.lastReview.reject_reason ? ` Причина: ${emp.lastReview.reject_reason}` : '';
+        msgEl.textContent = '❌ Ваши последние изменения были отклонены.' + reason;
+      }
+      banner.classList.remove('hidden');
+    }
+  }
 
   loadEducationData(emp.education);
   originalValues._educationParsed = getEducationData();
@@ -465,6 +482,8 @@ function showForm(emp) {
       buildCompetencyChecklist(posField.value);
       syncChecklist(document.getElementById('f_competencies')?.value || '');
     };
+    // Rebuild checklist with actual position after setting value
+    buildCompetencyChecklist(emp.position || '');
   }
 
   const cityEl = document.getElementById('f_city');
@@ -926,8 +945,6 @@ document.getElementById('spellerBtn').addEventListener('click', async () => {
 // ─── Init ──────────────────────────────────────────────────────────────────
 async function initForm() {
   initTheme();
-  await loadPositionCompetencies();
-  buildCompetencyChecklist();
   setupTemplateTriggers();
 
   // Check if user is a logged-in manager
@@ -938,7 +955,7 @@ async function initForm() {
     }
   } catch {}
 
-  await loadEmployee();
+  await loadEmployee(); // loads employee + positions + competencies, then showForm
 
   // If manager opened via dashboard, update submit button text
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';

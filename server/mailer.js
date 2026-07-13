@@ -87,7 +87,7 @@ async function notifyEmployeeSubmitted(employee) {
   });
 }
 
-async function notifyEmployeeApproved(employee) {
+async function notifyEmployeeApproved(employee, comment = '') {
   if (!employee.email) return;
   await sendMail({
     to: employee.email,
@@ -100,6 +100,7 @@ async function notifyEmployeeApproved(employee) {
         <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
           <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
           <p>✅ Менеджер подтвердил обновление вашего профиля. Данные успешно сохранены.</p>
+          ${comment ? `<p><strong>Комментарий:</strong> ${comment}</p>` : ''}
         </div>
       </div>
     `,

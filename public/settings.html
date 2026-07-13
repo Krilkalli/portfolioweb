@@ -156,15 +156,22 @@
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
         Укажите ключевые компетенции для каждой должности. Сотрудники увидят их в чек-листе при заполнении профиля.
+        Доступны три предопределённые группы: <strong>Архитектор</strong>, <strong>Разработчик</strong>, <strong>Аналитик</strong>.
       </p>
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <select class="form-control" id="compPositionSelect" style="flex:1;min-width:200px;">
+      <div id="compGroupTabs" style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
+        <button class="btn btn-sm btn-primary" data-group="Архитектор" onclick="switchCompGroup('Архитектор')">Архитектор</button>
+        <button class="btn btn-sm btn-ghost" data-group="Разработчик" onclick="switchCompGroup('Разработчик')">Разработчик</button>
+        <button class="btn btn-sm btn-ghost" data-group="Аналитик" onclick="switchCompGroup('Аналитик')">Аналитик</button>
+        <button class="btn btn-sm btn-ghost" data-group="__other" onclick="switchCompGroup('__other')">Другая должность...</button>
+      </div>
+      <div id="compOtherSelect" style="display:none;margin-bottom:12px;">
+        <select class="form-control" id="compPositionSelect">
           <option value="">— Выберите должность —</option>
         </select>
       </div>
-      <div id="compForPosition" style="display:none;">
+      <div id="compGroupPanel">
         <div class="position-list" id="compList"></div>
-        <div class="add-position-row">
+        <div class="add-position-row" style="margin-top:8px;">
           <input type="text" class="form-control" id="newCompInput" placeholder="Новая компетенция">
           <button class="btn btn-primary" id="addCompBtn">Добавить</button>
         </div>
