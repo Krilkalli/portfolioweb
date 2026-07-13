@@ -14,7 +14,7 @@ function initials(name) {
 
 function formatDate(str) {
   if (!str) return '—';
-  return new Date(str).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(str).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
@@ -103,7 +103,7 @@ function populatePositionSelects() {
 function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => `
@@ -115,7 +115,7 @@ function renderTable(list) {
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
           <div>
-            <div class="employee-name">${e.name}${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
+            <div class="employee-name"><a href="${e.link}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted)">${e.email || '—'}</div>
           </div>
         </div>
@@ -132,23 +132,62 @@ function renderTable(list) {
       <td style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
       <td class="col-link">
         ${e.status !== 'archived'
-          ? `<a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">Открыть ссылку</a>`
+          ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
+              <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
+              <button class="btn btn-ghost btn-icon" style="width:26px;height:26px;font-size:0.7rem;flex-shrink:0;" onclick="copyToClipboard('${e.link}')" title="Скопировать ссылку">📋</button>
+            </div>`
+          : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
+      </td>
+      <td class="col-resume">
+        ${e.status !== 'archived'
+          ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
+              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
+              <div class="resume-dropdown">
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
+              </div>
+            </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
       <td class="col-actions">
-        <div class="actions-cell">
-          ${e.status !== 'archived'
-            ? `<a href="${e.link}&mode=view" target="_blank" rel="noopener" class="btn btn-primary btn-sm">👤 Профиль</a>
-               <button class="btn btn-ghost btn-sm" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-               <a href="/api/employees/${e.id}/resume" class="btn btn-ghost btn-sm">📄 Резюме</a>
-               ${e.pendingCount > 0 ? `<a href="/review.html" class="btn btn-warning btn-sm">⚡ Проверить</a>` : ''}
-               <button class="btn btn-ghost btn-sm" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Архивировать">📦 Архив</button>`
-            : `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`}
+        <div class="action-menu" style="position:relative;display:inline-flex;">
+          ${e.status === 'archived'
+            ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
+            : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
+               <div class="action-dropdown">
+                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
+                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+               </div>`}
         </div>
       </td>
     </tr>
   `).join('');
 }
+
+function copyToClipboard(text) {
+  navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
+}
+
+function toggleResumeMenu(btn) {
+  document.querySelectorAll('.resume-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
+}
+
+function toggleActionMenu(btn) {
+  document.querySelectorAll('.action-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
+}
+
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.action-menu')) {
+    document.querySelectorAll('.action-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+  if (!e.target.closest('.resume-menu')) {
+    document.querySelectorAll('.resume-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+});
 
 async function regenerateToken(id, name) {
   if (!confirm(`Сгенерировать новую ссылку для ${name}?\nСтарая ссылка перестанет работать.`)) return;
@@ -275,40 +314,6 @@ function applyFilter() {
   );
   renderTable(list);
 }
-
-// ─── Import Excel ─────────────────────────────────────────────────────────────
-document.getElementById('importFile').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-
-  if (!confirm('Импорт полностью ЗАМЕНИТ текущий список сотрудников данными из файла.\nВсе существующие сотрудники будут удалены.\n\nПродолжить?')) {
-    e.target.value = '';
-    return;
-  }
-
-  const overlay = document.getElementById('progressOverlay');
-  const msg = document.getElementById('progressMsg');
-  overlay.classList.add('active');
-  msg.textContent = 'Импорт файла...';
-
-  const fd = new FormData();
-  fd.append('file', file);
-
-  try {
-    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
-    const d = await r.json();
-    overlay.classList.remove('active');
-    e.target.value = '';
-    if (r.ok) {
-      toast(`Импорт завершён: список заменён, добавлено ${d.imported} сотрудников (было удалено: ${d.removed})`, 'success');
-      await loadEmployees();
-      await loadStats();
-    } else { toast(d.error || 'Ошибка импорта', 'error'); }
-  } catch {
-    overlay.classList.remove('active');
-    toast('Ошибка при импорте файла', 'error');
-  }
-});
 
 // ─── Logout ──────────────────────────────────────────────────────────────────
 document.getElementById('logoutBtn').addEventListener('click', async () => {

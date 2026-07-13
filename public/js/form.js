@@ -22,6 +22,8 @@ const FIELD_NAMES = {
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
   certification: 'Сертификация',
+  course_name: 'Наименование курса',
+  course_year: 'Год прохождения курса',
 };
 
 let originalValues = {};
@@ -56,9 +58,10 @@ function toggleTemplate(field) {
   if (panel) panel.classList.toggle('visible');
 }
 function setupTemplateTriggers() {
+  const templateFields = ['about', 'competencies', 'project_experience'];
   document.querySelectorAll('.form-control').forEach(el => {
     const field = el.id.replace('f_', '');
-    if (document.getElementById('template_' + field)) {
+    if (templateFields.includes(field) && document.getElementById('template_' + field)) {
       el.addEventListener('focus', () => {
         const panel = document.getElementById('template_' + field);
         if (panel) panel.classList.add('visible');
@@ -449,26 +452,38 @@ function showForm(emp) {
   const certText = emp.certification || '';
   const certParts = certText.split(/\n\s*\n/);
   const certEl = document.getElementById('f_certification');
-  const coursesEl = document.getElementById('f_courses');
+  const courseNameEl = document.getElementById('f_course_name');
+  const courseYearEl = document.getElementById('f_course_year');
   if (certEl) {
     certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^Сертификация 1С:?\s*/i, '').trim() : '') || '';
     originalValues.certification = certEl.value;
     certEl.oninput = trackChanges;
   }
-  if (coursesEl) {
-    coursesEl.value = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
-    originalValues.courses = coursesEl.value;
-    coursesEl.oninput = trackChanges;
+  if (courseNameEl) {
+    // Try to split courses by " — " to get name and year
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseNameEl.value = parts[0]?.trim() || '';
+    originalValues.course_name = courseNameEl.value;
+    courseNameEl.oninput = trackChanges;
+  }
+  if (courseYearEl) {
+    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
+    const parts = coursesText.split(' — ');
+    courseYearEl.value = parts[1]?.trim() || '';
+    originalValues.course_year = courseYearEl.value;
+    courseYearEl.oninput = trackChanges;
   }
 
   const dateEl = document.getElementById('lastUpdatedDate');
   if (dateEl && emp.updated_at) {
     const d = new Date(emp.updated_at);
-    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   trackChanges();
   renderViewContent();
+  loadEmployeePhoto(employee);
   if (isViewMode) setViewMode(true);
 }
 
@@ -482,7 +497,8 @@ function renderViewContent() {
   document.getElementById('viewCompetencies').innerHTML = viewValue(document.getElementById('f_competencies')?.value);
   document.getElementById('viewCertification').innerHTML =
     viewField('Сертификаты 1С', document.getElementById('f_certification')?.value) +
-    viewField('Обучающие курсы', document.getElementById('f_courses')?.value);
+    viewField('Наименование курса', document.getElementById('f_course_name')?.value) +
+    viewField('Год прохождения', document.getElementById('f_course_year')?.value);
   document.getElementById('viewEducation').innerHTML = renderAccordionView(getEducationData(),
     d => d.institution || 'Образование',
     d => viewField('Квалификация', d.degree) + viewField('Направление', d.specialty) + viewField('Год окончания', d.year),
@@ -528,7 +544,7 @@ function trackChanges() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -571,7 +587,7 @@ function getChangedFieldNames() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', courses: 'f_courses',
+    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
@@ -593,7 +609,9 @@ function collectFormFields() {
     about: document.getElementById('f_about')?.value.trim() || '',
     competencies: document.getElementById('f_competencies')?.value.trim() || '',
     certification: document.getElementById('f_certification')?.value.trim() || '',
-    courses: document.getElementById('f_courses')?.value.trim() || '',
+    course_name: document.getElementById('f_course_name')?.value.trim() || '',
+    course_year: document.getElementById('f_course_year')?.value.trim() || '',
+    photo: document.getElementById('f_photo')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),
@@ -602,6 +620,7 @@ function collectFormFields() {
 
 async function performSubmit(fields) {
   fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
+  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
   const btn = document.getElementById('submitBtn');
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
@@ -622,7 +641,7 @@ async function performSubmit(fields) {
       document.getElementById('formState').classList.add('hidden');
       document.getElementById('successState').classList.remove('hidden');
       document.getElementById('changesCountMsg').textContent =
-        d.changed > 0 ? `Изменено полей: ${d.changed}` : 'Изменений не обнаружено';
+        d.changed > 0 ? `Изменено полей: ${d.changed}` : '';
     } else {
       toast(d.error || 'Ошибка при отправке', 'error');
       btn.disabled = false;
@@ -698,8 +717,72 @@ document.getElementById('addProjectBtn').addEventListener('click', () => {
 });
 
 function escHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
+
+function handlePhotoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    toast('Выберите изображение', 'error');
+    return;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    toast('Файл слишком большой (макс. 5 МБ)', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const preview = document.getElementById('photoPreview');
+    preview.innerHTML = `<img src="${e.target.result}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    document.getElementById('f_photo').value = e.target.result;
+    trackChanges();
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadEmployeePhoto(emp) {
+  const photoEl = document.getElementById('f_photo');
+  const preview = document.getElementById('photoPreview');
+  if (emp.photo) {
+    photoEl.value = emp.photo;
+    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+  }
+  originalValues.photo = emp.photo || '';
+  if (photoEl) photoEl.oninput = trackChanges;
+}
+
+// ─── Speller (Yandex) ──────────────────────────────────────────────────────
+document.getElementById('spellerBtn').addEventListener('click', async () => {
+  const btn = document.getElementById('spellerBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin:0;"></span> Исправление...';
+  try {
+    const fields = collectFormFields();
+    const r = await fetch('/api/form/correct-text', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields }),
+    });
+    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Ошибка'); }
+    const data = await r.json();
+    if (!data.ok) throw new Error('Ошибка ответа');
+    const c = data.corrected;
+    for (const [key, val] of Object.entries(c)) {
+      const el = document.getElementById('f_' + key);
+      if (el && val !== undefined) {
+        el.value = val;
+        el.dispatchEvent(new Event('input'));
+      }
+    }
+    trackChanges();
+    toast('Текст исправлен', 'success');
+  } catch (e) {
+    toast('Ошибка исправления: ' + e.message, 'error');
+  }
+  btn.disabled = false;
+  btn.innerHTML = '✨ Исправить текст';
+});
 
 // ─── Init ──────────────────────────────────────────────────────────────────
 initTheme();

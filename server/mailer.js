@@ -124,6 +124,54 @@ async function notifyEmployeeRejected(employee, reason) {
   });
 }
 
+async function notifyManagerFeedback(employee, feedback) {
+  const managerEmail = helpers.getSetting('manager_email');
+  if (!managerEmail || !feedback) return;
+  
+  await sendMail({
+    to: managerEmail,
+    subject: `💬 Обратная связь от ${employee.name}`,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;">Портфолио IS1C</h2>
+        </div>
+        <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
+          <h3>Обратная связь от сотрудника</h3>
+          <p><strong>ФИО:</strong> ${employee.name}</p>
+          <p><strong>Должность:</strong> ${employee.position}</p>
+          <p><strong>Оценка:</strong> ${feedback.rating ? '★'.repeat(feedback.rating) + '☆'.repeat(5 - feedback.rating) : 'Не указана'}</p>
+          <p><strong>Комментарий:</strong></p>
+          <p style="background:#fff;padding:12px;border-radius:4px;border:1px solid #ddd;">${feedback.comment || '—'}</p>
+        </div>
+      </div>
+    `,
+  });
+}
+
+async function notifyMassMailing(employees, subject, htmlContent) {
+  const results = [];
+  for (const emp of employees) {
+    if (emp.email) {
+      try {
+        await sendMail({
+          to: emp.email,
+          subject,
+          html: htmlContent
+            .replace(/{{name}}/g, emp.name.split(' ')[1] || emp.name)
+            .replace(/{{fullName}}/g, emp.name)
+            .replace(/{{position}}/g, emp.position || '')
+            .replace(/{{city}}/g, emp.city || ''),
+        });
+        results.push({ email: emp.email, success: true });
+      } catch (err) {
+        results.push({ email: emp.email, success: false, error: err.message });
+      }
+    }
+  }
+  return results;
+}
+
 module.exports = {
   sendMail,
   testConnection,
@@ -131,4 +179,6 @@ module.exports = {
   notifyEmployeeSubmitted,
   notifyEmployeeApproved,
   notifyEmployeeRejected,
+  notifyManagerFeedback,
+  notifyMassMailing,
 };

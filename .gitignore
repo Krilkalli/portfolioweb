@@ -1,9 +1,12 @@
-node_modules/
-.env
-dist/
-build/
+node_modules/ 
+.env 
+dist/ 
+build/ 
 data/
-*.db
-*.db-shm
-*.db-wal
+# Временные файлы БД
+data/*.db-shm
+data/*.db-wal
+data/*.db
+# Зависимости Node.js
+node_modules/
 

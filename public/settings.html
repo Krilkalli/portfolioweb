@@ -175,6 +175,23 @@
       </div>
     </div>
 
+    <!-- Import Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📥 Импорт сотрудников из Excel</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Импорт полностью <strong style="color:var(--danger)">ЗАМЕНИТ</strong> текущий список сотрудников данными из файла.
+        Все существующие сотрудники будут удалены.
+      </p>
+      <label class="btn btn-primary" for="importFile" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
+        📥 Выбрать файл и импортировать
+        <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none;">
+      </label>
+      <div id="importResult" style="margin-top:12px;font-size:0.85rem;"></div>
+    </div>
+
     <!-- Template Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">

@@ -210,7 +210,11 @@ router.post('/employees/export-excel', requireAuth, (req, res) => {
       const jobs = (e.jobs || []).map(j => [j.company, j.position, j.period].filter(Boolean).join(' | ')).join('\n');
       return `Общий стаж: ${e.total}${jobs ? '\n' + jobs : ''}`;
     }
-    return String(e);
+    if (Array.isArray(e.jobs) && e.jobs.length > 0) {
+      const jobs = e.jobs.map(j => [j.company, j.position, j.period].filter(Boolean).join(' | ')).join('\n');
+      return jobs;
+    }
+    return '';
   };
   const fmtProject = (p) => {
     if (!p) return '';
@@ -347,6 +351,49 @@ router.post('/template/upload', requireAuth, upload.single('template'), (req, re
   fs.copyFileSync(req.file.path, dest);
   fs.unlinkSync(req.file.path);
   res.json({ ok: true, message: 'Шаблон загружен. Используется для всех новых резюме.' });
+});
+
+// ── Массовая рассылка ────────────────────────────────────────────────────────
+router.post('/mass-mailing', requireAuth, async (req, res) => {
+  const { subject, htmlContent, recipientIds, sendToAll } = req.body;
+  if (!subject || !htmlContent) {
+    return res.status(400).json({ error: 'Тема и содержание письма обязательны' });
+  }
+
+  let employees = [];
+  if (sendToAll) {
+    employees = helpers.getAllEmployees();
+  } else if (Array.isArray(recipientIds) && recipientIds.length > 0) {
+    employees = recipientIds.map(id => helpers.getEmployee(Number(id))).filter(Boolean);
+  } else {
+    return res.status(400).json({ error: 'Не выбраны получатели' });
+  }
+
+  if (employees.length === 0) {
+    return res.status(400).json({ error: 'Нет получателей для рассылки' });
+  }
+
+  const { notifyMassMailing } = require('../mailer');
+  const results = await notifyMassMailing(employees, subject, htmlContent);
+
+  const successCount = results.filter(r => r.success).length;
+  const failCount = results.filter(r => !r.success).length;
+
+  res.json({ ok: true, sent: successCount, failed: failCount, details: results });
+});
+
+// ── Обратная связь: уведомление менеджера ────────────────────────────────────
+router.post('/feedback/notify-manager', requireAuth, async (req, res) => {
+  const { employeeId, feedback } = req.body;
+  if (!employeeId || !feedback) {
+    return res.status(400).json({ error: 'Необходимы employeeId и feedback' });
+  }
+  const emp = helpers.getEmployee(Number(employeeId));
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+
+  const { notifyManagerFeedback } = require('../mailer');
+  await notifyManagerFeedback(emp, feedback);
+  res.json({ ok: true });
 });
 
 router.get('/template/info', requireAuth, (req, res) => {
