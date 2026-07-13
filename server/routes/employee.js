@@ -149,12 +149,16 @@ router.post('/:token/submit', async (req, res) => {
   }
 
   // Save photo directly if changed
+  let photoChanged = false;
   if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
     helpers.updateEmployee(emp.id, { photo: submitFields.photo });
+    photoChanged = true;
   }
 
-  if (changes.length === 0)
+  if (changes.length === 0) {
+    if (photoChanged) return res.json({ ok: true, changed: 1, message: 'Фото обновлено' });
     return res.json({ ok: true, changed: 0, message: 'Изменений не обнаружено' });
+  }
 
   helpers.submitChanges(emp.id, changes);
 

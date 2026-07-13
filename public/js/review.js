@@ -106,6 +106,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 let pendingGroups = [];
 let rejectTargetId = null;
 let rejectTargetType = null; // 'employee' | 'change'
+let rejectTargetEmployeeId = null;
 
 // ─── Загрузка ─────────────────────────────────────────────────────────────────
 async function loadPending() {

@@ -640,8 +640,14 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
     });
     const d = await r.json();
     if (r.ok) {
-      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
-      toast(`Рассылка завершена: ${d.sent} успешно, ${d.failed} с ошибками`, d.failed === 0 ? 'success' : 'warning');
+      const color = d.sent > 0 ? 'var(--success)' : 'var(--danger)';
+      const icon = d.sent > 0 ? '✅' : '❌';
+      document.getElementById('massMailResult').innerHTML = `<span style="color:${color}">${icon} Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
+      if (d.failed > 0 && d.details) {
+        const firstError = d.details.find(r => !r.success);
+        if (firstError) document.getElementById('massMailResult').innerHTML += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">Пример ошибки: ${escHtml(firstError.error || 'неизвестная ошибка')}</div>`;
+      }
+      toast(`Рассылка: ${d.sent} успешно, ${d.failed} с ошибками`, d.sent > 0 ? (d.failed === 0 ? 'success' : 'warning') : 'error');
     } else {
       document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
       toast(d.error || 'Ошибка рассылки', 'error');

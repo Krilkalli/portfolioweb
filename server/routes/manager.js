@@ -316,7 +316,13 @@ router.put('/settings', requireAuth, (req, res) => {
   // Email менеджера — для админа и скрама
   const canEdit = ['manager_email'];
   if (role === 'admin') {
-    for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
+    for (const k of [...adminOnly, ...canEdit]) {
+      if (req.body[k] !== undefined) {
+        // Не сохранять пустой пароль — чтобы случайно не стереть старый
+        if (k === 'smtp_pass' && !String(req.body[k]).trim()) continue;
+        helpers.setSetting(k, req.body[k]);
+      }
+    }
   } else if (role === 'scrum') {
     for (const k of canEdit) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
   } else {

@@ -31,8 +31,11 @@ async function sendMail({ to, subject, html }) {
 
 async function testConnection() {
   const t = getTransport();
-  if (!t) throw new Error('SMTP не настроен');
-  await t.transport.verify();
+  if (!t) throw new Error('SMTP не настроен. Проверьте хост, логин и пароль.');
+  await Promise.race([
+    t.transport.verify(),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Таймаут подключения — проверьте хост и порт')), 15000)),
+  ]);
 }
 
 // ─── Шаблоны писем ───────────────────────────────────────────────────────────

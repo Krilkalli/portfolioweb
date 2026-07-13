@@ -211,8 +211,9 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
     smtp_from:     document.getElementById('smtp_from').value.trim(),
     manager_email: document.getElementById('manager_email').value.trim(),
   };
-  const pass = document.getElementById('smtp_pass').value;
+  const pass = document.getElementById('smtp_pass').value.trim();
   if (pass) payload.smtp_pass = pass;
+  // Если пароль не указан — не отправляем его, чтобы не стереть старый
 
   try {
     const r = await fetch('/api/settings', {

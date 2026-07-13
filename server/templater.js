@@ -277,7 +277,6 @@ async function generateFromTemplate(employee) {
 
 async function generateDocx(employee) {
   const logoData = fs.readFileSync(LOGO_PATH);
-  const photoBuf = parsePhoto(employee.photo);
 
   const childParagraphs = [];
 
@@ -287,37 +286,50 @@ async function generateDocx(employee) {
     new Paragraph({ children: [new TextRun({ text: employee.position || '', size: 24, color: '6C63FF', font: 'Calibri', bold: true })], spacing: { after: 40 } }),
     new Paragraph({ children: [new TextRun({ text: (employee.contacts || '').split('\n').filter(l => l.trim()).join(' | '), size: 18, color: '666666', font: 'Calibri' })], spacing: { after: 0 } }),
   ];
+
+  let photoCell = null;
+  if (employee.photo && employee.photo.startsWith('data:image/')) {
+    try {
+      const m = employee.photo.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+      if (m) {
+        const photoData = Buffer.from(m[2], 'base64');
+        photoCell = new TableCell({
+          width: { size: 15, type: WidthType.PERCENTAGE },
+          verticalAlign: 'center',
+          margins: { top: 0, bottom: 0, left: 0, right: 0 },
+          children: [new Paragraph({
+            alignment: AlignmentType.CENTER,
+            children: [new ImageRun({ data: photoData, transformation: { width: 80, height: 80 } })],
+          })],
+        });
+      }
+    } catch (e) {
+      console.warn('⚠️ Ошибка при вставке фото в DOCX:', e.message);
+    }
+  }
+
   const infoCell = new TableCell({
-    width: { size: photoBuf ? 70 : 75, type: WidthType.PERCENTAGE },
+    width: { size: photoCell ? 70 : 85, type: WidthType.PERCENTAGE },
     verticalAlign: 'center',
     margins: { top: 0, bottom: 0, left: 0, right: 0 },
     children: infoChildren,
   });
-  const cells = [
-    new TableCell({
-      width: { size: photoBuf ? 15 : 25, type: WidthType.PERCENTAGE },
-      verticalAlign: 'center',
-      margins: { top: 0, bottom: 0, left: 0, right: 0 },
-      children: [
-        new Paragraph({
-          children: [new ImageRun({ data: logoData, transformation: { width: 100, height: 30 } })],
-          alignment: AlignmentType.CENTER,
-        }),
-      ],
-    }),
-  ];
-  if (photoBuf) {
-    cells.unshift(new TableCell({
-      width: { size: 15, type: WidthType.PERCENTAGE },
-      verticalAlign: 'center',
-      margins: { top: 0, bottom: 0, left: 0, right: 0 },
-      children: [new Paragraph({
+
+  const cells = [];
+  if (photoCell) cells.push(photoCell);
+  cells.push(new TableCell({
+    width: { size: photoCell ? 15 : 15, type: WidthType.PERCENTAGE },
+    verticalAlign: 'center',
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    children: [
+      new Paragraph({
+        children: [new ImageRun({ data: logoData, transformation: { width: 100, height: 30 } })],
         alignment: AlignmentType.CENTER,
-        children: [new ImageRun({ data: photoBuf, transformation: { width: 80, height: 80 } })],
-      })],
-    }));
-  }
+      }),
+    ],
+  }));
   cells.push(infoCell);
+
   childParagraphs.push(new Table({
     rows: [new TableRow({ children: cells })],
   }));
