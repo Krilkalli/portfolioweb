@@ -507,7 +507,7 @@ if (scrumEmailForm) {
       if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Сохранено'; toast('Email сохранён', 'success'); }
       else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = '❌ ' + (d.error || 'Ошибка'); }
     } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
-    finally { btn.disabled = false; btn.textContent = '💾 Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
+    finally { btn.disabled = false; btn.textContent = 'Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
   });
 }
 

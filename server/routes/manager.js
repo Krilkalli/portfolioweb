@@ -410,9 +410,10 @@ router.post('/template/upload', requireAdmin, upload.single('template'), (req, r
   res.json({ ok: true, message: 'Шаблон загружен. Используется для всех новых резюме.' });
 });
 
-// ── Массовая рассылка ────────────────────────────────────────────────────────
+// ─── Массовая рассылка ────────────────────────────────────────────────────────
 router.post('/mass-mailing', requireCanEdit, async (req, res) => {
-  const { subject, htmlContent, recipientIds, sendToAll } = req.body;
+  const { subject, htmlContent, employeeIds, sendToAll } = req.body;
+  
   if (!subject || !htmlContent) {
     return res.status(400).json({ error: 'Тема и содержание письма обязательны' });
   }
@@ -420,8 +421,8 @@ router.post('/mass-mailing', requireCanEdit, async (req, res) => {
   let employees = [];
   if (sendToAll) {
     employees = helpers.getAllEmployees();
-  } else if (Array.isArray(recipientIds) && recipientIds.length > 0) {
-    employees = recipientIds.map(id => helpers.getEmployee(Number(id))).filter(Boolean);
+  } else if (Array.isArray(employeeIds) && employeeIds.length > 0) {
+    employees = employeeIds.map(id => helpers.getEmployee(Number(id))).filter(Boolean);
   } else {
     return res.status(400).json({ error: 'Не выбраны получатели' });
   }

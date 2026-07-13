@@ -155,10 +155,10 @@ function renderTable(list) {
   }
   tbody.innerHTML = list.map(e => `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
-      <td class="col-check">
+      <td class="col-check" style="text-align:center;">
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
       </td>
-      <td>
+      <td style="text-align:left;">
         <div style="display:flex;align-items:center;gap:10px;">
           <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
           <div>
@@ -167,17 +167,21 @@ function renderTable(list) {
           </div>
         </div>
       </td>
-      <td><span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span></td>
-      <td><span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span></td>
-      <td>
+      <td style="text-align:left;">
+        <span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span>
+      </td>
+      <td style="text-align:left;">
+        <span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span>
+      </td>
+      <td style="text-align:left;">
         ${e.status === 'archived'
           ? '<span class="badge badge-muted">Архив</span>'
           : e.pendingCount > 0
             ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
-      <td style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
-      <td class="col-link">
+      <td style="text-align:left;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
+      <td class="col-link" style="text-align:left;">
         ${e.status !== 'archived'
           ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
               <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
@@ -185,7 +189,7 @@ function renderTable(list) {
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-resume">
+      <td class="col-resume" style="text-align:center;">
         ${e.status !== 'archived'
           ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
               <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
@@ -196,7 +200,7 @@ function renderTable(list) {
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-actions">
+      <td class="col-actions" style="text-align:center;">
         <div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
             ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
@@ -541,72 +545,84 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
   }
 });
 
-// ─── Import Excel Modal ──────────────────────────────────────────────────────
-let importMode = null;
+// // // ─── Import Excel Modal ──────────────────────────────────────────────────────
+// // let importMode = null;
 
-document.getElementById('importExcelBtn').addEventListener('click', () => {
-  document.getElementById('importExcelModal').classList.add('active');
-  document.getElementById('importResult').innerHTML = '';
-  document.getElementById('importFileInput').value = '';
-  importMode = null;
-});
+// // document.getElementById('importExcelBtn').addEventListener('click', () => {
+// //   document.getElementById('importExcelModal').classList.add('active');
+// //   document.getElementById('importResult').innerHTML = '';
+// //   document.getElementById('importFileInput').value = '';
+// //   importMode = null;
+// // });
 
-document.getElementById('closeImportModal').addEventListener('click', () => {
-  document.getElementById('importExcelModal').classList.remove('active');
-});
-document.getElementById('importExcelModal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) document.getElementById('importExcelModal').classList.remove('active');
-});
+// // document.getElementById('closeImportModal').addEventListener('click', () => {
+// //   document.getElementById('importExcelModal').classList.remove('active');
+// // });
+// // document.getElementById('importExcelModal').addEventListener('click', (e) => {
+// //   if (e.target === e.currentTarget) document.getElementById('importExcelModal').classList.remove('active');
+// // });
 
-document.getElementById('importAddBtn').addEventListener('click', () => {
-  importMode = 'add';
-  document.getElementById('importFileInput').click();
-});
+// // document.getElementById('importAddBtn').addEventListener('click', () => {
+// //   importMode = 'add';
+// //   document.getElementById('importFileInput').click();
+// // });
 
-document.getElementById('importReplaceBtn').addEventListener('click', () => {
-  if (!confirm('ВНИМАНИЕ! Все текущие сотрудники будут ПОЛНОСТЬЮ УДАЛЕНЫ и заменены данными из файла.\n\nЭто действие необратимо. Продолжить?')) return;
-  importMode = 'replace';
-  document.getElementById('importFileInput').click();
-});
+// // document.getElementById('importReplaceBtn').addEventListener('click', () => {
+// //   if (!confirm('ВНИМАНИЕ! Все текущие сотрудники будут ПОЛНОСТЬЮ УДАЛЕНЫ и заменены данными из файла.\n\nЭто действие необратимо. Продолжить?')) return;
+// //   importMode = 'replace';
+// //   document.getElementById('importFileInput').click();
+// // });
 
-document.getElementById('importFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file || !importMode) return;
+// document.getElementById('importFileInput').addEventListener('change', async (e) => {
+//   const file = e.target.files[0];
+//   if (!file || !importMode) return;
 
-  const result = document.getElementById('importResult');
-  result.innerHTML = '<span class="spinner"></span> Импорт...';
+//   const result = document.getElementById('importResult');
+//   result.innerHTML = '<span class="spinner"></span> Импорт...';
 
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('mode', importMode);
+//   const fd = new FormData();
+//   fd.append('file', file);
+//   fd.append('mode', importMode);
 
-  try {
-    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
-    const d = await r.json();
-    e.target.value = '';
-    if (r.ok) {
-      const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
-      result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
-      toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
-      await loadEmployees();
-      await loadStats();
-    } else {
-      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
-      toast(d.error || 'Ошибка импорта', 'error');
-    }
-  } catch {
-    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
-    toast('Ошибка при импорте файла', 'error');
-  }
-  setTimeout(() => { result.innerHTML = ''; }, 6000);
-});
+//   try {
+//     const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
+//     const d = await r.json();
+//     e.target.value = '';
+//     if (r.ok) {
+//       const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
+//       result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
+//       toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
+//       await loadEmployees();
+//       await loadStats();
+//     } else {
+//       result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
+//       toast(d.error || 'Ошибка импорта', 'error');
+//     }
+//   } catch {
+//     result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+//     toast('Ошибка при импорте файла', 'error');
+//   }
+//   setTimeout(() => { result.innerHTML = ''; }, 6000);
+// });
 
 // ─── Mass Mail ────────────────────────────────────────────────────────────────
+
+// Открыть модальное окно рассылки
 document.getElementById('massMailBtn').addEventListener('click', () => {
+  // Проверяем, есть ли выбранные сотрудники
+  if (selectedIds.size === 0) {
+    toast('Сначала выберите сотрудников в таблице', 'warning');
+    return;
+  }
+  
   document.getElementById('massMailModal').classList.add('active');
   document.getElementById('massMailResult').innerHTML = '';
+  
+  // Показываем количество выбранных
+  document.getElementById('selectedRecipientsInfo').textContent = `👥 Выбрано: ${selectedIds.size} сотрудников`;
 });
 
+// Закрыть модальное окно
 document.getElementById('closeMassMailModal').addEventListener('click', () => {
   document.getElementById('massMailModal').classList.remove('active');
 });
@@ -617,15 +633,29 @@ document.getElementById('massMailModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) document.getElementById('massMailModal').classList.remove('active');
 });
 
+// Отправка письма выбранным сотрудникам
 document.getElementById('massMailForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  
   const subject = document.getElementById('mailSubject').value.trim();
   const body = document.getElementById('mailBody').value.trim();
-  if (!subject || !body) { toast('Заполните тему и текст письма', 'warning'); return; }
+  
+  if (!subject || !body) { 
+    toast('Заполните тему и текст письма', 'warning'); 
+    return; 
+  }
+
+  if (selectedIds.size === 0) {
+    toast('Нет выбранных сотрудников', 'warning');
+    return;
+  }
 
   const btn = document.getElementById('sendMassMailBtn');
+  const result = document.getElementById('massMailResult');
+  
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
+  result.innerHTML = '';
 
   try {
     const r = await fetch('/api/mass-mailing', {
@@ -635,25 +665,27 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
         subject,
         htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
           body.replace(/\n/g, '<br>') + '</div>',
-        sendToAll: true,
+        employeeIds: Array.from(selectedIds),
       }),
     });
+    
     const d = await r.json();
+    
     if (r.ok) {
-      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
+      result.innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
       toast(`Рассылка завершена: ${d.sent} успешно, ${d.failed} с ошибками`, d.failed === 0 ? 'success' : 'warning');
     } else {
-      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
+      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
       toast(d.error || 'Ошибка рассылки', 'error');
     }
   } catch (err) {
-    document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
+    result.innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
     toast('Ошибка соединения', 'error');
   }
+  
   btn.disabled = false;
-  btn.innerHTML = '📧 Отправить всем';
+  btn.innerHTML = '📧 Отправить выбранным';
 });
-
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {

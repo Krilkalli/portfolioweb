@@ -238,7 +238,7 @@
       </div>
     </div>
     <button id="addEmployeeBtn" class="btn btn-primary btn-sm">➕ Сотрудника</button>
-    <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📥 Импорт Excel</button>
+    <!-- <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📥 Импорт Excel</button> -->
     <button id="massMailBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📧 Рассылка</button>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm">📤 Экспорт Excel</a>
   </div>
@@ -258,7 +258,7 @@
   <div class="card employees-card">
     <div class="table-wrap">
       <table class="table" id="employeesTable">
-        <thead>
+        <!-- <thead>
           <tr>
             <th class="col-check"><input type="checkbox" id="selectAll"></th>
             <th>Сотрудник</th>
@@ -269,6 +269,21 @@
             <th class="col-link">Персональная ссылка</th>
             <th class="col-resume">Резюме</th>
             <th class="col-actions">Действия</th>
+          </tr>
+        </thead> -->
+        <thead>
+          <tr>
+            <th class="col-check" style="text-align:center;width:40px;">
+              <input type="checkbox" id="selectAll">
+            </th>
+            <th style="text-align:left;">Сотрудник</th>
+            <th style="text-align:left;">Должность</th>
+            <th style="text-align:left;">Город</th>
+            <th style="text-align:left;">Статус</th>
+            <th class="col-date" style="text-align:left;">Обновлено</th>
+            <th class="col-link" style="text-align:left;">Перссылка</th>
+            <th class="col-resume" style="text-align:center;">Резюме</th>
+            <th class="col-actions" style="text-align:center;"></th>
           </tr>
         </thead>
         <tbody id="employeesTbody">
@@ -318,14 +333,7 @@
   </div>
 </div>
 
-<!-- Import Excel Modal -->
-<div class="modal-overlay" id="importExcelModal">
-  <div class="modal" style="max-width:520px;">
-    <div class="modal-header">
-      <span class="modal-title">📥 Импорт из Excel</span>
-      <button class="btn btn-ghost btn-icon" id="closeImportModal">✕</button>
-    </div>
-    <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;word-break:break-word;">
+    <!-- <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;word-break:break-word;">
       Выберите режим импорта. Формат файла: <code>.xlsx</code> с колонками ФИО, Образование, Должность, Контактные данные, Стаж работы, Обо мне, Компетенции, Проектный опыт, Сертификация 1С.
     </p>
     <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
@@ -341,19 +349,21 @@
     <input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none;">
     <div id="importResult" style="font-size:0.85rem;"></div>
   </div>
-</div>
+</div> -->
 
 <!-- Mass Mail Modal -->
 <div class="modal-overlay" id="massMailModal">
   <div class="modal" style="max-width:600px;">
     <div class="modal-header">
-      <span class="modal-title">📧 Массовая рассылка</span>
+      <span class="modal-title">📧Рассылка</span>
       <button class="btn btn-ghost btn-icon" id="closeMassMailModal">✕</button>
     </div>
     <div style="padding:8px 0;">
-      <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
-        Отправить уведомление всем активным сотрудникам с персональной ссылкой для обновления резюме.
-      </p>
+      <!-- Информация о выбранных сотрудниках -->
+      <div id="selectedRecipientsInfo" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:0.9rem;">
+        👥 Выбрано: 0 сотрудников
+      </div>
+
       <form id="massMailForm">
         <div class="form-group">
           <label class="form-label">Тема письма</label>
@@ -374,14 +384,13 @@
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border);">
           <button type="button" class="btn btn-ghost" id="cancelMassMailBtn">Отмена</button>
-          <button type="submit" class="btn btn-primary" id="sendMassMailBtn">📧 Отправить всем</button>
+          <button type="submit" class="btn btn-primary" id="sendMassMailBtn">📧 Отправить выбранным</button>
         </div>
       </form>
       <div id="massMailResult" style="font-size:0.85rem;margin-top:12px;"></div>
     </div>
   </div>
 </div>
-
 <!-- Toast -->
 <div class="toast-container" id="toastContainer"></div>
 
