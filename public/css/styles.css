@@ -572,3 +572,32 @@ body.light-theme .login-page {
   .container { padding: 0 16px; }
   .card { padding: 16px; }
 }
+/* ─── Красивые чекбоксы ──────────────────────────────────────────────────── */
+
+/* Базовый стиль для всех чекбоксов */
+input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent);
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+}
+
+/* При наведении */
+input[type="checkbox"]:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 12px var(--accent-glow);
+}
+
+/* При фокусе */
+input[type="checkbox"]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Активное состояние (нажатие) */
+input[type="checkbox"]:active {
+  transform: scale(0.9);
+}
