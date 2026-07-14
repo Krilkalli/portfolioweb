@@ -151,7 +151,7 @@ function renderEmployeeCard(group) {
   card.innerHTML = `
     <div class="review-card-header">
       <div class="employee-info">
-        <div class="avatar">${initials(group.employee_name)}</div>
+        ${group.employee_photo ? `<div class="avatar" style="background-image:url('/uploads/${group.employee_photo}');background-size:cover;background-position:center;color:transparent;">${initials(group.employee_name)}</div>` : `<div class="avatar">${initials(group.employee_name)}</div>`}
         <div>
           <div style="font-weight:600;">${group.employee_name}</div>
           <div style="font-size:0.8rem;color:var(--text-muted);">${group.employee_position}</div>

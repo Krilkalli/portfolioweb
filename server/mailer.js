@@ -103,8 +103,11 @@ async function notifyEmployeeApproved(employee) {
   });
 }
 
-async function notifyEmployeeRejected(employee, reason) {
+async function notifyEmployeeRejected(employee, reason, rejectedFields = []) {
   if (!employee.email) return;
+  const fieldList = rejectedFields.length > 0
+    ? `<p><strong>Не принятые поля:</strong></p><ul style="padding-left:20px;margin:8px 0;">${rejectedFields.map(f => `<li>${f}</li>`).join('')}</ul>`
+    : '';
   await sendMail({
     to: employee.email,
     subject: '❌ Изменения профиля не приняты',
@@ -116,7 +119,8 @@ async function notifyEmployeeRejected(employee, reason) {
         <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
           <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
           <p>К сожалению, менеджер отклонил изменения вашего профиля.</p>
-          ${reason ? `<p><strong>Причина:</strong> ${reason}</p>` : ''}
+          ${fieldList}
+          ${reason ? `<p><strong>Комментарий:</strong> ${reason}</p>` : ''}
           <p>Пожалуйста, свяжитесь с менеджером для уточнения деталей.</p>
         </div>
       </div>
@@ -178,68 +182,6 @@ async function notifyMassMailing(employees, subject, htmlContent, serverUrl) {
   return results;
 }
 
-async function notifyPhotoSubmittedForApproval(employee, serverUrl) {
-  await sendMail({
-    to: employee.email,
-    subject: '📸 Ваше фото загружено — ожидает подтверждения',
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-        <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
-          <h2 style="margin:0;">Портфолио IS1C</h2>
-        </div>
-        <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
-          <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
-          <p>✅ Ваше фото профиля успешно загружено.</p>
-          <p>📸 Фото добавлено вами ожидает подтверждения администратором.</p>
-          <p>После одобрения фото будет отображаться в вашем профиле и в резюме.</p>
-        </div>
-      </div>
-    `,
-  });
-}
-
-async function notifyPhotoApproved(employee) {
-  if (!employee.email) return;
-  await sendMail({
-    to: employee.email,
-    subject: '✅ Ваше фото одобрено',
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-        <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
-          <h2 style="margin:0;">Портфолио IS1C</h2>
-        </div>
-        <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
-          <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
-          <p>✅ Ваше фото профиля было одобрено администратором.</p>
-          <p>🎉 Теперь фото отображается в вашем профиле и во всех резюме.</p>
-        </div>
-      </div>
-    `,
-  });
-}
-
-async function notifyPhotoRejected(employee, reason) {
-  if (!employee.email) return;
-  await sendMail({
-    to: employee.email,
-    subject: '❌ Ваше фото не было одобрено',
-    html: `
-      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-        <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
-          <h2 style="margin:0;">Портфолио IS1C</h2>
-        </div>
-        <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
-          <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
-          <p>❌ Ваше фото профиля не было одобрено администратором.</p>
-          ${reason ? `<p><strong>Причина отклонения:</strong> ${reason}</p>` : ''}
-          <p>Пожалуйста, загрузите новое фото с правильным форматом и в соответствии с требованиями.</p>
-          <p>Принимаемые форматы: JPEG, PNG, WebP. Максимальный размер: 5 МБ.</p>
-        </div>
-      </div>
-    `,
-  });
-}
-
 module.exports = {
   sendMail,
   testConnection,
@@ -249,7 +191,4 @@ module.exports = {
   notifyEmployeeRejected,
   notifyManagerFeedback,
   notifyMassMailing,
-  notifyPhotoSubmittedForApproval,
-  notifyPhotoApproved,
-  notifyPhotoRejected,
 };

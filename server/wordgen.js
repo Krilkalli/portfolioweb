@@ -71,10 +71,41 @@ function makeSectionHeader(text) {
 async function generateResume(employee) {
   const sections = [];
 
+  let photoRun = null;
+  if (employee.photo) {
+    let buf = null;
+    try {
+      if (employee.photo.startsWith('data:')) {
+        buf = Buffer.from(employee.photo.split(',')[1], 'base64');
+      } else {
+        const fs = require('fs');
+        const path = require('path');
+        const photoPath = path.join(__dirname, '..', 'uploads', employee.photo);
+        if (fs.existsSync(photoPath)) buf = fs.readFileSync(photoPath);
+      }
+    } catch (err) {
+      console.error('Ошибка загрузки фото для резюме', err);
+    }
+    if (buf) {
+      photoRun = new ImageRun({
+        data: buf,
+        transformation: { width: 100, height: 100 },
+        floating: {
+          horizontalPosition: { relative: 'margin', align: 'right' },
+          verticalPosition: { relative: 'margin', offset: 0 },
+          wrap: { type: 'square', side: 'both' }
+        }
+      });
+    }
+  }
+
   // ── Шапка: ФИО + должность + контакты ──────────────────────────────────────
   sections.push(
     new Paragraph({
-      children: [new TextRun({ text: employee.name, bold: true, size: 40, color: BRAND_DARK })],
+      children: [
+        new TextRun({ text: employee.name, bold: true, size: 40, color: BRAND_DARK }),
+        ...(photoRun ? [photoRun] : [])
+      ],
       spacing: { after: 80 },
     }),
     new Paragraph({

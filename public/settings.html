@@ -45,6 +45,7 @@
     .collapsible .collapsible-header .collapse-icon { font-size: 1rem; transition: transform var(--transition); }
     .collapsible.collapsed .collapsible-header .collapse-icon { transform: rotate(-90deg); }
 
+    .comp-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     .smtp-hint {
       font-size: 0.8rem;
       color: var(--text-muted);
@@ -156,14 +157,14 @@
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
-        Укажите ключевые компетенции для каждой должности. Сотрудники увидят их в чек-листе при заполнении профиля.
+        Настройте компетенции для каждой группы. Сотрудники увидят все группы в чек-листе.
       </p>
-      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-        <select class="form-control" id="compPositionSelect" style="flex:1;min-width:200px;">
-          <option value="">— Выберите должность —</option>
-        </select>
+      <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm comp-tab active" data-group="Разработчик">Разработчик</button>
+        <button class="btn btn-ghost btn-sm comp-tab" data-group="Архитектор">Архитектор</button>
+        <button class="btn btn-ghost btn-sm comp-tab" data-group="Консультант">Консультант</button>
       </div>
-      <div id="compForPosition" style="display:none;">
+      <div id="compForPosition">
         <div class="position-list" id="compList"></div>
         <div class="add-position-row">
           <input type="text" class="form-control" id="newCompInput" placeholder="Новая компетенция">

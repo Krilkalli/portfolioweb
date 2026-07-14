@@ -1,54 +1,29 @@
 const express = require('express');
 const router  = express.Router();
+const multer  = require('multer');
+const path    = require('path');
+const fs      = require('fs');
+const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyManagerFeedback } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
 
-const SPELLER_URL = 'https://speller.yandex.net/services/spellservice.json/checkText';
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-// Multer config for photo upload
-const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'photos');
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-const photoUpload = multer({ 
-  dest: uploadDir,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-  fileFilter: (req, file, cb) => {
-    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Только JPEG, PNG и WebP'), false);
-    }
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, uuidv4() + ext);
   }
 });
+const upload = multer({ storage });
 
-// Helper: save base64 data URL as file
-function saveBase64Photo(base64Data, employeeId) {
-  // Extract base64 data from data URL
-  const matches = base64Data.match(/^data:(image\/[a-z]+);base64,(.+)$/);
-  if (!matches) return null;
-  
-  const mimeType = matches[1];
-  const ext = mimeType.split('/')[1];
-  const buffer = Buffer.from(matches[2], 'base64');
-  
-  const filename = `photo_${employeeId}_${Date.now()}.${ext}`;
-  const filepath = path.join(uploadDir, filename);
-  
-  fs.writeFileSync(filepath, buffer);
-  
-  return {
-    photo_path: filepath,
-    photo_filename: filename,
-    photo_mimetype: mimeType,
-    photo_size: buffer.length,
-    photo_approved: 0,
-    photo_submitted_at: new Date().toISOString(),
-  };
-}
+const SPELLER_URL = 'https://speller.yandex.net/services/spellservice.json/checkText';
 
 function spellerRequest(text) {
   return new Promise((resolve, reject) => {
@@ -77,6 +52,8 @@ function applySpeller(text, errors) {
     if (!err.s || err.s.length === 0) continue;
     const word = err.word;
     let suggestion = err.s[0];
+    // Yandex Speller sometimes returns suggestions with context prefix (e.g. "- слово")
+    // Strip leading non-alphanumeric/chars that don't match the original word
     if (!word[0] || /[-\s]/.test(suggestion[0]) && !/[-\s]/.test(word[0])) {
       suggestion = suggestion.replace(/^[^a-zA-Zа-яА-ЯёЁ0-9]+/, '');
     }
@@ -189,28 +166,9 @@ router.post('/:token/submit', async (req, res) => {
     }
   }
 
-  // Save photo directly if changed - convert base64 to file
+  // Save photo directly if changed
   if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
-    if (submitFields.photo && submitFields.photo.startsWith('data:')) {
-      const photoData = saveBase64Photo(submitFields.photo, emp.id);
-      if (photoData) {
-        helpers.updateEmployee(emp.id, photoData);
-        // Notify manager about new photo
-        const { notifyPhotoSubmittedForApproval } = require('../mailer');
-        const base = `${req.protocol}://${req.get('host')}`;
-        notifyPhotoSubmittedForApproval(emp, base).catch(() => {});
-      }
-    } else if (!submitFields.photo) {
-      // Photo removed
-      helpers.updateEmployee(emp.id, {
-        photo_path: '',
-        photo_filename: '',
-        photo_mimetype: '',
-        photo_size: 0,
-        photo_approved: 0,
-        photo_submitted_at: '',
-      });
-    }
+    helpers.updateEmployee(emp.id, { photo: submitFields.photo });
   }
 
   if (changes.length === 0)
@@ -253,6 +211,27 @@ router.post('/:token/feedback', (req, res) => {
   const feedback = { rating: rating ? Number(rating) : null, comment: comment || '' };
   notifyManagerFeedback(emp, feedback).catch(() => {});
   res.json({ ok: true });
+});
+
+// ── Загрузить фото ────────────────────────────────────────────────────────────
+router.post('/:token/photo', upload.single('photo'), (req, res) => {
+  const emp = helpers.getEmployeeByToken(req.params.token);
+  if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+
+  // Удаляем старое фото, если есть
+  if (emp.photo) {
+    const oldPath = path.join(uploadsDir, emp.photo);
+    if (fs.existsSync(oldPath)) {
+      try { fs.unlinkSync(oldPath); } catch (e) { console.error('Ошибка удаления старого фото', e); }
+    }
+  }
+
+  const newPhotoName = req.file.filename;
+  helpers.updateEmployee(emp.id, { photo: newPhotoName });
+
+  res.json({ ok: true, photo: newPhotoName });
 });
 
 module.exports = router;

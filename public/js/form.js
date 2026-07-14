@@ -83,22 +83,9 @@ function setupTemplateTriggers() {
 }
 
 // ─── Competency Checklist ──────────────────────────────────────────────────
-const COMPETENCY_GROUPS = [
-  { label: 'Архитектор', items: [
-    'Формирование функциональной архитектуры системы',
-    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
-    'Проектирование миграции данных из legacy-систем',
-    'Управление требованиями на уровне бизнес-целей',
-    'Организация приемки и сдачи функциональности',
-    'Оценка трудоемкости и ресурсное планирование',
-    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
-    'Знание отраслевого учета (МСФО, регламентированный учет)',
-    'Стратегическое видение проекта',
-    'Управление командой аналитиков и разработчиков',
-    'Презентация решений перед заказчиком',
-    'Управление функциональными и техническими рисками',
-  ]},
-  { label: 'Разработчик', items: [
+
+const DEFAULT_GROUPS = {
+  'Разработчик': [
     'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
     'Понимание клиент-серверной архитектуры и транзакций',
     'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
@@ -111,8 +98,22 @@ const COMPETENCY_GROUPS = [
     'Работа с чужим кодом, диагностика ошибок',
     'Самостоятельный анализ задач и оценка сроков',
     'Функциональное тестирование и регресс по чек-листу',
-  ]},
-  { label: 'Аналитик', items: [
+  ],
+  'Архитектор': [
+    'Формирование функциональной архитектуры системы',
+    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+    'Проектирование миграции данных из legacy-систем',
+    'Управление требованиями на уровне бизнес-целей',
+    'Организация приемки и сдачи функциональности',
+    'Оценка трудоемкости и ресурсное планирование',
+    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+    'Знание отраслевого учета (МСФО, регламентированный учет)',
+    'Стратегическое видение проекта',
+    'Управление командой аналитиков и разработчиков',
+    'Презентация решений перед заказчиком',
+    'Управление функциональными и техническими рисками',
+  ],
+  'Консультант': [
     'Проведение обследования и интервьюирование пользователей',
     'Анализ бизнес-процессов (AS IS / TO BE)',
     'Моделирование в нотациях BPMN, EPC',
@@ -125,44 +126,23 @@ const COMPETENCY_GROUPS = [
     'Навыки деловой переписки и коммуникации',
     'Обучение и консультирование пользователей',
     'Написание базовых SQL/1С-запросов',
-  ]},
-];
+  ],
+};
 
 function buildCompetencyChecklist(positionOverride) {
   const container = document.getElementById('competencyChecklist');
   if (!container) return;
   container.innerHTML = '';
 
-  // If position has custom competencies, show only those
-  const pos = positionOverride || document.getElementById('f_position')?.value || '';
-  const posComps = positionCompetencies[pos];
-  if (posComps && posComps.length > 0) {
-    const label = document.createElement('div');
-    label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-bottom:4px;';
-    label.textContent = pos;
-    container.appendChild(label);
-    posComps.forEach(item => {
-      const wrapper = document.createElement('label');
-      wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.value = item;
-      cb.style.cssText = 'margin-top:3px;accent-color:var(--accent);';
-      cb.addEventListener('change', updateCompetencies);
-      wrapper.appendChild(cb);
-      wrapper.appendChild(document.createTextNode(' ' + item));
-      container.appendChild(wrapper);
-    });
-    return;
-  }
+  const groups = Object.keys(positionCompetencies).length > 0 ? positionCompetencies : DEFAULT_GROUPS;
 
-  // Fallback: show default competency groups
-  COMPETENCY_GROUPS.forEach(group => {
+  Object.entries(groups).forEach(([groupLabel, items]) => {
     const label = document.createElement('div');
     label.className = 'competency-group-label';
     label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-top:8px;margin-bottom:4px;';
-    label.textContent = group.label;
+    label.textContent = groupLabel;
     container.appendChild(label);
-    group.items.forEach(item => {
+    items.forEach(item => {
       const wrapper = document.createElement('label');
       wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
       const cb = document.createElement('input');
@@ -487,7 +467,19 @@ function showForm(emp) {
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
-  document.getElementById('avatarEl').textContent = initials(emp.name);
+  const avatarEl = document.getElementById('avatarEl');
+  if (emp.photo) {
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    avatarEl.style.backgroundImage = `url('${src}')`;
+    avatarEl.style.backgroundSize = 'cover';
+    avatarEl.style.backgroundPosition = 'center';
+    avatarEl.style.color = 'transparent';
+    avatarEl.textContent = initials(emp.name);
+  } else {
+    avatarEl.style.backgroundImage = 'none';
+    avatarEl.style.color = '';
+    avatarEl.textContent = initials(emp.name);
+  }
 
   if (emp.hasPending) document.getElementById('pendingWarning').classList.remove('hidden');
 
@@ -933,15 +925,48 @@ function handlePhotoUpload(event) {
 
 document.getElementById('applyCropBtn').addEventListener('click', () => {
   if (!cropper) return;
-  const canvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-  const preview = document.getElementById('photoPreview');
-  preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-  document.getElementById('f_photo').value = dataUrl;
-  document.getElementById('photoCropModal').classList.remove('active');
-  cropper.destroy();
-  cropper = null;
-  trackChanges();
+  const btn = document.getElementById('applyCropBtn');
+  btn.disabled = true;
+  btn.innerHTML = 'Загрузка...';
+
+  cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(async (blob) => {
+    const fd = new FormData();
+    fd.append('photo', blob, 'photo.jpg');
+
+    try {
+      const r = await fetch(`/api/form/${token}/photo`, {
+        method: 'POST',
+        body: fd
+      });
+      const data = await r.json();
+      if (r.ok) {
+        document.getElementById('f_photo').value = data.photo;
+        const preview = document.getElementById('photoPreview');
+        preview.innerHTML = `<img src="/uploads/${data.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        
+        const avatarEl = document.getElementById('avatarEl');
+        if (avatarEl) {
+          avatarEl.style.backgroundImage = `url('/uploads/${data.photo}')`;
+          avatarEl.style.backgroundSize = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+          avatarEl.style.color = 'transparent';
+        }
+
+        toast('Фото сохранено', 'success');
+        trackChanges();
+      } else {
+        toast(data.error || 'Ошибка загрузки', 'error');
+      }
+    } catch {
+      toast('Ошибка соединения', 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '✅ Применить';
+    document.getElementById('photoCropModal').classList.remove('active');
+    cropper.destroy();
+    cropper = null;
+  }, 'image/jpeg', 0.9);
 });
 
 function closeCropModal() {
@@ -957,21 +982,10 @@ document.getElementById('photoCropModal').addEventListener('click', (e) => {
 function loadEmployeePhoto(emp) {
   const photoEl = document.getElementById('f_photo');
   const preview = document.getElementById('photoPreview');
-  
-  // Check new photo fields first (file-based storage)
-  const hasPhoto = emp.photo_path && emp.photo_filename;
-  const isApproved = emp.photo_approved === 1 || emp.photo_approved === true;
-  
-  if (hasPhoto) {
-    const previewUrl = `/api/employees/${emp.id}/photo/preview`;
-    photoEl.value = previewUrl; // Store preview URL for reference
-    let statusIcon = isApproved ? ' ✅' : ' ⏳';
-    let statusText = isApproved ? ' (Одобрено)' : ' (На проверке)';
-    preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" title="Фото${statusText}">`;
-  } else if (emp.photo) {
-    // Legacy base64 photo support
+  if (emp.photo) {
     photoEl.value = emp.photo;
-    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    preview.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
   }
   originalValues.photo = emp.photo || '';
   if (photoEl) photoEl.oninput = trackChanges;

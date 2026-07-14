@@ -30,12 +30,7 @@ db.exec(`
     email TEXT DEFAULT '',
     city TEXT DEFAULT '',
     phone TEXT DEFAULT '',
-    photo_path TEXT DEFAULT '',
-    photo_filename TEXT DEFAULT '',
-    photo_mimetype TEXT DEFAULT '',
-    photo_size INTEGER DEFAULT 0,
-    photo_approved INTEGER DEFAULT 0,
-    photo_submitted_at TEXT DEFAULT '',
+    photo TEXT DEFAULT '',
     token TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT,
@@ -87,13 +82,6 @@ try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'ac
 try { db.exec("ALTER TABLE pending_changes ADD COLUMN reviewed_by TEXT DEFAULT ''"); } catch (e) {}
 // Миграция: добавить колонку photo в employees
 try { db.exec("ALTER TABLE employees ADD COLUMN photo TEXT DEFAULT ''"); } catch (e) {}
-// Миграция: добавить новые колонки для файлового хранения фото
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_path TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_filename TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_mimetype TEXT DEFAULT ''"); } catch (e) {}
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_size INTEGER DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_approved INTEGER DEFAULT 0"); } catch (e) {}
-try { db.exec("ALTER TABLE employees ADD COLUMN photo_submitted_at TEXT DEFAULT ''"); } catch (e) {}
 // Миграция: добавить колонку role в managers
 try { db.exec("ALTER TABLE managers ADD COLUMN role TEXT DEFAULT 'admin'"); } catch (e) {}
 
@@ -117,10 +105,6 @@ const stUpdateEmployee = db.prepare(`UPDATE employees SET
   contacts=@contacts, experience=@experience, about=@about, competencies=@competencies,
   project_experience=@project_experience, certification=@certification,
   email=@email, city=@city, phone=@phone, updated_at=@updated_at WHERE id=@id`);
-const stUpdateEmployeePhoto = db.prepare(`UPDATE employees SET
-  photo_path=@photo_path, photo_filename=@photo_filename, photo_mimetype=@photo_mimetype,
-  photo_size=@photo_size, photo_approved=@photo_approved, photo_submitted_at=@photo_submitted_at,
-  updated_at=@updated_at WHERE id=@id`);
 const stArchiveEmployee = db.prepare("UPDATE employees SET status='archived', updated_at=? WHERE id=?");
 const stRestoreEmployee = db.prepare("UPDATE employees SET status='active', updated_at=? WHERE id=?");
 const stGetChanges    = db.prepare('SELECT * FROM pending_changes WHERE status = ? ORDER BY submitted_at');
@@ -152,16 +136,24 @@ function normalizeName(name) {
 // ─── Безопасные поля для динамического UPDATE ────────────────────────────────
 const ALLOWED_FIELDS = new Set([
   'name','education','position','contacts','experience','about','competencies',
-  'project_experience','certification','email','city','phone','photo_path',
-  'photo_filename','photo_mimetype','photo_size','photo_approved','photo_submitted_at',
+  'project_experience','certification','email','city','phone','photo',
 ]);
 
-// ─── Функция извлечения имени файла из пути ───────────────────────────────────
-function getFilenameFromPath(fullPath) {
-  if (!fullPath) return '';
-  // Handle both Windows and Unix paths
-  return fullPath.split(/[/\\]/).pop() || fullPath;
-}
+const FIELD_LABELS = {
+  name: 'ФИО',
+  education: 'Образование',
+  position: 'Должность',
+  contacts: 'Контактные данные',
+  experience: 'Стаж работы',
+  about: 'Обо мне',
+  competencies: 'Компетенции',
+  project_experience: 'Проектный опыт',
+  certification: 'Сертификация 1С',
+  email: 'Email',
+  city: 'Город',
+  phone: 'Телефон',
+  photo: 'Фото',
+};
 
 // ─── Парсинг legacy-текста образования в JSON-массив ──────────────────────
 function parseLegacyEducationLines(val) {
@@ -210,12 +202,6 @@ function castEmployee(r) {
   try { emp.education = JSON.parse(emp.education || '[]'); } catch { emp.education = parseLegacyEducationLines(emp.education); }
   try { emp.experience = JSON.parse(emp.experience || '{}'); } catch { emp.experience = parseLegacyExperience(emp.experience); }
   try { emp.project_experience = JSON.parse(emp.project_experience || '[]'); } catch { emp.project_experience = parseLegacyProject(emp.project_experience); }
-  // Ensure boolean for approval field
-  if (typeof emp.photo_approved === 'string') {
-    emp.photo_approved = emp.photo_approved === '1' || emp.photo_approved === 'true';
-  } else {
-    emp.photo_approved = Boolean(emp.photo_approved);
-  }
   delete emp.name_lower;
   return emp;
 }
@@ -239,12 +225,7 @@ function prepEmployee(emp) {
     email: emp.email || '',
     city: emp.city || '',
     phone: emp.phone || '',
-    photo_path: emp.photo_path || '',
-    photo_filename: emp.photo_filename || '',
-    photo_mimetype: emp.photo_mimetype || '',
-    photo_size: emp.photo_size || 0,
-    photo_approved: emp.photo_approved || 0,
-    photo_submitted_at: emp.photo_submitted_at || '',
+    photo: emp.photo || '',
     token: emp.token || uuidv4(),
     status: emp.status === 'archived' ? 'archived' : 'active',
     created_at: emp.created_at || now,
@@ -502,6 +483,66 @@ function init() {
   }
   if (changed) saveSettings(settings);
 
+  // Миграция: переименовать 'Аналитик' → 'Консультант' в компетенциях
+  const oldComps = helpers.getPositionCompetencies();
+  if (oldComps['Аналитик'] !== undefined && oldComps['Консультант'] === undefined) {
+    oldComps['Консультант'] = oldComps['Аналитик'];
+    delete oldComps['Аналитик'];
+    helpers.setPositionCompetencies(oldComps);
+    console.log('✅ Компетенции: группа «Аналитик» переименована в «Консультант»');
+  }
+
+  // Seed: если positionCompetencies пусто, заполнить по умолчанию
+  const comps = helpers.getPositionCompetencies();
+  const DEFAULT_COMPS = {
+    'Разработчик': [
+      'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
+      'Понимание клиент-серверной архитектуры и транзакций',
+      'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
+      'Модификация через расширения и подписки на события',
+      'Веб-сервисы и HTTP-сервисы (SOAP/REST)',
+      'Обмены данными XML/JSON',
+      'Работа с Git, SVN',
+      'Автотестирование (Vanessa Automation) / статанализ (SonarQube, BSL LS)',
+      'Написание читаемого, структурированного кода',
+      'Работа с чужим кодом, диагностика ошибок',
+      'Самостоятельный анализ задач и оценка сроков',
+      'Функциональное тестирование и регресс по чек-листу',
+    ],
+    'Архитектор': [
+      'Формирование функциональной архитектуры системы',
+      'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+      'Проектирование миграции данных из legacy-систем',
+      'Управление требованиями на уровне бизнес-целей',
+      'Организация приемки и сдачи функциональности',
+      'Оценка трудоемкости и ресурсное планирование',
+      'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+      'Знание отраслевого учета (МСФО, регламентированный учет)',
+      'Стратегическое видение проекта',
+      'Управление командой аналитиков и разработчиков',
+      'Презентация решений перед заказчиком',
+      'Управление функциональными и техническими рисками',
+    ],
+    'Консультант': [
+      'Проведение обследования и интервьюирование пользователей',
+      'Анализ бизнес-процессов (AS IS / TO BE)',
+      'Моделирование в нотациях BPMN, EPC',
+      'GAP-анализ',
+      'Сбор и формализация требований',
+      'Разработка проектной документации (ТЗ, ЧТЗ, инструкции, ПМИ)',
+      'Знание бухгалтерского, налогового, кадрового учета',
+      'Постановка задач разработчикам',
+      'Участие в тестировании функционала',
+      'Навыки деловой переписки и коммуникации',
+      'Обучение и консультирование пользователей',
+      'Написание базовых SQL/1С-запросов',
+    ],
+  };
+  if (Object.keys(comps).length === 0) {
+    helpers.setPositionCompetencies(DEFAULT_COMPS);
+    console.log('✅ Компетенции: установлены значения по умолчанию');
+  }
+
   // Создать первого менеджера, если нет ни одного
   const managerCount = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
   if (managerCount === 0) {
@@ -541,24 +582,6 @@ function init() {
         db.prepare("UPDATE employees SET project_experience = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
       }
     }
-
-  // ─── Post-миграции: конвертировать старое фото в новый формат
-  const photoTx = db.transaction(() => {
-    const allRows = db.prepare("SELECT id, photo FROM employees WHERE photo IS NOT NULL AND photo != ''").all();
-    const now = new Date().toISOString();
-    for (const row of allRows) {
-      if (row.photo && row.photo.startsWith('data:')) {
-        // Письмо base64 в новый формат
-        const base64Data = row.photo.split(',')[1] || row.photo;
-        const now = new Date().toISOString();
-        db.prepare("UPDATE employees SET photo_path = ?, photo_filename = ?, photo_mimetype = ?, photo_size = ?, photo_approved = ?, photo_submitted_at = ?, photo = '' WHERE id = ?").run('', '', '', 0, 0, now, row.id);
-      } else {
-        // Письмо в новом формате, очистить старое поле
-        db.prepare("UPDATE employees SET photo = '' WHERE id = ?").run(row.id);
-      }
-    }
-  });
-  try { photoTx(); } catch (e) { console.warn('⚠️ Ошибка конвертации фото:', e.message); }
     db.prepare("DELETE FROM pending_changes WHERE field_name IN ('courses','cert_date')").run();
   });
   fixTx();
@@ -747,6 +770,7 @@ const helpers = {
           employee_id: c.employee_id,
           employee_name: emp.name || '?',
           employee_position: emp.position || '',
+          employee_photo: emp.photo || '',
           changes: [],
         };
       }
@@ -771,6 +795,10 @@ const helpers = {
 
   getChangeById(id) {
     return stGetChange.get(Number(id)) || null;
+  },
+
+  getPendingChangesForEmployee(employeeId) {
+    return stGetChangesByEmp.all(Number(employeeId), 'pending') || [];
   },
 
   submitChanges(employeeId, changesArray) {
@@ -940,4 +968,4 @@ const helpers = {
 };
 
 init();
-module.exports = { helpers };
+module.exports = { helpers, FIELD_LABELS };
