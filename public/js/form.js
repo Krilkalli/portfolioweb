@@ -83,22 +83,9 @@ function setupTemplateTriggers() {
 }
 
 // ─── Competency Checklist ──────────────────────────────────────────────────
-const COMPETENCY_GROUPS = [
-  { label: 'Архитектор', items: [
-    'Формирование функциональной архитектуры системы',
-    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
-    'Проектирование миграции данных из legacy-систем',
-    'Управление требованиями на уровне бизнес-целей',
-    'Организация приемки и сдачи функциональности',
-    'Оценка трудоемкости и ресурсное планирование',
-    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
-    'Знание отраслевого учета (МСФО, регламентированный учет)',
-    'Стратегическое видение проекта',
-    'Управление командой аналитиков и разработчиков',
-    'Презентация решений перед заказчиком',
-    'Управление функциональными и техническими рисками',
-  ]},
-  { label: 'Разработчик', items: [
+
+const DEFAULT_GROUPS = {
+  'Разработчик': [
     'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
     'Понимание клиент-серверной архитектуры и транзакций',
     'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
@@ -111,8 +98,22 @@ const COMPETENCY_GROUPS = [
     'Работа с чужим кодом, диагностика ошибок',
     'Самостоятельный анализ задач и оценка сроков',
     'Функциональное тестирование и регресс по чек-листу',
-  ]},
-  { label: 'Аналитик', items: [
+  ],
+  'Архитектор': [
+    'Формирование функциональной архитектуры системы',
+    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+    'Проектирование миграции данных из legacy-систем',
+    'Управление требованиями на уровне бизнес-целей',
+    'Организация приемки и сдачи функциональности',
+    'Оценка трудоемкости и ресурсное планирование',
+    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+    'Знание отраслевого учета (МСФО, регламентированный учет)',
+    'Стратегическое видение проекта',
+    'Управление командой аналитиков и разработчиков',
+    'Презентация решений перед заказчиком',
+    'Управление функциональными и техническими рисками',
+  ],
+  'Консультант': [
     'Проведение обследования и интервьюирование пользователей',
     'Анализ бизнес-процессов (AS IS / TO BE)',
     'Моделирование в нотациях BPMN, EPC',
@@ -125,44 +126,23 @@ const COMPETENCY_GROUPS = [
     'Навыки деловой переписки и коммуникации',
     'Обучение и консультирование пользователей',
     'Написание базовых SQL/1С-запросов',
-  ]},
-];
+  ],
+};
 
 function buildCompetencyChecklist(positionOverride) {
   const container = document.getElementById('competencyChecklist');
   if (!container) return;
   container.innerHTML = '';
 
-  // If position has custom competencies, show only those
-  const pos = positionOverride || document.getElementById('f_position')?.value || '';
-  const posComps = positionCompetencies[pos];
-  if (posComps && posComps.length > 0) {
-    const label = document.createElement('div');
-    label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-bottom:4px;';
-    label.textContent = pos;
-    container.appendChild(label);
-    posComps.forEach(item => {
-      const wrapper = document.createElement('label');
-      wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.value = item;
-      cb.style.cssText = 'margin-top:3px;accent-color:var(--accent);';
-      cb.addEventListener('change', updateCompetencies);
-      wrapper.appendChild(cb);
-      wrapper.appendChild(document.createTextNode(' ' + item));
-      container.appendChild(wrapper);
-    });
-    return;
-  }
+  const groups = Object.keys(positionCompetencies).length > 0 ? positionCompetencies : DEFAULT_GROUPS;
 
-  // Fallback: show default competency groups
-  COMPETENCY_GROUPS.forEach(group => {
+  Object.entries(groups).forEach(([groupLabel, items]) => {
     const label = document.createElement('div');
     label.className = 'competency-group-label';
     label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-top:8px;margin-bottom:4px;';
-    label.textContent = group.label;
+    label.textContent = groupLabel;
     container.appendChild(label);
-    group.items.forEach(item => {
+    items.forEach(item => {
       const wrapper = document.createElement('label');
       wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
       const cb = document.createElement('input');

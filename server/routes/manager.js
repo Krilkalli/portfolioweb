@@ -3,7 +3,7 @@ const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const { ZipArchive } = require('archiver');
 const XLSX    = require('xlsx');
-const { helpers } = require('../db');
+const { helpers, FIELD_LABELS } = require('../db');
 const { generateResume } = require('../wordgen');
 const { generatePdfResume } = require('../pdfgen');
 const { generateFromTemplate } = require('../templater');
@@ -105,8 +105,14 @@ router.post('/pending/:changeId/approve', requireCanReview, async (req, res) => 
 
 // ── Отклонить одно изменение ──────────────────────────────────────────────────
 router.post('/pending/:changeId/reject', requireCanReview, (req, res) => {
-  const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
-  if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
+  const change = helpers.getChangeById(Number(req.params.changeId));
+  if (!change) return res.status(404).json({ error: 'Изменение не найдено' });
+  helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
+  const emp = helpers.getEmployee(change.employee_id);
+  if (emp) {
+    const labels = [FIELD_LABELS[change.field_name] || change.field_name];
+    notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
+  }
   res.json({ ok: true });
 });
 
@@ -125,8 +131,10 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
+  const pendingChanges = helpers.getPendingChangesForEmployee(id);
   helpers.rejectAllForEmployee(id, req.body.reason || '', req.session.managerName || '');
-  notifyEmployeeRejected(emp, req.body.reason).catch(() => {});
+  const labels = pendingChanges.map(c => FIELD_LABELS[c.field_name] || c.field_name);
+  notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
   res.json({ ok: true });
 });
 

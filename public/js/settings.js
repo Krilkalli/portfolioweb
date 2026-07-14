@@ -33,7 +33,7 @@ let positionCompetencies = {};
 async function loadPositions() {
   try {
     const r = await fetch('/api/positions');
-    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); populateCompPositionSelect(); }
+    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); }
   } catch {}
 }
 
@@ -42,59 +42,56 @@ async function loadPositionCompetencies() {
     const r = await fetch('/api/position-competencies');
     if (r.ok) { positionCompetencies = await r.json(); }
   } catch {}
+  COMP_GROUPS.forEach(g => { if (!positionCompetencies[g]) positionCompetencies[g] = []; });
+  renderCompList();
 }
 
-function populateCompPositionSelect() {
-  const sel = document.getElementById('compPositionSelect');
-  if (!sel) return;
-  const curr = sel.value;
-  sel.innerHTML = '<option value="">— Выберите должность —</option>';
-  positions.forEach(p => {
-    const opt = document.createElement('option');
-    opt.value = p; opt.textContent = p; sel.appendChild(opt);
+const COMP_GROUPS = ['Разработчик', 'Архитектор', 'Консультант'];
+
+document.querySelectorAll('.comp-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.comp-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCompList();
   });
-  sel.value = curr;
-}
-
-document.getElementById('compPositionSelect')?.addEventListener('change', (e) => {
-  const pos = e.target.value;
-  const wrap = document.getElementById('compForPosition');
-  if (!pos) { wrap.style.display = 'none'; return; }
-  wrap.style.display = 'block';
-  renderCompList(pos);
 });
 
-function renderCompList(position) {
+function getActiveGroup() {
+  const active = document.querySelector('.comp-tab.active');
+  return active ? active.getAttribute('data-group') : 'Разработчик';
+}
+
+function renderCompList() {
   const list = document.getElementById('compList');
   if (!list) return;
-  const comps = positionCompetencies[position] || [];
+  const group = getActiveGroup();
+  const comps = positionCompetencies[group] || [];
   if (comps.length === 0) {
-    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:8px 0;">Нет компетенций для этой должности</p>';
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:8px 0;">Нет компетенций для этой группы</p>';
     return;
   }
   list.innerHTML = comps.map(c => `
     <div class="position-item">
       <span>${escHtml(c)}</span>
-      <button class="remove-pos" onclick="removeComp('${escHtml(position).replace(/'/g, "\\'")}', '${escHtml(c).replace(/'/g, "\\'")}')">✕</button>
+      <button class="remove-pos" onclick="removeComp('${escHtml(group).replace(/'/g, "\\'")}', '${escHtml(c).replace(/'/g, "\\'")}')">✕</button>
     </div>
   `).join('');
 }
 
 document.getElementById('addCompBtn')?.addEventListener('click', async () => {
-  const pos = document.getElementById('compPositionSelect').value;
+  const group = getActiveGroup();
   const comp = document.getElementById('newCompInput').value.trim();
-  if (!pos) { toast('Выберите должность', 'warning'); return; }
   if (!comp) { toast('Введите компетенцию', 'warning'); return; }
   try {
     const r = await fetch('/api/position-competencies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ position: pos, competency: comp }),
+      body: JSON.stringify({ position: group, competency: comp }),
     });
     if (r.ok) {
       const d = await r.json();
-      positionCompetencies[pos] = d.competencies;
-      renderCompList(pos);
+      positionCompetencies[group] = d.competencies;
+      renderCompList();
       document.getElementById('newCompInput').value = '';
       toast('Компетенция добавлена', 'success');
     } else {
@@ -119,7 +116,7 @@ async function removeComp(position, competency) {
     if (r.ok) {
       const d = await r.json();
       positionCompetencies[position] = d.competencies;
-      renderCompList(position);
+      renderCompList();
       toast('Компетенция удалена', 'info');
     }
   } catch { toast('Ошибка соединения', 'error'); }

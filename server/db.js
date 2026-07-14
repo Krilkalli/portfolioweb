@@ -139,6 +139,22 @@ const ALLOWED_FIELDS = new Set([
   'project_experience','certification','email','city','phone','photo',
 ]);
 
+const FIELD_LABELS = {
+  name: 'ФИО',
+  education: 'Образование',
+  position: 'Должность',
+  contacts: 'Контактные данные',
+  experience: 'Стаж работы',
+  about: 'Обо мне',
+  competencies: 'Компетенции',
+  project_experience: 'Проектный опыт',
+  certification: 'Сертификация 1С',
+  email: 'Email',
+  city: 'Город',
+  phone: 'Телефон',
+  photo: 'Фото',
+};
+
 // ─── Парсинг legacy-текста образования в JSON-массив ──────────────────────
 function parseLegacyEducationLines(val) {
   // legacy formats:
@@ -467,6 +483,66 @@ function init() {
   }
   if (changed) saveSettings(settings);
 
+  // Миграция: переименовать 'Аналитик' → 'Консультант' в компетенциях
+  const oldComps = helpers.getPositionCompetencies();
+  if (oldComps['Аналитик'] !== undefined && oldComps['Консультант'] === undefined) {
+    oldComps['Консультант'] = oldComps['Аналитик'];
+    delete oldComps['Аналитик'];
+    helpers.setPositionCompetencies(oldComps);
+    console.log('✅ Компетенции: группа «Аналитик» переименована в «Консультант»');
+  }
+
+  // Seed: если positionCompetencies пусто, заполнить по умолчанию
+  const comps = helpers.getPositionCompetencies();
+  const DEFAULT_COMPS = {
+    'Разработчик': [
+      'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
+      'Понимание клиент-серверной архитектуры и транзакций',
+      'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
+      'Модификация через расширения и подписки на события',
+      'Веб-сервисы и HTTP-сервисы (SOAP/REST)',
+      'Обмены данными XML/JSON',
+      'Работа с Git, SVN',
+      'Автотестирование (Vanessa Automation) / статанализ (SonarQube, BSL LS)',
+      'Написание читаемого, структурированного кода',
+      'Работа с чужим кодом, диагностика ошибок',
+      'Самостоятельный анализ задач и оценка сроков',
+      'Функциональное тестирование и регресс по чек-листу',
+    ],
+    'Архитектор': [
+      'Формирование функциональной архитектуры системы',
+      'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+      'Проектирование миграции данных из legacy-систем',
+      'Управление требованиями на уровне бизнес-целей',
+      'Организация приемки и сдачи функциональности',
+      'Оценка трудоемкости и ресурсное планирование',
+      'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+      'Знание отраслевого учета (МСФО, регламентированный учет)',
+      'Стратегическое видение проекта',
+      'Управление командой аналитиков и разработчиков',
+      'Презентация решений перед заказчиком',
+      'Управление функциональными и техническими рисками',
+    ],
+    'Консультант': [
+      'Проведение обследования и интервьюирование пользователей',
+      'Анализ бизнес-процессов (AS IS / TO BE)',
+      'Моделирование в нотациях BPMN, EPC',
+      'GAP-анализ',
+      'Сбор и формализация требований',
+      'Разработка проектной документации (ТЗ, ЧТЗ, инструкции, ПМИ)',
+      'Знание бухгалтерского, налогового, кадрового учета',
+      'Постановка задач разработчикам',
+      'Участие в тестировании функционала',
+      'Навыки деловой переписки и коммуникации',
+      'Обучение и консультирование пользователей',
+      'Написание базовых SQL/1С-запросов',
+    ],
+  };
+  if (Object.keys(comps).length === 0) {
+    helpers.setPositionCompetencies(DEFAULT_COMPS);
+    console.log('✅ Компетенции: установлены значения по умолчанию');
+  }
+
   // Создать первого менеджера, если нет ни одного
   const managerCount = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
   if (managerCount === 0) {
@@ -720,6 +796,10 @@ const helpers = {
     return stGetChange.get(Number(id)) || null;
   },
 
+  getPendingChangesForEmployee(employeeId) {
+    return stGetChangesByEmp.all(Number(employeeId), 'pending') || [];
+  },
+
   submitChanges(employeeId, changesArray) {
     const tx = db.transaction(() => {
       stDelPendingForEmp.run(Number(employeeId));
@@ -887,4 +967,4 @@ const helpers = {
 };
 
 init();
-module.exports = { helpers };
+module.exports = { helpers, FIELD_LABELS };
