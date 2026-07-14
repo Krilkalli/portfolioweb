@@ -957,7 +957,19 @@ document.getElementById('photoCropModal').addEventListener('click', (e) => {
 function loadEmployeePhoto(emp) {
   const photoEl = document.getElementById('f_photo');
   const preview = document.getElementById('photoPreview');
-  if (emp.photo) {
+  
+  // Check new photo fields first (file-based storage)
+  const hasPhoto = emp.photo_path && emp.photo_filename;
+  const isApproved = emp.photo_approved === 1 || emp.photo_approved === true;
+  
+  if (hasPhoto) {
+    const previewUrl = `/api/employees/${emp.id}/photo/preview`;
+    photoEl.value = previewUrl; // Store preview URL for reference
+    let statusIcon = isApproved ? ' ✅' : ' ⏳';
+    let statusText = isApproved ? ' (Одобрено)' : ' (На проверке)';
+    preview.innerHTML = `<img src="${previewUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" title="Фото${statusText}">`;
+  } else if (emp.photo) {
+    // Legacy base64 photo support
     photoEl.value = emp.photo;
     preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
   }

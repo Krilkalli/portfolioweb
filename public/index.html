@@ -231,6 +231,16 @@
           <label class="filter-label" style="margin-top:4px;">
             <input type="checkbox" id="filterArchived" checked> Показывать архив
           </label>
+          <div class="form-group" style="margin-top:8px;">
+            <label class="form-label" style="font-size:0.78rem;">Фото</label>
+            <select id="photoFilter" class="form-control" style="font-size:0.8rem;">
+              <option value="">— Все —</option>
+              <option value="yes">Есть фото</option>
+              <option value="approved">Одобрено</option>
+              <option value="pending">Ожидает подтверждения</option>
+              <option value="no">Нет фото</option>
+            </select>
+          </div>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
             <button class="btn btn-ghost btn-sm" id="filterResetBtn">Сбросить</button>
           </div>

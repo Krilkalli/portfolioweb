@@ -410,6 +410,163 @@ router.post('/template/upload', requireAdmin, upload.single('template'), (req, r
   res.json({ ok: true, message: 'Шаблон загружен. Используется для всех новых резюме.' });
 });
 
+// ── Загрузка фото для сотрудников с проверкой ──────────────────────────────
+router.post('/employees/:id/photo/upload', requireCanEdit, upload.single('photo'), async (req, res) => {
+  const id = Number(req.params.id);
+  const emp = helpers.getEmployee(id);
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+
+  // Проверка типа пользователя
+  const role = req.session.managerRole || 'admin';
+  if (role === 'leader') {
+    return res.status(403).json({ error: 'Руководитель не может загружать фото' });
+  }
+
+  if (!req.file) return res.status(400).json({ error: 'Фото не загружено' });
+
+  // Проверка типа файла
+  const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+  if (!allowedMimes.includes(req.file.mimetype)) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Неверный тип файла. Разрешены только JPEG, PNG и WebP' });
+  }
+
+  // Проверка размера файла (макс. 5MB)
+  const maxSize = 5 * 1024 * 1024; // 5MB
+  if (req.file.size > maxSize) {
+    fs.unlinkSync(req.file.path);
+    return res.status(400).json({ error: 'Файл слишком большой (макс. 5MB)' });
+  }
+
+  const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'photos');
+  if (!fs.existsSync(uploadDir)) {
+    fs.mkdirSync(uploadDir, { recursive: true });
+  }
+
+  // Генерация безопасного имени файла
+  const filename = `photo_${id}_${Date.now()}.${req.file.mimetype.split('/')[1]}`;
+  const filepath = path.join(uploadDir, filename);
+
+  // Копирование файла
+  fs.copyFileSync(req.file.path, filepath);
+  fs.unlinkSync(req.file.path);
+
+  // Сохранение метаданных в базе данных
+  const now = new Date().toISOString();
+  helpers.updateEmployee(id, {
+    photo_path: filepath,
+    photo_filename: filename,
+    photo_mimetype: req.file.mimetype,
+    photo_size: req.file.size,
+    photo_approved: 0, // Не одобрено по умолчанию
+    photo_submitted_at: now,
+  });
+
+  // Уведомление о необходимости проверки
+  const base = `${req.protocol}://${req.get('host')}`;
+  const { notifyPhotoSubmittedForApproval } = require('../mailer');
+  await notifyPhotoSubmittedForApproval(emp, base).catch(() => {});
+
+  res.json({ ok: true, message: 'Фото загружено', filename });
+});
+
+// ── Получить фото для превью ────────────────────────────────
+router.get('/employees/:id/photo/preview', requireAuth, (req, res) => {
+  const id = Number(req.params.id);
+  const emp = helpers.getEmployee(id);
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+
+  if (!emp.photo_path || !fs.existsSync(emp.photo_path)) {
+    return res.status(404).json({ error: 'Фото не найдено' });
+  }
+
+  const ext = path.extname(emp.photo_path).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+  };
+
+  res.setHeader('Content-Type', mimeTypes[ext] || 'application/octet-stream');
+  res.sendFile(path.resolve(emp.photo_path));
+});
+
+// ── Одобрить фото ────────────────────────────────
+router.post('/employees/:id/photo/approve', requireCanReview, async (req, res) => {
+  const id = Number(req.params.id);
+  const emp = helpers.getEmployee(id);
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+
+  if (!emp.photo_path || !fs.existsSync(emp.photo_path)) {
+    return res.status(400).json({ error: 'Фото не загружено' });
+  }
+
+  helpers.updateEmployee(id, {
+    photo_approved: 1,
+    updated_at: new Date().toISOString(),
+  });
+
+  const { notifyPhotoApproved } = require('../mailer');
+  await notifyPhotoApproved(emp).catch(() => {});
+
+  res.json({ ok: true, message: 'Фото одобрено' });
+});
+
+// ── Отклонить фото ────────────────────────────────
+router.post('/employees/:id/photo/reject', requireCanReview, async (req, res) => {
+  const id = Number(req.params.id);
+  const emp = helpers.getEmployee(id);
+  if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+
+  if (!emp.photo_path || !fs.existsSync(emp.photo_path)) {
+    return res.status(400).json({ error: 'Фото не загружено' });
+  }
+
+  // Удаление файла фото
+  try {
+    fs.unlinkSync(emp.photo_path);
+  } catch (e) {
+    console.warn('Не удалось удалить файл:', e.message);
+  }
+
+  helpers.updateEmployee(id, {
+    photo_path: '',
+    photo_filename: '',
+    photo_mimetype: '',
+    photo_size: 0,
+    photo_approved: 0,
+    photo_submitted_at: '',
+    updated_at: new Date().toISOString(),
+  });
+
+  const { notifyPhotoRejected } = require('../mailer');
+  await notifyPhotoRejected(emp, req.body.reason || '').catch(() => {});
+
+  res.json({ ok: true, message: 'Фото отклонено и удалено' });
+});
+
+// ── Получить список фото для одобрения ────────────────────────────────
+router.get('/pending-photos', requireAuth, (req, res) => {
+  const role = req.session.managerRole || 'admin';
+  if (role !== 'admin' && role !== 'scrum') {
+    return res.status(403).json({ error: 'Недостаточно прав для просмотра фото' });
+  }
+
+  const all = helpers.getAllEmployees();
+  const pending = all.filter(e => e.photo_path && !e.photo_approved);
+
+  res.json(pending.map(e => ({
+    id: e.id,
+    name: e.name,
+    photo_filename: e.photo_filename,
+    photo_mimetype: e.photo_mimetype,
+    photo_size: e.photo_size,
+    photo_submitted_at: e.photo_submitted_at,
+    link: `${e.name}`.replace(/\s+/g, '_').toLowerCase(),
+  })));
+});
+
 // ─── Массовая рассылка ────────────────────────────────────────────────────────
 router.post('/mass-mailing', requireCanEdit, async (req, res) => {
   const { subject, htmlContent, employeeIds, sendToAll } = req.body;

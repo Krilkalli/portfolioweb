@@ -4,8 +4,51 @@ const { helpers } = require('../db');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyManagerFeedback } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
 
 const SPELLER_URL = 'https://speller.yandex.net/services/spellservice.json/checkText';
+
+// Multer config for photo upload
+const uploadDir = path.join(__dirname, '..', '..', 'uploads', 'photos');
+if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+const photoUpload = multer({ 
+  dest: uploadDir,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    if (['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Только JPEG, PNG и WebP'), false);
+    }
+  }
+});
+
+// Helper: save base64 data URL as file
+function saveBase64Photo(base64Data, employeeId) {
+  // Extract base64 data from data URL
+  const matches = base64Data.match(/^data:(image\/[a-z]+);base64,(.+)$/);
+  if (!matches) return null;
+  
+  const mimeType = matches[1];
+  const ext = mimeType.split('/')[1];
+  const buffer = Buffer.from(matches[2], 'base64');
+  
+  const filename = `photo_${employeeId}_${Date.now()}.${ext}`;
+  const filepath = path.join(uploadDir, filename);
+  
+  fs.writeFileSync(filepath, buffer);
+  
+  return {
+    photo_path: filepath,
+    photo_filename: filename,
+    photo_mimetype: mimeType,
+    photo_size: buffer.length,
+    photo_approved: 0,
+    photo_submitted_at: new Date().toISOString(),
+  };
+}
 
 function spellerRequest(text) {
   return new Promise((resolve, reject) => {
@@ -34,8 +77,6 @@ function applySpeller(text, errors) {
     if (!err.s || err.s.length === 0) continue;
     const word = err.word;
     let suggestion = err.s[0];
-    // Yandex Speller sometimes returns suggestions with context prefix (e.g. "- слово")
-    // Strip leading non-alphanumeric/chars that don't match the original word
     if (!word[0] || /[-\s]/.test(suggestion[0]) && !/[-\s]/.test(word[0])) {
       suggestion = suggestion.replace(/^[^a-zA-Zа-яА-ЯёЁ0-9]+/, '');
     }
@@ -148,9 +189,28 @@ router.post('/:token/submit', async (req, res) => {
     }
   }
 
-  // Save photo directly if changed
+  // Save photo directly if changed - convert base64 to file
   if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
-    helpers.updateEmployee(emp.id, { photo: submitFields.photo });
+    if (submitFields.photo && submitFields.photo.startsWith('data:')) {
+      const photoData = saveBase64Photo(submitFields.photo, emp.id);
+      if (photoData) {
+        helpers.updateEmployee(emp.id, photoData);
+        // Notify manager about new photo
+        const { notifyPhotoSubmittedForApproval } = require('../mailer');
+        const base = `${req.protocol}://${req.get('host')}`;
+        notifyPhotoSubmittedForApproval(emp, base).catch(() => {});
+      }
+    } else if (!submitFields.photo) {
+      // Photo removed
+      helpers.updateEmployee(emp.id, {
+        photo_path: '',
+        photo_filename: '',
+        photo_mimetype: '',
+        photo_size: 0,
+        photo_approved: 0,
+        photo_submitted_at: '',
+      });
+    }
   }
 
   if (changes.length === 0)

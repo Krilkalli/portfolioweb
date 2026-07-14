@@ -153,7 +153,13 @@ function renderTable(list) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map(e => `
+  tbody.innerHTML = list.map(e => {
+    const hasPhoto = e.photo_path && e.photo_filename;
+    const photoApproved = e.photo_approved;
+    const photoStatusIcon = hasPhoto ? (photoApproved ? '✅' : '⏳') : '📷';
+    const photoStatusTitle = hasPhoto ? (photoApproved ? 'Фото одобрено' : 'Фото на проверке') : 'Фото не загружено';
+    
+    return `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
       <td class="col-check" style="text-align:center;">
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
@@ -172,6 +178,10 @@ function renderTable(list) {
       </td>
       <td style="text-align:left;">
         <span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span>
+      </td>
+      <td style="text-align:center;white-space:nowrap;">
+        <span style="font-size:1.2rem;cursor:help;" title="${photoStatusTitle}">${photoStatusIcon}</span>
+        ${hasPhoto ? `<span style="font-size:0.65rem;color:${photoApproved ? 'var(--success)' : 'var(--warning)'};margin-left:4px;">${photoApproved ? 'Одобрено' : 'На проверке'}</span>` : ''}
       </td>
       <td style="text-align:left;">
         ${e.status === 'archived'
@@ -208,11 +218,19 @@ function renderTable(list) {
                <div class="action-dropdown">
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+                 <div style="border-top:1px solid var(--border);margin:4px 0;padding-top:4px;"></div>
+                 ${hasPhoto && !photoApproved
+                   ? `<button class="action-dropdown-item" onclick="viewEmployeePhoto(${e.id})">👁 Посмотреть фото</button>
+                      <button class="action-dropdown-item" onclick="approveEmployeePhoto(${e.id})" style="color:var(--success);">✅ Одобрить фото</button>
+                      <button class="action-dropdown-item" onclick="rejectEmployeePhoto(${e.id})" style="color:var(--danger);">❌ Отклонить фото</button>`
+                   : hasPhoto && photoApproved
+                     ? `<button class="action-dropdown-item" onclick="viewEmployeePhoto(${e.id})">👁 Посмотреть фото</button>`
+                     : `<button class="action-dropdown-item" onclick="uploadEmployeePhoto(${e.id})">📷 Загрузить фото</button>`}
                </div>`}
         </div>
       </td>
     </tr>
-  `).join('');
+  `}).join('');
 }
 
 function copyToClipboard(text) {
@@ -275,6 +293,108 @@ async function restoreEmployee(id, name) {
       await loadStats();
     } else { toast('Ошибка восстановления', 'error'); }
   } catch { toast('Ошибка соединения', 'error'); }
+}
+
+// ─── Photo Actions ────────────────────────────────────────────────────────────
+async function uploadEmployeePhoto(id) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/jpeg,image/png,image/webp';
+  input.style.display = 'none';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    // Client-side validation
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast('Неверный тип файла. Разрешены JPEG, PNG, WebP', 'error');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast('Файл слишком большой (макс. 5 МБ)', 'error');
+      return;
+    }
+    
+    const formData = new FormData();
+    formData.append('photo', file);
+    
+    try {
+      const r = await fetch(`/api/employees/${id}/photo/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const d = await r.json();
+      if (r.ok) {
+        toast(d.message || 'Фото загружено', 'success');
+        await loadEmployees();
+      } else {
+        toast(d.error || 'Ошибка загрузки', 'error');
+      }
+    } catch {
+      toast('Ошибка соединения', 'error');
+    }
+  };
+  
+  document.body.appendChild(input);
+  input.click();
+  document.body.removeChild(input);
+}
+
+async function viewEmployeePhoto(id) {
+  try {
+    const r = await fetch(`/api/employees/${id}/photo/preview`);
+    if (!r.ok) {
+      const d = await r.json();
+      throw new Error(d.error || 'Фото не найдено');
+    }
+    const blob = await r.blob();
+    const url = URL.createObjectURL(blob);
+    
+    // Open in new tab/window
+    window.open(url, '_blank');
+  } catch (err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function approveEmployeePhoto(id) {
+  if (!confirm('Одобрить фото этого сотрудника?')) return;
+  
+  try {
+    const r = await fetch(`/api/employees/${id}/photo/approve`, { method: 'POST' });
+    const d = await r.json();
+    if (r.ok) {
+      toast(d.message || 'Фото одобрено', 'success');
+      await loadEmployees();
+    } else {
+      toast(d.error || 'Ошибка', 'error');
+    }
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
+}
+
+async function rejectEmployeePhoto(id) {
+  const reason = prompt('Укажите причину отклонения (необязательно):');
+  if (reason === null) return; // User cancelled
+  
+  try {
+    const r = await fetch(`/api/employees/${id}/photo/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: reason || '' }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast(d.message || 'Фото отклонено и удалено', 'success');
+      await loadEmployees();
+    } else {
+      toast(d.error || 'Ошибка', 'error');
+    }
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
 }
 
 // ─── Add Employee ────────────────────────────────────────────────────────────
@@ -352,6 +472,7 @@ document.getElementById('filterArchived').addEventListener('change', (e) => {
 document.getElementById('searchInput').addEventListener('input', () => { applyFilter(); });
 document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
 document.getElementById('filterCity').addEventListener('change', () => { applyFilter(); });
+document.getElementById('photoFilter').addEventListener('change', () => { applyFilter(); });
 
 // ─── Filter Popup ───────────────────────────────────────────────────────────
 document.getElementById('filterBtn').addEventListener('click', (e) => {
@@ -366,6 +487,7 @@ document.addEventListener('click', (e) => {
 document.getElementById('filterResetBtn').addEventListener('click', () => {
   document.getElementById('filterPosition').value = '';
   document.getElementById('filterCity').value = '';
+  document.getElementById('photoFilter').value = '';
   selectedCerts.clear();
   document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = false);
   document.getElementById('certSearchInput').value = '';
@@ -406,6 +528,8 @@ function applyFilter() {
       return [...selectedCerts].some(c => cert.includes(c.toLowerCase()));
     });
   }
+
+  // Filter by photo approval\n  const photoFilter = document.getElementById('photoFilter');\n  if (photoFilter && photoFilter.value !== '') {\n    const filter = photoFilter.value;\n    list = list.filter(e => {\n      const hasPhoto = e.photo_path && e.photo_filename;\n      if (filter === 'yes') return hasPhoto;\n      if (filter === 'approved') return hasPhoto && e.photo_approved;\n      if (filter === 'pending') return hasPhoto && !e.photo_approved;\n      return true;\n    });\n  }
   list = list.filter(emp =>
     emp.name.toLowerCase().includes(q) ||
     (emp.position || '').toLowerCase().includes(q) ||
