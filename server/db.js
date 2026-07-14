@@ -770,6 +770,7 @@ const helpers = {
           employee_id: c.employee_id,
           employee_name: emp.name || '?',
           employee_position: emp.position || '',
+          employee_photo: emp.photo || '',
           changes: [],
         };
       }

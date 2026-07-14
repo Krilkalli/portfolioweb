@@ -15,11 +15,18 @@ function registerFonts(doc) {
   else doc.registerFont('MainFontBold', 'Helvetica');
 }
 
-function parsePhoto(base64Str) {
-  if (!base64Str || !base64Str.startsWith('data:image/')) return null;
-  const m = base64Str.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
-  if (!m) return null;
-  try { return Buffer.from(m[2], 'base64'); } catch { return null; }
+function parsePhoto(photoValue) {
+  if (!photoValue) return null;
+  if (photoValue.startsWith('data:image/')) {
+    const m = photoValue.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+    if (!m) return null;
+    try { return Buffer.from(m[2], 'base64'); } catch { return null; }
+  }
+  const photoPath = path.join(__dirname, '..', 'uploads', photoValue);
+  if (fs.existsSync(photoPath)) {
+    try { return fs.readFileSync(photoPath); } catch { return null; }
+  }
+  return null;
 }
 
 async function generatePdfResume(employee) {
@@ -48,12 +55,13 @@ async function generatePdfResume(employee) {
 
     // ── Header: photo + name + position + contacts ─────────────────────
     const photoBuf = parsePhoto(employee.photo);
-    const nameX = photoBuf ? ml + 90 : ml;
-    const nameW = maxW - (photoBuf ? 95 : 0);
+    const nameX = photoBuf ? ml + 105 : ml;
+    const nameW = maxW - (photoBuf ? 110 : 0);
 
     if (photoBuf) {
       try {
-        doc.image(photoBuf, ml, y, { width: 80, height: 80 });
+        // 3.4 cm = 1.33858 inches = ~96.38 points
+        doc.image(photoBuf, ml, y, { width: 96, height: 96 });
       } catch {}
     }
 

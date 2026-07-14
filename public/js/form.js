@@ -467,7 +467,19 @@ function showForm(emp) {
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
-  document.getElementById('avatarEl').textContent = initials(emp.name);
+  const avatarEl = document.getElementById('avatarEl');
+  if (emp.photo) {
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    avatarEl.style.backgroundImage = `url('${src}')`;
+    avatarEl.style.backgroundSize = 'cover';
+    avatarEl.style.backgroundPosition = 'center';
+    avatarEl.style.color = 'transparent';
+    avatarEl.textContent = initials(emp.name);
+  } else {
+    avatarEl.style.backgroundImage = 'none';
+    avatarEl.style.color = '';
+    avatarEl.textContent = initials(emp.name);
+  }
 
   if (emp.hasPending) document.getElementById('pendingWarning').classList.remove('hidden');
 
@@ -913,15 +925,48 @@ function handlePhotoUpload(event) {
 
 document.getElementById('applyCropBtn').addEventListener('click', () => {
   if (!cropper) return;
-  const canvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-  const preview = document.getElementById('photoPreview');
-  preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-  document.getElementById('f_photo').value = dataUrl;
-  document.getElementById('photoCropModal').classList.remove('active');
-  cropper.destroy();
-  cropper = null;
-  trackChanges();
+  const btn = document.getElementById('applyCropBtn');
+  btn.disabled = true;
+  btn.innerHTML = 'Загрузка...';
+
+  cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(async (blob) => {
+    const fd = new FormData();
+    fd.append('photo', blob, 'photo.jpg');
+
+    try {
+      const r = await fetch(`/api/form/${token}/photo`, {
+        method: 'POST',
+        body: fd
+      });
+      const data = await r.json();
+      if (r.ok) {
+        document.getElementById('f_photo').value = data.photo;
+        const preview = document.getElementById('photoPreview');
+        preview.innerHTML = `<img src="/uploads/${data.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        
+        const avatarEl = document.getElementById('avatarEl');
+        if (avatarEl) {
+          avatarEl.style.backgroundImage = `url('/uploads/${data.photo}')`;
+          avatarEl.style.backgroundSize = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+          avatarEl.style.color = 'transparent';
+        }
+
+        toast('Фото сохранено', 'success');
+        trackChanges();
+      } else {
+        toast(data.error || 'Ошибка загрузки', 'error');
+      }
+    } catch {
+      toast('Ошибка соединения', 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '✅ Применить';
+    document.getElementById('photoCropModal').classList.remove('active');
+    cropper.destroy();
+    cropper = null;
+  }, 'image/jpeg', 0.9);
 });
 
 function closeCropModal() {
@@ -939,7 +984,8 @@ function loadEmployeePhoto(emp) {
   const preview = document.getElementById('photoPreview');
   if (emp.photo) {
     photoEl.value = emp.photo;
-    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    preview.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
   }
   originalValues.photo = emp.photo || '';
   if (photoEl) photoEl.oninput = trackChanges;

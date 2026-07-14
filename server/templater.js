@@ -250,12 +250,22 @@ function prepareData(employee) {
   };
 }
 
-function parsePhoto(base64Str) {
-  if (!base64Str || !base64Str.startsWith('data:image/')) return null;
-  const m = base64Str.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
-  if (!m) return null;
-  const ext = m[1] === 'jpeg' ? 'jpg' : m[1];
-  return Buffer.from(m[2], 'base64');
+function parsePhoto(photoValue) {
+  if (!photoValue) return null;
+  if (photoValue.startsWith('data:image/')) {
+    const m = photoValue.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+    if (!m) return null;
+    return Buffer.from(m[2], 'base64');
+  }
+  const photoPath = path.join(__dirname, '..', 'uploads', photoValue);
+  if (fs.existsSync(photoPath)) {
+    try {
+      return fs.readFileSync(photoPath);
+    } catch (e) {
+      console.error('Ошибка чтения фото', e);
+    }
+  }
+  return null;
 }
 
 async function generateFromTemplate(employee) {
@@ -268,9 +278,35 @@ async function generateFromTemplate(employee) {
   // Custom template: use docxtemplater
   const PizZip = require('pizzip');
   const Docxtemplater = require('docxtemplater');
+  const ImageModule = require('docxtemplater-image-module-free');
+
   const content = fs.readFileSync(tplPath, 'binary');
   const zip = new PizZip(content);
-  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true });
+
+  const imageOpts = {
+    centered: false,
+    getImage: function(tagValue, tagName) {
+      if (!tagValue) return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+      if (tagValue.startsWith('data:image/')) {
+        const m = tagValue.match(/^data:image\/(png|jpeg|jpg|gif|webp);base64,(.+)$/);
+        if (m) return Buffer.from(m[2], 'base64');
+      } else {
+        const photoPath = path.join(__dirname, '..', 'uploads', tagValue);
+        if (fs.existsSync(photoPath)) {
+          try { return fs.readFileSync(photoPath); } catch (e) {}
+        }
+      }
+      return Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+    },
+    getSize: function(img, tagValue, tagName) {
+      if (!tagValue) return [1, 1];
+      // 3.4 cm * 96 DPI / 2.54 cm/inch = ~129 pixels
+      return [129, 129];
+    }
+  };
+  const imageModule = new ImageModule(imageOpts);
+
+  const doc = new Docxtemplater(zip, { paragraphLoop: true, linebreaks: true, modules: [imageModule] });
   doc.render(prepareData(employee));
   return doc.getZip().generate({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
@@ -313,7 +349,7 @@ async function generateDocx(employee) {
       margins: { top: 0, bottom: 0, left: 0, right: 0 },
       children: [new Paragraph({
         alignment: AlignmentType.CENTER,
-        children: [new ImageRun({ data: photoBuf, transformation: { width: 80, height: 80 } })],
+        children: [new ImageRun({ data: photoBuf, transformation: { width: 129, height: 129 } })],
       })],
     }));
   }
