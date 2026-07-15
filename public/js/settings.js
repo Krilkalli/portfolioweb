@@ -26,150 +26,72 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
 });
 
-// ─── Competencies ──────────────────────────────────────────────────────────
+// ─── Positions ──────────────────────────────────────────────────────────────
 let positions = [];
 let positionCompetencies = {};
-let currentCompGroup = 'Архитектор';
 
 async function loadPositions() {
   try {
     const r = await fetch('/api/positions');
-    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); populateCompPositionSelect(); }
+    if (r.ok) { const d = await r.json(); positions = d.positions || []; renderPositions(); }
   } catch {}
 }
 
 async function loadPositionCompetencies() {
   try {
     const r = await fetch('/api/position-competencies');
-    if (r.ok) {
-      positionCompetencies = await r.json();
-      if (currentCompGroup) renderCompList(currentCompGroup);
-    }
+    if (r.ok) { positionCompetencies = await r.json(); }
   } catch {}
+  COMP_GROUPS.forEach(g => { if (!positionCompetencies[g]) positionCompetencies[g] = []; });
+  renderCompList();
 }
 
-function populateCompPositionSelect() {
-  const sel = document.getElementById('compPositionSelect');
-  if (!sel) return;
-  const curr = sel.value;
-  sel.innerHTML = '<option value="">— Выберите должность —</option>';
-  positions.forEach(p => {
-    if (p === 'Архитектор' || p === 'Разработчик' || p === 'Аналитик') return;
-    const opt = document.createElement('option');
-    opt.value = p; opt.textContent = p; sel.appendChild(opt);
-  });
-  sel.value = curr;
-}
+const COMP_GROUPS = ['Разработчик', 'Архитектор', 'Консультант'];
 
-document.getElementById('compPositionSelect')?.addEventListener('change', (e) => {
-  const pos = e.target.value;
-  if (!pos) return;
-  currentCompGroup = pos;
-  // Keep __other tab highlighted
-  document.querySelectorAll('#compGroupTabs .btn').forEach(b => {
-    b.className = b.dataset.group === '__other' ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
+document.querySelectorAll('.comp-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.comp-tab').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCompList();
   });
-  document.getElementById('compOtherSelect').style.display = 'block';
-  document.getElementById('compGroupPanel').style.display = 'block';
-  renderCompList(pos);
 });
 
-function switchCompGroup(group) {
-  currentCompGroup = group;
-  document.querySelectorAll('#compGroupTabs .btn').forEach(b => {
-    b.className = b.dataset.group === group ? 'btn btn-sm btn-primary' : 'btn btn-sm btn-ghost';
-  });
-  const otherSelect = document.getElementById('compOtherSelect');
-  if (group === '__other') {
-    otherSelect.style.display = 'block';
-    document.getElementById('compGroupPanel').style.display = 'none';
-    return;
-  }
-  otherSelect.style.display = 'none';
-  document.getElementById('compGroupPanel').style.display = 'block';
-  renderCompList(group);
+function getActiveGroup() {
+  const active = document.querySelector('.comp-tab.active');
+  return active ? active.getAttribute('data-group') : 'Разработчик';
 }
 
-function renderCompList(position) {
+function renderCompList() {
   const list = document.getElementById('compList');
   if (!list) return;
-  const comps = positionCompetencies[position] || [];
+  const group = getActiveGroup();
+  const comps = positionCompetencies[group] || [];
   if (comps.length === 0) {
-    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:8px 0;">Нет компетенций для этой должности</p>';
+    list.innerHTML = '<p style="color:var(--text-muted);font-size:0.82rem;padding:8px 0;">Нет компетенций для этой группы</p>';
     return;
   }
-  list.innerHTML = comps.map((c, i) => `
-    <div class="position-item" data-index="${i}">
-      <span class="comp-text">${escHtml(c)}</span>
-      <input class="comp-edit form-control" type="text" value="${escHtml(c)}" style="display:none;flex:1;font-size:0.82rem;padding:4px 8px;">
-      <div style="display:flex;gap:4px;">
-        <button class="btn btn-ghost btn-icon comp-edit-btn" style="width:26px;height:26px;font-size:0.75rem;" onclick="startEditComp(this)" title="Редактировать">✏️</button>
-        <button class="btn btn-ghost btn-icon comp-save-btn" style="display:none;width:26px;height:26px;font-size:0.75rem;" onclick="saveEditComp(this, '${escHtml(position).replace(/'/g, "\\'")}', ${i})" title="Сохранить">💾</button>
-        <button class="btn btn-ghost btn-icon comp-cancel-btn" style="display:none;width:26px;height:26px;font-size:0.75rem;" onclick="cancelEditComp(this)" title="Отмена">✕</button>
-        <button class="remove-pos" onclick="removeComp('${escHtml(position).replace(/'/g, "\\'")}', '${escHtml(c).replace(/'/g, "\\'")}')">✕</button>
-      </div>
+  list.innerHTML = comps.map(c => `
+    <div class="position-item">
+      <span>${escHtml(c)}</span>
+      <button class="remove-pos" onclick="removeComp('${escHtml(group).replace(/'/g, "\\'")}', '${escHtml(c).replace(/'/g, "\\'")}')">✕</button>
     </div>
   `).join('');
 }
 
-function startEditComp(btn) {
-  const item = btn.closest('.position-item');
-  item.querySelector('.comp-text').style.display = 'none';
-  item.querySelector('.comp-edit').style.display = 'flex';
-  item.querySelector('.comp-edit-btn').style.display = 'none';
-  item.querySelector('.comp-save-btn').style.display = '';
-  item.querySelector('.comp-cancel-btn').style.display = '';
-  item.querySelector('.comp-edit').focus();
-  item.querySelector('.comp-edit').select();
-}
-
-function cancelEditComp(btn) {
-  const item = btn.closest('.position-item');
-  item.querySelector('.comp-text').style.display = '';
-  item.querySelector('.comp-edit').style.display = 'none';
-  item.querySelector('.comp-edit-btn').style.display = '';
-  item.querySelector('.comp-save-btn').style.display = 'none';
-  item.querySelector('.comp-cancel-btn').style.display = 'none';
-}
-
-async function saveEditComp(btn, position, index) {
-  const item = btn.closest('.position-item');
-  const input = item.querySelector('.comp-edit');
-  const newVal = input.value.trim();
-  if (!newVal) { toast('Компетенция не может быть пустой', 'warning'); return; }
-  try {
-    const r = await fetch(`/api/position-competencies/${encodeURIComponent(position)}/${index}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ competency: newVal }),
-    });
-    if (r.ok) {
-      const d = await r.json();
-      positionCompetencies[position] = d.competencies;
-      renderCompList(position);
-      toast('Компетенция обновлена', 'success');
-    } else {
-      const d = await r.json();
-      toast(d.error || 'Ошибка', 'error');
-    }
-  } catch { toast('Ошибка соединения', 'error'); }
-}
-
 document.getElementById('addCompBtn')?.addEventListener('click', async () => {
-  const pos = currentCompGroup === '__other' ? document.getElementById('compPositionSelect').value : currentCompGroup;
+  const group = getActiveGroup();
   const comp = document.getElementById('newCompInput').value.trim();
-  if (!pos) { toast('Выберите должность', 'warning'); return; }
   if (!comp) { toast('Введите компетенцию', 'warning'); return; }
   try {
     const r = await fetch('/api/position-competencies', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ position: pos, competency: comp }),
+      body: JSON.stringify({ position: group, competency: comp }),
     });
     if (r.ok) {
       const d = await r.json();
-      positionCompetencies[pos] = d.competencies;
-      renderCompList(currentCompGroup === '__other' ? pos : currentCompGroup);
+      positionCompetencies[group] = d.competencies;
+      renderCompList();
       document.getElementById('newCompInput').value = '';
       toast('Компетенция добавлена', 'success');
     } else {
@@ -194,7 +116,7 @@ async function removeComp(position, competency) {
     if (r.ok) {
       const d = await r.json();
       positionCompetencies[position] = d.competencies;
-      renderCompList(currentCompGroup === '__other' ? position : currentCompGroup);
+      renderCompList();
       toast('Компетенция удалена', 'info');
     }
   } catch { toast('Ошибка соединения', 'error'); }
@@ -286,9 +208,8 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
     smtp_from:     document.getElementById('smtp_from').value.trim(),
     manager_email: document.getElementById('manager_email').value.trim(),
   };
-  const pass = document.getElementById('smtp_pass').value.trim();
+  const pass = document.getElementById('smtp_pass').value;
   if (pass) payload.smtp_pass = pass;
-  // Если пароль не указан — не отправляем его, чтобы не стереть старый
 
   try {
     const r = await fetch('/api/settings', {
@@ -454,7 +375,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 });
 
 function escHtml(str) {
-  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#39;');
+  return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 // ─── Template Upload ─────────────────────────────────────────────────────────
@@ -583,7 +504,7 @@ if (scrumEmailForm) {
       if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Сохранено'; toast('Email сохранён', 'success'); }
       else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = '❌ ' + (d.error || 'Ошибка'); }
     } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
-    finally { btn.disabled = false; btn.textContent = '💾 Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
+    finally { btn.disabled = false; btn.textContent = 'Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
   });
 }
 

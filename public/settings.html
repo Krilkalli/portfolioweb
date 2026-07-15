@@ -45,6 +45,7 @@
     .collapsible .collapsible-header .collapse-icon { font-size: 1rem; transition: transform var(--transition); }
     .collapsible.collapsed .collapsible-header .collapse-icon { transform: rotate(-90deg); }
 
+    .comp-tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
     .smtp-hint {
       font-size: 0.8rem;
       color: var(--text-muted);
@@ -58,8 +59,9 @@
 
 <nav class="navbar">
   <div class="navbar-brand">
-    <span class="logo-dot"></span>
-    IS1C Портфолио
+    <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" style="height: 50px; width: auto;">
+    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 32px; width: auto; display: none;">
+    <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
@@ -110,7 +112,7 @@
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <button type="submit" class="btn btn-primary" id="saveSmtpBtn">💾 Сохранить настройки</button>
+          <button type="submit" class="btn btn-primary" id="saveSmtpBtn">Сохранить настройки</button>
           <button type="button" class="btn btn-ghost" id="testEmailBtn">🔌 Проверить соединение</button>
         </div>
         <div id="smtpResult" style="margin-top:12px;font-size:0.875rem;"></div>
@@ -128,7 +130,7 @@
           <label class="form-label" for="scrum_manager_email">Email менеджера</label>
           <input id="scrum_manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru">
         </div>
-        <button type="submit" class="btn btn-primary" id="saveScrumEmailBtn">💾 Сохранить</button>
+        <button type="submit" class="btn btn-primary" id="saveScrumEmailBtn">Сохранить</button>
         <div id="scrumEmailResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
@@ -155,23 +157,16 @@
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
-        Укажите ключевые компетенции для каждой должности. Сотрудники увидят их в чек-листе при заполнении профиля.
-        Доступны три предопределённые группы: <strong>Архитектор</strong>, <strong>Разработчик</strong>, <strong>Аналитик</strong>.
+        Настройте компетенции для каждой группы. Сотрудники увидят все группы в чек-листе.
       </p>
-      <div id="compGroupTabs" style="display:flex;gap:4px;margin-bottom:12px;flex-wrap:wrap;">
-        <button class="btn btn-sm btn-primary" data-group="Архитектор" onclick="switchCompGroup('Архитектор')">Архитектор</button>
-        <button class="btn btn-sm btn-ghost" data-group="Разработчик" onclick="switchCompGroup('Разработчик')">Разработчик</button>
-        <button class="btn btn-sm btn-ghost" data-group="Аналитик" onclick="switchCompGroup('Аналитик')">Аналитик</button>
-        <button class="btn btn-sm btn-ghost" data-group="__other" onclick="switchCompGroup('__other')">Другая должность...</button>
+      <div style="display:flex;gap:4px;margin-bottom:16px;flex-wrap:wrap;">
+        <button class="btn btn-ghost btn-sm comp-tab active" data-group="Разработчик">Разработчик</button>
+        <button class="btn btn-ghost btn-sm comp-tab" data-group="Архитектор">Архитектор</button>
+        <button class="btn btn-ghost btn-sm comp-tab" data-group="Консультант">Консультант</button>
       </div>
-      <div id="compOtherSelect" style="display:none;margin-bottom:12px;">
-        <select class="form-control" id="compPositionSelect">
-          <option value="">— Выберите должность —</option>
-        </select>
-      </div>
-      <div id="compGroupPanel">
+      <div id="compForPosition">
         <div class="position-list" id="compList"></div>
-        <div class="add-position-row" style="margin-top:8px;">
+        <div class="add-position-row">
           <input type="text" class="form-control" id="newCompInput" placeholder="Новая компетенция">
           <button class="btn btn-primary" id="addCompBtn">Добавить</button>
         </div>
@@ -227,7 +222,7 @@
       </div>
     </div>
 
-    <!-- Import Card -->
+    Import Card
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title">📥 Импорт сотрудников из Excel</span>

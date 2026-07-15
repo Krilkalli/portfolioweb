@@ -83,22 +83,9 @@ function setupTemplateTriggers() {
 }
 
 // ─── Competency Checklist ──────────────────────────────────────────────────
-const COMPETENCY_GROUPS = [
-  { label: 'Архитектор', items: [
-    'Формирование функциональной архитектуры системы',
-    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
-    'Проектирование миграции данных из legacy-систем',
-    'Управление требованиями на уровне бизнес-целей',
-    'Организация приемки и сдачи функциональности',
-    'Оценка трудоемкости и ресурсное планирование',
-    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
-    'Знание отраслевого учета (МСФО, регламентированный учет)',
-    'Стратегическое видение проекта',
-    'Управление командой аналитиков и разработчиков',
-    'Презентация решений перед заказчиком',
-    'Управление функциональными и техническими рисками',
-  ]},
-  { label: 'Разработчик', items: [
+
+const DEFAULT_GROUPS = {
+  'Разработчик': [
     'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
     'Понимание клиент-серверной архитектуры и транзакций',
     'Опыт модификации типовых конфигураций (ERP, УТ, ДО, БП, ЗУП)',
@@ -111,8 +98,22 @@ const COMPETENCY_GROUPS = [
     'Работа с чужим кодом, диагностика ошибок',
     'Самостоятельный анализ задач и оценка сроков',
     'Функциональное тестирование и регресс по чек-листу',
-  ]},
-  { label: 'Аналитик', items: [
+  ],
+  'Архитектор': [
+    'Формирование функциональной архитектуры системы',
+    'Проектирование интеграционных решений (ESB, HTTP, RabbitMQ)',
+    'Проектирование миграции данных из legacy-систем',
+    'Управление требованиями на уровне бизнес-целей',
+    'Организация приемки и сдачи функциональности',
+    'Оценка трудоемкости и ресурсное планирование',
+    'Экспертное владение 1С:ERP / 1С:ЗУП КОРП',
+    'Знание отраслевого учета (МСФО, регламентированный учет)',
+    'Стратегическое видение проекта',
+    'Управление командой аналитиков и разработчиков',
+    'Презентация решений перед заказчиком',
+    'Управление функциональными и техническими рисками',
+  ],
+  'Консультант': [
     'Проведение обследования и интервьюирование пользователей',
     'Анализ бизнес-процессов (AS IS / TO BE)',
     'Моделирование в нотациях BPMN, EPC',
@@ -125,44 +126,23 @@ const COMPETENCY_GROUPS = [
     'Навыки деловой переписки и коммуникации',
     'Обучение и консультирование пользователей',
     'Написание базовых SQL/1С-запросов',
-  ]},
-];
+  ],
+};
 
 function buildCompetencyChecklist(positionOverride) {
   const container = document.getElementById('competencyChecklist');
   if (!container) return;
   container.innerHTML = '';
 
-  // If position has custom competencies, show only those
-  const pos = positionOverride || document.getElementById('f_position')?.value || '';
-  const posComps = positionCompetencies[pos];
-  if (posComps && posComps.length > 0) {
-    const label = document.createElement('div');
-    label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-bottom:4px;';
-    label.textContent = pos;
-    container.appendChild(label);
-    posComps.forEach(item => {
-      const wrapper = document.createElement('label');
-      wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox'; cb.value = item;
-      cb.style.cssText = 'margin-top:3px;accent-color:var(--accent);';
-      cb.addEventListener('change', updateCompetencies);
-      wrapper.appendChild(cb);
-      wrapper.appendChild(document.createTextNode(' ' + item));
-      container.appendChild(wrapper);
-    });
-    return;
-  }
+  const groups = Object.keys(positionCompetencies).length > 0 ? positionCompetencies : DEFAULT_GROUPS;
 
-  // Fallback: show default competency groups
-  COMPETENCY_GROUPS.forEach(group => {
+  Object.entries(groups).forEach(([groupLabel, items]) => {
     const label = document.createElement('div');
     label.className = 'competency-group-label';
     label.style.cssText = 'grid-column:1/-1;font-weight:600;font-size:0.85rem;color:var(--text-primary);margin-top:8px;margin-bottom:4px;';
-    label.textContent = group.label;
+    label.textContent = groupLabel;
     container.appendChild(label);
-    group.items.forEach(item => {
+    items.forEach(item => {
       const wrapper = document.createElement('label');
       wrapper.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-size:0.82rem;color:var(--text-secondary);cursor:pointer;padding:2px 0;line-height:1.4;';
       const cb = document.createElement('input');
@@ -296,7 +276,26 @@ function getEducationData() {
   })).filter(e => e.institution || e.degree || e.specialty || e.year);
 }
 
-// ─── Job Entries (Experience) ──────────────────────────────────────────────
+// // ─── Job Entries (Experience) ──────────────────────────────────────────────
+// function addJobEntry(data) {
+//   const c = document.getElementById('jobContainer');
+//   const e = document.createElement('details');
+//   e.className = 'job-entry accordion-entry';
+//   e.open = !data?.company;
+//   e.innerHTML = `
+//     <summary class="job-summary">${escHtml(jobTitle(data))}</summary>
+//     <div class="accordion-body">
+//       <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'job-entry')">✕</button>
+//       <div class="form-group"><label class="form-label">Компания</label>
+//         <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
+//       <div class="form-group"><label class="form-label">Должность</label>
+//         <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
+//       <div class="form-group"><label class="form-label">Период работы</label>
+//         <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
+//     </div>`;
+//   c.appendChild(e);
+//   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.job-summary'); trackChanges(); }));
+// }
 function addJobEntry(data) {
   const c = document.getElementById('jobContainer');
   const e = document.createElement('details');
@@ -311,12 +310,22 @@ function addJobEntry(data) {
       <div class="form-group"><label class="form-label">Должность</label>
         <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
       <div class="form-group"><label class="form-label">Период работы</label>
-        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
+        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
     </div>`;
   c.appendChild(e);
-  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.job-summary'); trackChanges(); }));
+  
+  // === НОВЫЙ КОД: маска для периода ===
+  const periodInput = e.querySelector('.job-period');
+  if (periodInput) {
+    maskPeriod(periodInput);
+  }
+  
+  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { 
+    updateAccordionTitle(e, '.job-summary'); 
+    trackChanges(); 
+  }));
 }
-
 function loadJobData(exp) {
   document.getElementById('jobContainer').innerHTML = '';
   const totalEl = document.getElementById('f_total_experience');
@@ -344,7 +353,6 @@ function getJobData() {
   };
 }
 
-// ─── Project Entries ───────────────────────────────────────────────────────
 function addProjectEntry(data) {
   const c = document.getElementById('projectExperienceContainer');
   const e = document.createElement('details');
@@ -355,7 +363,8 @@ function addProjectEntry(data) {
     <div class="accordion-body">
       <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'proj-entry')">✕</button>
       <div class="form-group"><label class="form-label">Период работы на проекте</label>
-        <input type="text" class="form-control proj-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
+        <input type="text" class="form-control proj-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
       <div class="form-group"><label class="form-label">Должность в рамках проекта</label>
         <input type="text" class="form-control proj-position" placeholder="Консультант по внедрению 1С" value="${escHtml(data?.position||'')}"></div>
       <div class="form-group"><label class="form-label">Роль в рамках проекта</label>
@@ -372,9 +381,18 @@ function addProjectEntry(data) {
         <input type="text" class="form-control proj-tech" placeholder="1С:ERP 2.5, XML, JSON, REST API" value="${escHtml(data?.technologies||'')}"></div>
     </div>`;
   c.appendChild(e);
-  e.querySelectorAll('input, textarea').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.proj-summary'); trackChanges(); }));
+  
+  // === НОВЫЙ КОД: маска для периода ===
+  const periodInput = e.querySelector('.proj-period');
+  if (periodInput) {
+    maskPeriod(periodInput);
+  }
+  
+  e.querySelectorAll('input, textarea').forEach(inp => inp.addEventListener('input', () => { 
+    updateAccordionTitle(e, '.proj-summary'); 
+    trackChanges(); 
+  }));
 }
-
 function loadProjectData(arr) {
   document.getElementById('projectExperienceContainer').innerHTML = '';
   if (Array.isArray(arr) && arr.length > 0) arr.forEach(d => addProjectEntry(d));
@@ -443,7 +461,19 @@ function showForm(emp) {
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
-  document.getElementById('avatarEl').textContent = initials(emp.name);
+  const avatarEl = document.getElementById('avatarEl');
+  if (emp.photo) {
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    avatarEl.style.backgroundImage = `url('${src}')`;
+    avatarEl.style.backgroundSize = 'cover';
+    avatarEl.style.backgroundPosition = 'center';
+    avatarEl.style.color = 'transparent';
+    avatarEl.textContent = initials(emp.name);
+  } else {
+    avatarEl.style.backgroundImage = 'none';
+    avatarEl.style.color = '';
+    avatarEl.textContent = initials(emp.name);
+  }
 
   const pdfLink = document.getElementById('pdfResumeLink');
   if (pdfLink && emp.id) {
@@ -732,12 +762,12 @@ async function performSubmit(fields) {
       } else {
         toast(d.error || 'Ошибка при сохранении', 'error');
         btn.disabled = false;
-        btn.innerHTML = '💾 Сохранить';
+        btn.innerHTML = 'Сохранить';
       }
     } catch {
       toast('Ошибка соединения с сервером', 'error');
       btn.disabled = false;
-      btn.innerHTML = '💾 Сохранить';
+      btn.innerHTML = 'Сохранить';
     }
     return;
   }
@@ -840,7 +870,43 @@ document.getElementById('addProjectBtn').addEventListener('click', () => {
 function escHtml(str) {
   return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
-
+// ─── Маска для периода: ММ.ГГГГ - ММ.ГГГГ ────────────────────────────────────
+function maskPeriod(el) {
+  if (!el) return;
+  
+  el.addEventListener('input', function(e) {
+    let digits = this.value.replace(/\D/g, '');
+    if (digits.length > 12) {
+      digits = digits.slice(0, 12);
+    }
+    let result = '';
+    for (let i = 0; i < digits.length; i++) {
+      if (i === 2 || i === 8) {
+        result += '.';
+      } else if (i === 6) {
+        result += ' - ';
+      }
+      result += digits[i];
+    }
+    this.value = result;
+  });
+  
+  el.addEventListener('paste', function(e) {
+    setTimeout(() => {
+      const digits = this.value.replace(/\D/g, '');
+      let result = '';
+      for (let i = 0; i < digits.length && i < 12; i++) {
+        if (i === 2 || i === 8) {
+          result += '.';
+        } else if (i === 6) {
+          result += ' - ';
+        }
+        result += digits[i];
+      }
+      this.value = result;
+    }, 10);
+  });
+}
 let cropper = null;
 
 function handlePhotoUpload(event) {
@@ -878,15 +944,48 @@ function handlePhotoUpload(event) {
 
 document.getElementById('applyCropBtn').addEventListener('click', () => {
   if (!cropper) return;
-  const canvas = cropper.getCroppedCanvas({ width: 400, height: 400 });
-  const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
-  const preview = document.getElementById('photoPreview');
-  preview.innerHTML = `<img src="${dataUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
-  document.getElementById('f_photo').value = dataUrl;
-  document.getElementById('photoCropModal').classList.remove('active');
-  cropper.destroy();
-  cropper = null;
-  trackChanges();
+  const btn = document.getElementById('applyCropBtn');
+  btn.disabled = true;
+  btn.innerHTML = 'Загрузка...';
+
+  cropper.getCroppedCanvas({ width: 400, height: 400 }).toBlob(async (blob) => {
+    const fd = new FormData();
+    fd.append('photo', blob, 'photo.jpg');
+
+    try {
+      const r = await fetch(`/api/form/${token}/photo`, {
+        method: 'POST',
+        body: fd
+      });
+      const data = await r.json();
+      if (r.ok) {
+        document.getElementById('f_photo').value = data.photo;
+        const preview = document.getElementById('photoPreview');
+        preview.innerHTML = `<img src="/uploads/${data.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+        
+        const avatarEl = document.getElementById('avatarEl');
+        if (avatarEl) {
+          avatarEl.style.backgroundImage = `url('/uploads/${data.photo}')`;
+          avatarEl.style.backgroundSize = 'cover';
+          avatarEl.style.backgroundPosition = 'center';
+          avatarEl.style.color = 'transparent';
+        }
+
+        toast('Фото сохранено', 'success');
+        trackChanges();
+      } else {
+        toast(data.error || 'Ошибка загрузки', 'error');
+      }
+    } catch {
+      toast('Ошибка соединения', 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '✅ Применить';
+    document.getElementById('photoCropModal').classList.remove('active');
+    cropper.destroy();
+    cropper = null;
+  }, 'image/jpeg', 0.9);
 });
 
 function closeCropModal() {
@@ -904,7 +1003,8 @@ function loadEmployeePhoto(emp) {
   const preview = document.getElementById('photoPreview');
   if (emp.photo) {
     photoEl.value = emp.photo;
-    preview.innerHTML = `<img src="${emp.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
+    let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
+    preview.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`;
   }
   originalValues.photo = emp.photo || '';
   if (photoEl) photoEl.oninput = trackChanges;
@@ -961,7 +1061,7 @@ async function initForm() {
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';
   if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
     const submitBtn = document.getElementById('submitBtn');
-    if (submitBtn) submitBtn.innerHTML = '💾 Сохранить';
+    if (submitBtn) submitBtn.innerHTML = 'Сохранить';
     // Hide feedback section for managers
     const fb = document.getElementById('feedbackSection');
     if (fb) fb.style.display = 'none';

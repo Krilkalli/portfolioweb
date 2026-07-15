@@ -107,8 +107,11 @@ async function notifyEmployeeApproved(employee, comment = '') {
   });
 }
 
-async function notifyEmployeeRejected(employee, reason) {
+async function notifyEmployeeRejected(employee, reason, rejectedFields = []) {
   if (!employee.email) return;
+  const fieldList = rejectedFields.length > 0
+    ? `<p><strong>Не принятые поля:</strong></p><ul style="padding-left:20px;margin:8px 0;">${rejectedFields.map(f => `<li>${f}</li>`).join('')}</ul>`
+    : '';
   await sendMail({
     to: employee.email,
     subject: '❌ Изменения профиля не приняты',
@@ -120,7 +123,8 @@ async function notifyEmployeeRejected(employee, reason) {
         <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
           <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
           <p>К сожалению, менеджер отклонил изменения вашего профиля.</p>
-          ${reason ? `<p><strong>Причина:</strong> ${reason}</p>` : ''}
+          ${fieldList}
+          ${reason ? `<p><strong>Комментарий:</strong> ${reason}</p>` : ''}
           <p>Пожалуйста, свяжитесь с менеджером для уточнения деталей.</p>
         </div>
       </div>

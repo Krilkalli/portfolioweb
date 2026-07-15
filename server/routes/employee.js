@@ -1,9 +1,27 @@
 const express = require('express');
 const router  = express.Router();
+const multer  = require('multer');
+const path    = require('path');
+const fs      = require('fs');
+const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyManagerFeedback } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
+
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadsDir);
+  },
+  filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname);
+    cb(null, uuidv4() + ext);
+  }
+});
+const upload = multer({ storage });
 
 const SPELLER_URL = 'https://speller.yandex.net/services/spellservice.json/checkText';
 
@@ -198,6 +216,27 @@ router.post('/:token/feedback', (req, res) => {
   const feedback = { rating: rating ? Number(rating) : null, comment: comment || '' };
   notifyManagerFeedback(emp, feedback).catch(() => {});
   res.json({ ok: true });
+});
+
+// ── Загрузить фото ────────────────────────────────────────────────────────────
+router.post('/:token/photo', upload.single('photo'), (req, res) => {
+  const emp = helpers.getEmployeeByToken(req.params.token);
+  if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+
+  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+
+  // Удаляем старое фото, если есть
+  if (emp.photo) {
+    const oldPath = path.join(uploadsDir, emp.photo);
+    if (fs.existsSync(oldPath)) {
+      try { fs.unlinkSync(oldPath); } catch (e) { console.error('Ошибка удаления старого фото', e); }
+    }
+  }
+
+  const newPhotoName = req.file.filename;
+  helpers.updateEmployee(emp.id, { photo: newPhotoName });
+
+  res.json({ ok: true, photo: newPhotoName });
 });
 
 module.exports = router;

@@ -40,8 +40,6 @@ let filterData = { positions: [], cities: [], certifications: [] };
 let selectedIds = new Set();
 let currentManager = null;
 let selectedCerts = new Set();
-let mailRecipientMode = 'all'; // 'all' | 'selected' | single employee id
-
 
 async function loadStats() {
   try {
@@ -157,29 +155,33 @@ function renderTable(list) {
   }
   tbody.innerHTML = list.map(e => `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
-      <td class="col-check">
+      <td class="col-check" style="text-align:center;">
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
       </td>
-      <td>
+      <td style="text-align:left;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>
+          ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${e.photo}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>`}
           <div>
             <div class="employee-name"><a href="${e.link}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.email || ''}">${e.email || '—'}</div>
           </div>
         </div>
       </td>
-      <td><span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span></td>
-      <td><span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span></td>
-      <td>
+      <td style="text-align:left;">
+        <span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span>
+      </td>
+      <td style="text-align:left;">
+        <span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span>
+      </td>
+      <td style="text-align:left;">
         ${e.status === 'archived'
           ? '<span class="badge badge-muted">Архив</span>'
           : e.pendingCount > 0
             ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
-      <td style="font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
-      <td class="col-link">
+      <td style="text-align:left;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
+      <td class="col-link" style="text-align:left;">
         ${e.status !== 'archived'
           ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
               <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
@@ -187,24 +189,26 @@ function renderTable(list) {
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-resume">
+      <td class="col-resume" style="text-align:center;">
         ${e.status !== 'archived'
-          ? `<div class="resume-menu" style="position:relative;display:inline-flex;gap:4px;">
-              <a class="btn btn-primary btn-sm" href="/api/employees/${e.id}/resume?format=docx" target="_blank" style="min-width:55px;">📄 DOCX</a>
-              <a class="btn btn-primary btn-sm" href="/api/employees/${e.id}/resume?format=pdf" target="_blank" style="min-width:55px;">📑 PDF</a>
+          ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
+              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
+              <div class="resume-dropdown">
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
+              </div>
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-actions">
+      <td class="col-actions" style="text-align:center;">
         <div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
             ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
-                <div class="action-dropdown">
-                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-                  <button class="action-dropdown-item" onclick="openMailForEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📧 Отправить письмо</button>
-                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
-                </div>`}
+               <div class="action-dropdown">
+                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
+                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+               </div>`}
         </div>
       </td>
     </tr>
@@ -213,6 +217,12 @@ function renderTable(list) {
 
 function copyToClipboard(text) {
   navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
+}
+
+function toggleResumeMenu(btn) {
+  document.querySelectorAll('.resume-dropdown.show').forEach(el => { if (el !== btn.nextElementSibling) el.classList.remove('show'); });
+  const menu = btn.nextElementSibling;
+  if (menu) menu.classList.toggle('show');
 }
 
 function toggleActionMenu(btn) {
@@ -224,6 +234,9 @@ function toggleActionMenu(btn) {
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.action-menu')) {
     document.querySelectorAll('.action-dropdown.show').forEach(el => el.classList.remove('show'));
+  }
+  if (!e.target.closest('.resume-menu')) {
+    document.querySelectorAll('.resume-dropdown.show').forEach(el => el.classList.remove('show'));
   }
 });
 
@@ -532,103 +545,84 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
   }
 });
 
-// ─── Import Excel Modal ──────────────────────────────────────────────────────
-let importMode = null;
+// // // ─── Import Excel Modal ──────────────────────────────────────────────────────
+// // let importMode = null;
 
-document.getElementById('importExcelBtn').addEventListener('click', () => {
-  document.getElementById('importExcelModal').classList.add('active');
-  document.getElementById('importResult').innerHTML = '';
-  document.getElementById('importFileInput').value = '';
-  importMode = null;
-});
+// // document.getElementById('importExcelBtn').addEventListener('click', () => {
+// //   document.getElementById('importExcelModal').classList.add('active');
+// //   document.getElementById('importResult').innerHTML = '';
+// //   document.getElementById('importFileInput').value = '';
+// //   importMode = null;
+// // });
 
-document.getElementById('closeImportModal').addEventListener('click', () => {
-  document.getElementById('importExcelModal').classList.remove('active');
-});
-document.getElementById('importExcelModal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) document.getElementById('importExcelModal').classList.remove('active');
-});
+// // document.getElementById('closeImportModal').addEventListener('click', () => {
+// //   document.getElementById('importExcelModal').classList.remove('active');
+// // });
+// // document.getElementById('importExcelModal').addEventListener('click', (e) => {
+// //   if (e.target === e.currentTarget) document.getElementById('importExcelModal').classList.remove('active');
+// // });
 
-document.getElementById('importAddBtn').addEventListener('click', () => {
-  importMode = 'add';
-  document.getElementById('importFileInput').click();
-});
+// // document.getElementById('importAddBtn').addEventListener('click', () => {
+// //   importMode = 'add';
+// //   document.getElementById('importFileInput').click();
+// // });
 
-document.getElementById('importReplaceBtn').addEventListener('click', () => {
-  if (!confirm('ВНИМАНИЕ! Все текущие сотрудники будут ПОЛНОСТЬЮ УДАЛЕНЫ и заменены данными из файла.\n\nЭто действие необратимо. Продолжить?')) return;
-  importMode = 'replace';
-  document.getElementById('importFileInput').click();
-});
+// // document.getElementById('importReplaceBtn').addEventListener('click', () => {
+// //   if (!confirm('ВНИМАНИЕ! Все текущие сотрудники будут ПОЛНОСТЬЮ УДАЛЕНЫ и заменены данными из файла.\n\nЭто действие необратимо. Продолжить?')) return;
+// //   importMode = 'replace';
+// //   document.getElementById('importFileInput').click();
+// // });
 
-document.getElementById('importFileInput').addEventListener('change', async (e) => {
-  const file = e.target.files[0];
-  if (!file || !importMode) return;
+// document.getElementById('importFileInput').addEventListener('change', async (e) => {
+//   const file = e.target.files[0];
+//   if (!file || !importMode) return;
 
-  const result = document.getElementById('importResult');
-  result.innerHTML = '<span class="spinner"></span> Импорт...';
+//   const result = document.getElementById('importResult');
+//   result.innerHTML = '<span class="spinner"></span> Импорт...';
 
-  const fd = new FormData();
-  fd.append('file', file);
-  fd.append('mode', importMode);
+//   const fd = new FormData();
+//   fd.append('file', file);
+//   fd.append('mode', importMode);
 
-  try {
-    const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
-    const d = await r.json();
-    e.target.value = '';
-    if (r.ok) {
-      const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
-      result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
-      toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
-      await loadEmployees();
-      await loadStats();
-    } else {
-      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
-      toast(d.error || 'Ошибка импорта', 'error');
-    }
-  } catch {
-    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
-    toast('Ошибка при импорте файла', 'error');
-  }
-  setTimeout(() => { result.innerHTML = ''; }, 6000);
-});
+//   try {
+//     const r = await fetch('/api/excel/import', { method: 'POST', body: fd });
+//     const d = await r.json();
+//     e.target.value = '';
+//     if (r.ok) {
+//       const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
+//       result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
+//       toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
+//       await loadEmployees();
+//       await loadStats();
+//     } else {
+//       result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
+//       toast(d.error || 'Ошибка импорта', 'error');
+//     }
+//   } catch {
+//     result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+//     toast('Ошибка при импорте файла', 'error');
+//   }
+//   setTimeout(() => { result.innerHTML = ''; }, 6000);
+// });
 
 // ─── Mass Mail ────────────────────────────────────────────────────────────────
-function openMailModal() {
-  mailRecipientMode = 'all';
-  document.getElementById('massMailSubtitle').textContent = 'Будут отправлены письма всем активным сотрудникам.';
-  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить всем';
-  document.getElementById('massMailModal').classList.add('active');
-  document.getElementById('massMailResult').innerHTML = '';
-  const listEl = document.getElementById('massMailRecipientList');
-  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = ''; }
-}
 
-function openMailForEmployee(id, name) {
-  mailRecipientMode = id;
-  document.getElementById('massMailSubtitle').textContent = `Будет отправлено письмо сотруднику: ${name}`;
-  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить';
-  document.getElementById('massMailModal').classList.add('active');
-  document.getElementById('massMailResult').innerHTML = '';
-  const listEl = document.getElementById('massMailRecipientList');
-  if (listEl) { listEl.style.display = 'none'; listEl.innerHTML = ''; }
-}
-
-function openMailForSelected() {
-  mailRecipientMode = 'selected';
-  document.getElementById('massMailSubtitle').textContent = `Будет отправлено писем: ${selectedIds.size}`;
-  document.getElementById('sendMassMailBtn').textContent = '📧 Отправить выбранным';
-  document.getElementById('massMailModal').classList.add('active');
-  document.getElementById('massMailResult').innerHTML = '';
-  const listEl = document.getElementById('massMailRecipientList');
-  if (listEl) {
-    const names = employees.filter(e => selectedIds.has(e.id)).map(e => e.name);
-    listEl.innerHTML = names.map(n => `<div>• ${escHtml(n)}</div>`).join('');
-    listEl.style.display = names.length ? 'block' : 'none';
+// Открыть модальное окно рассылки
+document.getElementById('massMailBtn').addEventListener('click', () => {
+  // Проверяем, есть ли выбранные сотрудники
+  if (selectedIds.size === 0) {
+    toast('Сначала выберите сотрудников в таблице', 'warning');
+    return;
   }
-}
+  
+  document.getElementById('massMailModal').classList.add('active');
+  document.getElementById('massMailResult').innerHTML = '';
+  
+  // Показываем количество выбранных
+  document.getElementById('selectedRecipientsInfo').textContent = `👥 Выбрано: ${selectedIds.size} сотрудников`;
+});
 
-document.getElementById('massMailBtn').addEventListener('click', openMailModal);
-
+// Закрыть модальное окно
 document.getElementById('closeMassMailModal').addEventListener('click', () => {
   document.getElementById('massMailModal').classList.remove('active');
 });
@@ -639,63 +633,59 @@ document.getElementById('massMailModal').addEventListener('click', (e) => {
   if (e.target === e.currentTarget) document.getElementById('massMailModal').classList.remove('active');
 });
 
-document.getElementById('massMailSelectedBtn')?.addEventListener('click', () => {
-  if (selectedIds.size === 0) { toast('Нет выбранных сотрудников', 'warning'); return; }
-  openMailForSelected();
-});
-
+// Отправка письма выбранным сотрудникам
 document.getElementById('massMailForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  
   const subject = document.getElementById('mailSubject').value.trim();
   const body = document.getElementById('mailBody').value.trim();
-  if (!subject || !body) { toast('Заполните тему и текст письма', 'warning'); return; }
+  
+  if (!subject || !body) { 
+    toast('Заполните тему и текст письма', 'warning'); 
+    return; 
+  }
+
+  if (selectedIds.size === 0) {
+    toast('Нет выбранных сотрудников', 'warning');
+    return;
+  }
 
   const btn = document.getElementById('sendMassMailBtn');
+  const result = document.getElementById('massMailResult');
+  
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
-
-  const payload = {
-    subject,
-    htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
-      body.replace(/\n/g, '<br>') + '</div>',
-  };
-
-  if (mailRecipientMode === 'all') {
-    payload.sendToAll = true;
-  } else if (mailRecipientMode === 'selected') {
-    payload.recipientIds = Array.from(selectedIds);
-  } else {
-    payload.recipientIds = [mailRecipientMode];
-  }
+  result.innerHTML = '';
 
   try {
     const r = await fetch('/api/mass-mailing', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        subject,
+        htmlContent: '<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5;border-radius:8px;">' +
+          body.replace(/\n/g, '<br>') + '</div>',
+        employeeIds: Array.from(selectedIds),
+      }),
     });
+    
     const d = await r.json();
+    
     if (r.ok) {
-      const color = d.sent > 0 ? 'var(--success)' : 'var(--danger)';
-      const icon = d.sent > 0 ? '✅' : '❌';
-      document.getElementById('massMailResult').innerHTML = `<span style="color:${color}">${icon} Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
-      if (d.failed > 0 && d.details) {
-        const firstError = d.details.find(r => !r.success);
-        if (firstError) document.getElementById('massMailResult').innerHTML += `<div style="font-size:0.78rem;color:var(--text-muted);margin-top:4px;">Пример ошибки: ${escHtml(firstError.error || 'неизвестная ошибка')}</div>`;
-      }
-      toast(`Рассылка: ${d.sent} успешно, ${d.failed} с ошибками`, d.sent > 0 ? (d.failed === 0 ? 'success' : 'warning') : 'error');
+      result.innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
+      toast(`Рассылка завершена: ${d.sent} успешно, ${d.failed} с ошибками`, d.failed === 0 ? 'success' : 'warning');
     } else {
-      document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
+      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
       toast(d.error || 'Ошибка рассылки', 'error');
     }
   } catch (err) {
-    document.getElementById('massMailResult').innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
+    result.innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
     toast('Ошибка соединения', 'error');
   }
+  
   btn.disabled = false;
-  btn.textContent = mailRecipientMode === 'all' ? '📧 Отправить всем' : '📧 Отправить';
+  btn.innerHTML = '📧 Отправить выбранным';
 });
-
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {

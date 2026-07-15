@@ -3,7 +3,7 @@ const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const { ZipArchive } = require('archiver');
 const XLSX    = require('xlsx');
-const { helpers } = require('../db');
+const { helpers, FIELD_LABELS } = require('../db');
 const { generateResume } = require('../wordgen');
 const { generatePdfResume } = require('../pdfgen');
 const { generateFromTemplate } = require('../templater');
@@ -100,22 +100,18 @@ router.get('/pending', requireAuth, (req, res) => {
 router.post('/pending/:changeId/approve', requireCanReview, async (req, res) => {
   const ok = helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
   if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
-  const ch = helpers.getChangeById(Number(req.params.changeId));
-  if (ch) {
-    const emp = helpers.getEmployee(ch.employee_id);
-    if (emp) notifyEmployeeApproved(emp, req.body.comment || '').catch(() => {});
-  }
   res.json({ ok: true });
 });
 
 // ── Отклонить одно изменение ──────────────────────────────────────────────────
-router.post('/pending/:changeId/reject', requireCanReview, async (req, res) => {
-  const ok = helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
-  if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
-  const ch = helpers.getChangeById(Number(req.params.changeId));
-  if (ch) {
-    const emp = helpers.getEmployee(ch.employee_id);
-    if (emp) notifyEmployeeRejected(emp, req.body.reason || '').catch(() => {});
+router.post('/pending/:changeId/reject', requireCanReview, (req, res) => {
+  const change = helpers.getChangeById(Number(req.params.changeId));
+  if (!change) return res.status(404).json({ error: 'Изменение не найдено' });
+  helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
+  const emp = helpers.getEmployee(change.employee_id);
+  if (emp) {
+    const labels = [FIELD_LABELS[change.field_name] || change.field_name];
+    notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
   }
   res.json({ ok: true });
 });
@@ -126,7 +122,7 @@ router.post('/employees/:id/approve-all', requireCanReview, async (req, res) => 
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
   const applied = helpers.approveAllForEmployee(id, req.session.managerName || '');
-  notifyEmployeeApproved(emp, req.body.comment || '').catch(() => {});
+  notifyEmployeeApproved(emp).catch(() => {});
   res.json({ ok: true, applied });
 });
 
@@ -135,8 +131,10 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res) => {
   const id  = Number(req.params.id);
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
+  const pendingChanges = helpers.getPendingChangesForEmployee(id);
   helpers.rejectAllForEmployee(id, req.body.reason || '', req.session.managerName || '');
-  notifyEmployeeRejected(emp, req.body.reason).catch(() => {});
+  const labels = pendingChanges.map(c => FIELD_LABELS[c.field_name] || c.field_name);
+  notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
   res.json({ ok: true });
 });
 
@@ -326,13 +324,7 @@ router.put('/settings', requireAuth, (req, res) => {
   // Email менеджера — для админа и скрама
   const canEdit = ['manager_email'];
   if (role === 'admin') {
-    for (const k of [...adminOnly, ...canEdit]) {
-      if (req.body[k] !== undefined) {
-        // Не сохранять пустой пароль — чтобы случайно не стереть старый
-        if (k === 'smtp_pass' && !String(req.body[k]).trim()) continue;
-        helpers.setSetting(k, req.body[k]);
-      }
-    }
+    for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
   } else if (role === 'scrum') {
     for (const k of canEdit) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);
   } else {
@@ -426,9 +418,10 @@ router.post('/template/upload', requireAdmin, upload.single('template'), (req, r
   res.json({ ok: true, message: 'Шаблон загружен. Используется для всех новых резюме.' });
 });
 
-// ── Массовая рассылка ────────────────────────────────────────────────────────
+// ─── Массовая рассылка ────────────────────────────────────────────────────────
 router.post('/mass-mailing', requireCanEdit, async (req, res) => {
-  const { subject, htmlContent, recipientIds, sendToAll } = req.body;
+  const { subject, htmlContent, employeeIds, sendToAll } = req.body;
+  
   if (!subject || !htmlContent) {
     return res.status(400).json({ error: 'Тема и содержание письма обязательны' });
   }
@@ -436,8 +429,8 @@ router.post('/mass-mailing', requireCanEdit, async (req, res) => {
   let employees = [];
   if (sendToAll) {
     employees = helpers.getAllEmployees();
-  } else if (Array.isArray(recipientIds) && recipientIds.length > 0) {
-    employees = recipientIds.map(id => helpers.getEmployee(Number(id))).filter(Boolean);
+  } else if (Array.isArray(employeeIds) && employeeIds.length > 0) {
+    employees = employeeIds.map(id => helpers.getEmployee(Number(id))).filter(Boolean);
   } else {
     return res.status(400).json({ error: 'Не выбраны получатели' });
   }
@@ -484,15 +477,6 @@ router.post('/position-competencies', requireCanEdit, (req, res) => {
   const { position, competency } = req.body;
   if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });
   const list = helpers.addPositionCompetency(position.trim(), competency.trim());
-  res.json({ ok: true, competencies: list });
-});
-
-router.put('/position-competencies/:position/:index', requireCanEdit, (req, res) => {
-  const { position, index } = req.params;
-  const { competency } = req.body;
-  if (!position || index === undefined || !competency) return res.status(400).json({ error: 'Должность, индекс и компетенция обязательны' });
-  const list = helpers.editPositionCompetency(position.trim(), Number(index), competency.trim());
-  if (!list) return res.status(404).json({ error: 'Компетенция не найдена' });
   res.json({ ok: true, competencies: list });
 });
 
