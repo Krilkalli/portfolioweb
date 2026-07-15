@@ -47,7 +47,7 @@ router.get('/employees', requireAuth, (req, res) => {
   const base = `${req.protocol}://${req.get('host')}`;
   const list = helpers.getAllEmployees().map(e => ({
     ...e,
-    link: `${base}/form.html?token=${e.token}&as=manager`,
+    link: `${base}/form.html?token=${e.token}&as`,
   }));
   res.json(list);
 });
@@ -60,7 +60,7 @@ router.get('/employees/:id', requireAuth, (req, res) => {
   res.json({
     ...emp,
     pendingChanges: helpers.getPendingByEmployee(emp.id),
-    link: `${base}/form.html?token=${emp.token}&as=manager`,
+    link: `${base}/form.html?token=${emp.token}&as`,
   });
 });
 
@@ -88,7 +88,7 @@ router.post('/employees/:id/new-token', requireCanEdit, (req, res) => {
   const emp = helpers.regenerateToken(Number(req.params.id));
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as=manager`, employee: emp });
+  res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as`, employee: emp });
 });
 
 // ── Все ожидающие изменения ───────────────────────────────────────────────────
@@ -142,7 +142,7 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res) => {
 router.post('/employees', requireCanEdit, (req, res) => {
   const emp = helpers.createEmployee(req.body);
   const base = `${req.protocol}://${req.get('host')}`;
-  res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as=manager` } });
+  res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
 });
 
 // ── Должности: список ────────────────────────────────────────────────────────

@@ -702,9 +702,9 @@ async function performSubmit(fields) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Отправка...';
 
-  const asManager = new URLSearchParams(location.search).get('as') === 'manager';
+  const asManager = new URLSearchParams(location.search).has('as');
 
-  // Если менеджер открыл форму через дашборд (?as=manager) — применяем напрямую
+  // Если менеджер открыл форму через дашборд (?as) — применяем напрямую
   if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
     try {
       const empId = employee.id;
@@ -1041,7 +1041,7 @@ async function initForm() {
   await loadEmployee();
 
   // If manager opened via dashboard, update submit button text
-  const asManager = new URLSearchParams(location.search).get('as') === 'manager';
+  const asManager = new URLSearchParams(location.search).has('as');
   if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.innerHTML = 'Сохранить';

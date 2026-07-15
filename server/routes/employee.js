@@ -158,17 +158,12 @@ router.post('/:token/submit', async (req, res) => {
   const changes = [];
   for (const fieldName of EDITABLE_FIELDS) {
     if (submitFields[fieldName] === undefined) continue;
-    if (fieldName === 'photo') continue; // photos saved directly
+
     const newNorm = normalizeForComparison(fieldName, submitFields[fieldName]);
     const oldNorm = normalizeForComparison(fieldName, emp[fieldName]);
     if (newNorm !== oldNorm) {
       changes.push({ field_name: fieldName, old_value: storeValue(fieldName, emp[fieldName]), new_value: storeValue(fieldName, submitFields[fieldName]) });
     }
-  }
-
-  // Save photo directly if changed
-  if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
-    helpers.updateEmployee(emp.id, { photo: submitFields.photo });
   }
 
   if (changes.length === 0)
@@ -213,24 +208,14 @@ router.post('/:token/feedback', (req, res) => {
   res.json({ ok: true });
 });
 
-// ── Загрузить фото ────────────────────────────────────────────────────────────
+// ── Загрузить фото (только на диск, не в БД — сохранение через pending changes) ──
 router.post('/:token/photo', upload.single('photo'), (req, res) => {
   const emp = helpers.getEmployeeByToken(req.params.token);
   if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
 
   if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
 
-  // Удаляем старое фото, если есть
-  if (emp.photo) {
-    const oldPath = path.join(uploadsDir, emp.photo);
-    if (fs.existsSync(oldPath)) {
-      try { fs.unlinkSync(oldPath); } catch (e) { console.error('Ошибка удаления старого фото', e); }
-    }
-  }
-
   const newPhotoName = req.file.filename;
-  helpers.updateEmployee(emp.id, { photo: newPhotoName });
-
   res.json({ ok: true, photo: newPhotoName });
 });
 

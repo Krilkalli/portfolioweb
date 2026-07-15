@@ -176,8 +176,8 @@ function renderTable(list) {
       <td style="text-align:left;">
         ${e.status === 'archived'
           ? '<span class="badge badge-muted">Архив</span>'
-          : e.pendingCount > 0
-            ? `<span class="badge badge-warning">⚡ ${e.pendingCount} изм.</span>`
+            : e.pendingCount > 0
+              ? `<a href="/review.html" class="badge badge-warning" style="text-decoration:none;cursor:pointer;">⚡ ${e.pendingCount} изм.</a>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
       <td style="text-align:left;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
