@@ -238,6 +238,7 @@ select.form-control option {
   letter-spacing: 0.06em;
   padding: 14px 16px;
   text-align: left;    /* ← ВАЖНО: выравнивание по левому краю */
+  border: none;
   border-bottom: 2px solid var(--border);
   white-space: nowrap;
   position: sticky;
@@ -246,12 +247,11 @@ select.form-control option {
 }
 .table td {
   padding: 16px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border: none;
   color: var(--text-primary);
   vertical-align: middle;
   text-align: left;    /* ← ВАЖНО: то же выравнивание, что и у th */
 }
-.table tr:last-child td { border-bottom: none; }
 .table tr.row-archived { opacity: 0.45; }
 .table tr.row-archived:hover { opacity: 0.7; }
 .table tbody tr { transition: background var(--transition); }

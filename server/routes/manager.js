@@ -47,7 +47,7 @@ router.get('/employees', requireAuth, async (req, res, next) => {
     const base = `${req.protocol}://${req.get('host')}`;
     const list = (await helpers.getAllEmployees()).map(e => ({
       ...e,
-      link: `${base}/form.html?token=${e.token}&as`,
+      link: `${base}/form.html?token=${e.token}&as=manager`,
     }));
     res.json(list);
   } catch (err) { next(err); }

@@ -776,12 +776,18 @@ const helpers = {
       const ch = await client.query('SELECT * FROM pending_changes WHERE id = $1', [Number(changeId)]);
       if (!ch.rows[0] || ch.rows[0].status !== 'pending') { await client.query('ROLLBACK'); return false; }
       const change = ch.rows[0];
+      const now = new Date().toISOString();
       const emp = await client.query('SELECT * FROM employees WHERE id = $1', [change.employee_id]);
       if (emp.rows[0] && ALLOWED_FIELDS.has(change.field_name)) {
-        const now = new Date().toISOString();
         await client.query(`UPDATE employees SET "${change.field_name}" = $1, updated_at = $2 WHERE id = $3`, [change.new_value, now, change.employee_id]);
+        if (change.field_name === 'contacts') {
+          const lines = (change.new_value || '').split('\n').filter(l => l.trim());
+          if (lines[0]) await client.query('UPDATE employees SET city = $1 WHERE id = $2', [lines[0], change.employee_id]);
+          const email = lines.find(l => l.includes('@'));
+          if (email) await client.query('UPDATE employees SET email = $1 WHERE id = $2', [email, change.employee_id]);
+        }
       }
-      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [new Date().toISOString(), reviewerName, Number(changeId)]);
+      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [now, reviewerName, Number(changeId)]);
       await client.query('COMMIT');
       return true;
     } catch (err) {
@@ -811,6 +817,12 @@ const helpers = {
         for (const ch of changes.rows) {
           if (ALLOWED_FIELDS.has(ch.field_name)) {
             await client.query(`UPDATE employees SET "${ch.field_name}" = $1, updated_at = $2 WHERE id = $3`, [ch.new_value, now, ch.employee_id]);
+            if (ch.field_name === 'contacts') {
+              const lines = (ch.new_value || '').split('\n').filter(l => l.trim());
+              if (lines[0]) await client.query('UPDATE employees SET city = $1 WHERE id = $2', [lines[0], ch.employee_id]);
+              const email = lines.find(l => l.includes('@'));
+              if (email) await client.query('UPDATE employees SET email = $1 WHERE id = $2', [email, ch.employee_id]);
+            }
           }
         }
       }
