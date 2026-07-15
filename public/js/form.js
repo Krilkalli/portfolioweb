@@ -1055,5 +1055,89 @@ async function initForm() {
     const bd = document.getElementById('backToDashManager');
     if (bd) bd.style.display = 'block';
   }
+
+  // --- AI Listeners ---
+  document.querySelectorAll('.ai-enhance-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const targetId = btn.getAttribute('data-target');
+      const textarea = document.getElementById(targetId);
+      const text = textarea.value.trim();
+      if (!text) {
+        toast('Сначала введите текст для улучшения', 'warning');
+        return;
+      }
+      
+      const originalText = btn.textContent;
+      btn.textContent = '⏳ Обработка...';
+      btn.disabled = true;
+      
+      try {
+        const r = await fetch('/api/ai/enhance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          const suggestionBox = document.getElementById('ai_suggestion_' + targetId);
+          if (suggestionBox) {
+            suggestionBox.style.display = 'block';
+            suggestionBox.innerHTML = `
+              <strong>✨ Предложение ИИ:</strong><br>
+              <div style="white-space:pre-wrap; margin-top:8px; margin-bottom:8px;">${d.result}</div>
+              <button class="btn btn-sm btn-primary" onclick="applyAiSuggestion('${targetId}', \`${d.result.replace(/`/g, '\\`')}\`)">Применить</button>
+              <button class="btn btn-sm btn-ghost" onclick="document.getElementById('ai_suggestion_${targetId}').style.display='none'">Отклонить</button>
+            `;
+          }
+        } else {
+          toast(d.error || 'Ошибка ИИ', 'error');
+        }
+      } catch (e) {
+        toast('Ошибка сети', 'error');
+      } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
+      }
+    });
+  });
+
+  const aiReviewBtn = document.getElementById('aiReviewBtn');
+  if (aiReviewBtn) {
+    aiReviewBtn.addEventListener('click', async () => {
+      aiReviewBtn.disabled = true;
+      const originalText = aiReviewBtn.textContent;
+      aiReviewBtn.textContent = '⏳ Анализ...';
+      try {
+        const fields = collectFormData();
+        const r = await fetch('/api/ai/review', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: fields })
+        });
+        const d = await r.json();
+        if (r.ok) {
+          // Show modal with AI comments
+          showModal('✨ Результат проверки ИИ', `<div style="white-space:pre-wrap;">${d.result}</div>`);
+        } else {
+          toast(d.error || 'Ошибка ИИ', 'error');
+        }
+      } catch (e) {
+        toast('Ошибка сети', 'error');
+      } finally {
+        aiReviewBtn.textContent = originalText;
+        aiReviewBtn.disabled = false;
+      }
+    });
+  }
 }
+
+window.applyAiSuggestion = function(targetId, newText) {
+  const textarea = document.getElementById(targetId);
+  if (textarea) {
+    textarea.value = newText;
+    document.getElementById('ai_suggestion_' + targetId).style.display = 'none';
+    toast('Текст обновлен', 'success');
+  }
+};
+
 initForm();

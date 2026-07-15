@@ -319,9 +319,9 @@ router.get('/settings', requireAuth, (req, res) => {
 // ── Настройки: сохранить ─────────────────────────────────────────────────────
 router.put('/settings', requireAuth, (req, res) => {
   const role = req.session.managerRole || 'admin';
-  // SMTP настройки — только для админа
-  const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from'];
-  // Email менеджера — для админа и скрама
+  // SMTP and AI Settings - admin only
+  const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_prompt_fill', 'ai_prompt_review'];
+  // Email - editable by scrumменеджера — для админа и скрама
   const canEdit = ['manager_email'];
   if (role === 'admin') {
     for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) helpers.setSetting(k, req.body[k]);

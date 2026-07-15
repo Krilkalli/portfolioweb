@@ -160,6 +160,7 @@ function renderEmployeeCard(group) {
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
       <div class="actions">
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id})">✨ Анализ ИИ</button>
         <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})">✅ Подтвердить всё</button>
         <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')">❌ Отклонить всё</button>
       </div>
@@ -259,6 +260,40 @@ function removeEmployeeCard(employeeId) {
     }, 300);
   }
 }
+
+window.reviewWithAI = async function(employeeId) {
+  const group = pendingGroups.find(g => g.employee_id === employeeId);
+  if (!group) return;
+  
+  const payloadData = {};
+  group.changes.forEach(c => {
+    payloadData[c.field_name] = c.new_value;
+  });
+
+  const btn = event.target;
+  const originalText = btn.textContent;
+  btn.textContent = '⏳ Анализ...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/api/ai/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: payloadData })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      showModal('✨ Результат проверки ИИ', `<div style="white-space:pre-wrap;">${d.result}</div>`);
+    } else {
+      toast(d.error || 'Ошибка ИИ', 'error');
+    }
+  } catch (e) {
+    toast('Ошибка сети', 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+};
 
 // ─── Отклонение ───────────────────────────────────────────────────────────────
 function openRejectModal(id, type, employeeId = null) {

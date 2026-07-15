@@ -98,6 +98,7 @@ app.use('/api/auth',    require('./routes/auth'));
 app.use('/api',         require('./routes/manager'));   // /api/employees, /api/pending, /api/settings, /api/stats
 app.use('/api/form',    require('./routes/employee'));
 app.use('/api/excel',   require('./routes/excel'));
+app.use('/api/ai',      require('./routes/ai'));
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
 app.use((req, res) => {

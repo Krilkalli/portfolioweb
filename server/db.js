@@ -475,7 +475,14 @@ function init() {
   // Настройки
   let settings = loadSettings();
   let changed = false;
-  const defs = { smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'' };
+  const defs = { 
+    smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'',
+    ai_provider: 'yandexgpt',
+    ai_api_key: '',
+    ai_folder_id: '',
+    ai_prompt_fill: 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.',
+    ai_prompt_review: 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".'
+  };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
   if (!settings.positions || !Array.isArray(settings.positions) || settings.positions.length === 0) {
     settings.positions = ['Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];

@@ -366,7 +366,11 @@
       <!-- ===== ОБО МНЕ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">👤 Обо мне</div>
+          <div class="section-card-title">
+            👤 Обо мне
+            <button type="button" class="btn btn-ghost ai-enhance-btn edit-only" data-target="f_about" style="float:right; padding:2px 8px; font-size:0.8rem;">✨ ИИ-Ассистент</button>
+          </div>
+          <div class="ai-suggestion-box" id="ai_suggestion_f_about" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
           <div id="viewAbout" class="view-only"></div>
 <div class="example-hint" onclick="toggleTemplate('about')">👁 Показать пример</div>
@@ -380,7 +384,11 @@
       <!-- ===== КОМПЕТЕНЦИИ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">📋Компетенции</div>
+          <div class="section-card-title">
+            📋Компетенции
+            <button type="button" class="btn btn-ghost ai-enhance-btn edit-only" data-target="f_competencies" style="float:right; padding:2px 8px; font-size:0.8rem;">✨ ИИ-Ассистент</button>
+          </div>
+          <div class="ai-suggestion-box" id="ai_suggestion_f_competencies" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_competencies" class="form-control edit-only" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
           <div id="viewCompetencies" class="view-only"></div>
           <div class="example-hint" onclick="toggleTemplate('competencies')">👁 Показать чек-лист компетенций</div>
@@ -450,7 +458,8 @@
     </div>
 
     <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
-      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">✉️ Отправить на проверку</button>
+      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">📤 Отправить на проверку</button>
+      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);">✨ Проверить анкету ИИ</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
       <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
     </div>

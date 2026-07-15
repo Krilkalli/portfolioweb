@@ -119,6 +119,47 @@
       </form>
     </div>
 
+    <!-- AI Settings Card -->
+    <div class="card" data-role="admin">
+      <div class="card-header">
+        <span class="card-title">✨ ИИ-Ассистент (Нейросети)</span>
+      </div>
+      <div class="smtp-hint">
+        Настройка искусственного интеллекта для помощи сотрудникам при заполнении профиля и менеджерам при проверке.
+      </div>
+      <form id="aiForm">
+        <div class="form-group">
+          <label class="form-label" for="ai_provider">Провайдер ИИ</label>
+          <select id="ai_provider" name="ai_provider" class="form-control">
+            <option value="yandexgpt">YandexGPT</option>
+            <option value="gigachat">GigaChat (в разработке)</option>
+            <option value="openai">OpenAI (в разработке)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_folder_id">ID Каталога (Folder ID) <span class="text-muted" style="font-weight:400;">— Для YandexGPT</span></label>
+          <input id="ai_folder_id" name="ai_folder_id" type="text" class="form-control" placeholder="Например: b1g76p4n2vjdpk61g8q6">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_api_key">API Ключ (Secret Key)</label>
+          <input id="ai_api_key" name="ai_api_key" type="password" class="form-control" placeholder="Оставьте пустым, чтобы не менять">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_prompt_fill">Промпт для помощи сотруднику <span class="text-muted" style="font-weight:400;">— Автоматический запрос при улучшении текста</span></label>
+          <textarea id="ai_prompt_fill" name="ai_prompt_fill" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_prompt_review">Промпт для проверки (ревью) <span class="text-muted" style="font-weight:400;">— Автоматический запрос при поиске ошибок</span></label>
+          <textarea id="ai_prompt_review" name="ai_prompt_review" class="form-control" rows="3"></textarea>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary" id="saveAiBtn">Сохранить настройки ИИ</button>
+        </div>
+        <div id="aiResult" style="margin-top:12px;font-size:0.875rem;"></div>
+      </form>
+    </div>
+
     <!-- Scrum-only email section -->
     <div class="card" data-role="scrum" style="display:none;">
       <div class="card-header">

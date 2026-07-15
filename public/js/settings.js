@@ -190,6 +190,14 @@ async function loadSettings() {
     document.getElementById('smtp_user').value    = s.smtp_user    || '';
     document.getElementById('smtp_from').value    = s.smtp_from    || '';
     document.getElementById('manager_email').value = s.manager_email || '';
+
+    // AI Settings
+    if (document.getElementById('ai_provider')) {
+      document.getElementById('ai_provider').value = s.ai_provider || 'yandexgpt';
+      document.getElementById('ai_folder_id').value = s.ai_folder_id || '';
+      document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || '';
+      document.getElementById('ai_prompt_review').value = s.ai_prompt_review || '';
+    }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
 }
 
@@ -223,15 +231,52 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
       result.textContent = '✅ Настройки успешно сохранены';
       document.getElementById('smtp_pass').value = '';
     } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
-  } catch { toast('Ошибка соединения', 'error'); }
+  } catch { toast('Ошибка сети', 'error'); }
   finally {
     btn.disabled = false;
-    btn.textContent = '💾 Сохранить настройки';
+    btn.textContent = 'Сохранить настройки';
     setTimeout(() => { result.textContent = ''; }, 5000);
   }
 });
 
-// ─── Test SMTP ──────────────────────────────────────────────────────────────
+// -- Save AI --
+document.getElementById('aiForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('saveAiBtn');
+  const result = document.getElementById('aiResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Сохранение...';
+
+  const payload = {
+    ai_provider:      document.getElementById('ai_provider').value,
+    ai_folder_id:     document.getElementById('ai_folder_id').value.trim(),
+    ai_prompt_fill:   document.getElementById('ai_prompt_fill').value.trim(),
+    ai_prompt_review: document.getElementById('ai_prompt_review').value.trim(),
+  };
+  const key = document.getElementById('ai_api_key').value;
+  if (key) payload.ai_api_key = key;
+
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      toast('Настройки ИИ сохранены', 'success');
+      result.style.color = 'var(--success)';
+      result.textContent = '✅ Настройки успешно сохранены';
+      document.getElementById('ai_api_key').value = '';
+    } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
+  } catch { toast('Ошибка сети', 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = 'Сохранить настройки ИИ';
+    setTimeout(() => { result.textContent = ''; }, 5000);
+  }
+});
+
+// -- Test SMTP --──────────────────────────────────────────────────────────────
 document.getElementById('testEmailBtn').addEventListener('click', async () => {
   const btn = document.getElementById('testEmailBtn');
   const result = document.getElementById('smtpResult');
