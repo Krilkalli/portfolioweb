@@ -22,6 +22,10 @@ const FIELD_LABELS = {
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
   certification: 'Сертификация 1С',
+  email: 'Email',
+  city: 'Город',
+  phone: 'Телефон',
+  photo: 'Фото',
 };
 
 // ─── Форматирование значений для «Было / Стало» ─────────────────────────────
@@ -176,6 +180,14 @@ function renderDiffField(change) {
   const oldVal = formatDiffValue(change.field_name, change.old_value) || '(пусто)';
   const newVal = formatDiffValue(change.field_name, change.new_value) || '(пусто)';
 
+  const isPhoto = change.field_name === 'photo';
+  const oldPhotoHtml = isPhoto
+    ? (change.old_value ? `<img src="/uploads/${change.old_value}" style="max-width:120px;max-height:120px;border-radius:8px;object-fit:cover;">` : '<span style="color:var(--text-muted)">(нет фото)</span>')
+    : escHtml(oldVal);
+  const newPhotoHtml = isPhoto && change.new_value
+    ? `<img src="/uploads/${change.new_value}" style="max-width:120px;max-height:120px;border-radius:8px;object-fit:cover;">`
+    : escHtml(newVal);
+
   return `
     <div class="diff-field" id="change-${change.id}">
       <div class="diff-field-label">
@@ -188,11 +200,11 @@ function renderDiffField(change) {
       <div class="diff-cols">
         <div class="diff-col diff-col-old">
           <div class="diff-col-title">Было</div>
-          <div class="diff-text old-text">${escHtml(oldVal)}</div>
+          <div class="diff-text old-text">${oldPhotoHtml}</div>
         </div>
         <div class="diff-col diff-col-new">
           <div class="diff-col-title">Стало</div>
-          <div class="diff-text new-text">${escHtml(newVal)}</div>
+          <div class="diff-text new-text">${newPhotoHtml}</div>
         </div>
       </div>
     </div>
