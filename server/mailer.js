@@ -1,12 +1,12 @@
 const nodemailer = require('nodemailer');
 const { helpers } = require('./db');
 
-function getTransport() {
-  const host = helpers.getSetting('smtp_host');
-  const port = parseInt(helpers.getSetting('smtp_port') || '587');
-  const user = helpers.getSetting('smtp_user');
-  const pass = helpers.getSetting('smtp_pass');
-  const from = helpers.getSetting('smtp_from') || 'Портфолио IS1C <noreply@is1c.ru>';
+async function getTransport() {
+  const host = await helpers.getSetting('smtp_host');
+  const port = parseInt(await helpers.getSetting('smtp_port') || '587');
+  const user = await helpers.getSetting('smtp_user');
+  const pass = await helpers.getSetting('smtp_pass');
+  const from = await helpers.getSetting('smtp_from') || 'Портфолио IS1C <noreply@is1c.ru>';
 
   if (!host || !user || !pass) return null;
 
@@ -14,7 +14,7 @@ function getTransport() {
 }
 
 async function sendMail({ to, subject, html }) {
-  const t = getTransport();
+  const t = await getTransport();
   if (!t) {
     console.warn('⚠️  SMTP не настроен — письмо не отправлено:', subject);
     return false;
@@ -30,15 +30,13 @@ async function sendMail({ to, subject, html }) {
 }
 
 async function testConnection() {
-  const t = getTransport();
+  const t = await getTransport();
   if (!t) throw new Error('SMTP не настроен');
   await t.transport.verify();
 }
 
-// ─── Шаблоны писем ───────────────────────────────────────────────────────────
-
 async function notifyManagerNewSubmission(employee, serverUrl) {
-  const managerEmail = helpers.getSetting('manager_email');
+  const managerEmail = await helpers.getSetting('manager_email');
   if (!managerEmail) return;
 
   await sendMail({
@@ -129,9 +127,9 @@ async function notifyEmployeeRejected(employee, reason, rejectedFields = []) {
 }
 
 async function notifyManagerFeedback(employee, feedback) {
-  const managerEmail = helpers.getSetting('manager_email');
+  const managerEmail = await helpers.getSetting('manager_email');
   if (!managerEmail || !feedback) return;
-  
+
   await sendMail({
     to: managerEmail,
     subject: `💬 Обратная связь от ${employee.name}`,

@@ -2,21 +2,49 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const Database = require('better-sqlite3');
+const { Pool } = require('pg');
 const config = require('./config');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const pool = new Pool({
+  host: config.pg.host,
+  port: config.pg.port,
+  database: config.pg.database,
+  user: config.pg.user,
+  password: config.pg.password,
+});
 
-const DB_PATH = path.join(DATA_DIR, 'portfolio.db');
-const db = new Database(DB_PATH);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+pool.on('error', err => console.error('PG pool error:', err.message));
+
+// ─── Query helpers (supports both array and @named params) ────────────────────
+function _query(sql, params) {
+  if (params && !Array.isArray(params)) {
+    let idx = 0;
+    const values = [];
+    const converted = sql.replace(/@(\w+)/g, (_, key) => {
+      values.push(params[key]);
+      return `$${++idx}`;
+    });
+    return pool.query(converted, values);
+  }
+  return pool.query(sql, params);
+}
+
+function _get(sql, ...params) {
+  return _query(sql, ...params).then(r => r.rows[0] || null);
+}
+
+function _all(sql, ...params) {
+  return _query(sql, ...params).then(r => r.rows);
+}
+
+function _run(sql, ...params) {
+  return _query(sql, ...params);
+}
 
 // ─── Schema ──────────────────────────────────────────────────────────────────
-db.exec(`
+const SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS employees (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     name_lower TEXT NOT NULL DEFAULT '',
     education TEXT DEFAULT '[]',
@@ -41,7 +69,7 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
 
   CREATE TABLE IF NOT EXISTS pending_changes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
     field_name TEXT,
     old_value TEXT,
@@ -49,6 +77,7 @@ db.exec(`
     submitted_at TEXT,
     status TEXT DEFAULT 'pending',
     reviewed_at TEXT DEFAULT '',
+    reviewed_by TEXT DEFAULT '',
     reject_reason TEXT DEFAULT ''
   );
   CREATE INDEX IF NOT EXISTS idx_changes_status ON pending_changes(status);
@@ -60,7 +89,7 @@ db.exec(`
   );
 
   CREATE TABLE IF NOT EXISTS employee_feedback (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
     rating INTEGER,
     comment TEXT DEFAULT '',
@@ -69,64 +98,20 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id);
 
   CREATE TABLE IF NOT EXISTS managers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
-    created_at TEXT
+    created_at TEXT,
+    role TEXT DEFAULT 'admin'
   );
-`);
-// Миграция: добавить колонку status если БД создана до этого обновления
-try { db.exec("ALTER TABLE employees ADD COLUMN status TEXT NOT NULL DEFAULT 'active'"); } catch (e) {}
-// Миграция: добавить колонку reviewed_by в pending_changes
-try { db.exec("ALTER TABLE pending_changes ADD COLUMN reviewed_by TEXT DEFAULT ''"); } catch (e) {}
-// Миграция: добавить колонку photo в employees
-try { db.exec("ALTER TABLE employees ADD COLUMN photo TEXT DEFAULT ''"); } catch (e) {}
-// Миграция: добавить колонку role в managers
-try { db.exec("ALTER TABLE managers ADD COLUMN role TEXT DEFAULT 'admin'"); } catch (e) {}
 
-// ─── Подготовленные запросы ──────────────────────────────────────────────────
-const stGetSetting   = db.prepare('SELECT value FROM settings WHERE key = ?');
-const stSetSetting   = db.prepare('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)');
-const stDelSetting   = db.prepare('DELETE FROM settings WHERE key = ?');
-const stGetAllEmployees = db.prepare("SELECT * FROM employees WHERE status = 'active' ORDER BY name_lower");
-const stGetAllEmployeesAll = db.prepare("SELECT * FROM employees ORDER BY CASE WHEN status='archived' THEN 1 ELSE 0 END, name_lower");
-const stGetEmployee  = db.prepare('SELECT * FROM employees WHERE id = ?');
-const stGetByToken   = db.prepare('SELECT * FROM employees WHERE token = ?');
-const stGetByEmail   = db.prepare('SELECT * FROM employees WHERE email = ? AND email != \'\' LIMIT 1');
-const stGetByName    = db.prepare('SELECT * FROM employees WHERE name_lower = ? LIMIT 1');
-const stInsertEmployee = db.prepare(`INSERT INTO employees
-  (name, name_lower, education, position, contacts, experience, about, competencies,
-   project_experience, certification, email, city, phone, token, status, created_at, updated_at)
-  VALUES (@name, @name_lower, @education, @position, @contacts, @experience, @about,
-   @competencies, @project_experience, @certification, @email, @city, @phone, @token, @status, @created_at, @updated_at)`);
-const stUpdateEmployee = db.prepare(`UPDATE employees SET
-  name=@name, name_lower=@name_lower, education=@education, position=@position,
-  contacts=@contacts, experience=@experience, about=@about, competencies=@competencies,
-  project_experience=@project_experience, certification=@certification,
-  email=@email, city=@city, phone=@phone, updated_at=@updated_at WHERE id=@id`);
-const stArchiveEmployee = db.prepare("UPDATE employees SET status='archived', updated_at=? WHERE id=?");
-const stRestoreEmployee = db.prepare("UPDATE employees SET status='active', updated_at=? WHERE id=?");
-const stGetChanges    = db.prepare('SELECT * FROM pending_changes WHERE status = ? ORDER BY submitted_at');
-const stGetChangesAll = db.prepare('SELECT * FROM pending_changes ORDER BY submitted_at');
-const stGetChangesByEmp = db.prepare('SELECT * FROM pending_changes WHERE employee_id = ? AND status = ?');
-const stGetChange     = db.prepare('SELECT * FROM pending_changes WHERE id = ?');
-const stHasPending    = db.prepare('SELECT 1 FROM pending_changes WHERE employee_id = ? AND status = \'pending\' LIMIT 1');
-const stCountPending  = db.prepare('SELECT COUNT(DISTINCT employee_id) cnt FROM pending_changes WHERE status = \'pending\'');
-const stInsertChange  = db.prepare(`INSERT INTO pending_changes
-  (employee_id, field_name, old_value, new_value, submitted_at, status)
-  VALUES (?, ?, ?, ?, ?, 'pending')`);
-const stDelPendingForEmp = db.prepare('DELETE FROM pending_changes WHERE employee_id = ? AND status = \'pending\'');
-const stApproveChange = db.prepare("UPDATE pending_changes SET status = 'approved', reviewed_at = ?, reviewed_by = ? WHERE id = ?");
-const stRejectChange  = db.prepare("UPDATE pending_changes SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, reject_reason = ? WHERE id = ?");
-const stApproveAll    = db.prepare("UPDATE pending_changes SET status = 'approved', reviewed_at = ?, reviewed_by = ? WHERE employee_id = ? AND status = 'pending'");
-const stRejectAll     = db.prepare("UPDATE pending_changes SET status = 'rejected', reviewed_at = ?, reviewed_by = ?, reject_reason = ? WHERE employee_id = ? AND status = 'pending'");
-const stInsertFeedback = db.prepare('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES (?, ?, ?, ?)');
-const stGetManagerByEmail = db.prepare('SELECT * FROM managers WHERE email = ?');
-const stGetManagerById   = db.prepare('SELECT * FROM managers WHERE id = ?');
-const stGetAllManagers   = db.prepare('SELECT id, name, email, role, created_at FROM managers ORDER BY name');
-const stInsertManager    = db.prepare('INSERT INTO managers (name, email, password_hash, role, created_at) VALUES (?, ?, ?, ?, ?)');
-const stDeleteManager    = db.prepare('DELETE FROM managers WHERE id = ?');
+  CREATE TABLE IF NOT EXISTS sessions (
+    sid TEXT PRIMARY KEY,
+    expired REAL NOT NULL,
+    sess TEXT NOT NULL
+  );
+`;
 
 // ─── Нормализация имени для поиска дубликатов ──────────────────────────────
 function normalizeName(name) {
@@ -157,14 +142,8 @@ const FIELD_LABELS = {
 
 // ─── Парсинг legacy-текста образования в JSON-массив ──────────────────────
 function parseLegacyEducationLines(val) {
-  // legacy formats:
-  //   "ВУЗ\nСтепень\nСпециальность\nГод"  (newline-separated)
-  //   "ВУЗ,\nСтепень,\nСпециальность,\nГод;"  (comma/semicolon delimited)
-  //   "inst1,deg1,spec1,year1;inst2,deg2,spec2,year2"  (fully delimited)
   const text = String(val || '').trim();
   if (!text) return [];
-
-  // Try fully delimited format (; between entries, , between fields)
   if (text.includes(';') || text.includes(',\n') === false) {
     const entries = text.split(';').filter(e => e.trim());
     if (entries.some(e => e.split(',').length >= 2)) {
@@ -179,9 +158,6 @@ function parseLegacyEducationLines(val) {
       }).filter(e => e.institution);
     }
   }
-
-  // Newline-separated format: each block separated by double newline,
-  // within a block each field on its own line
   const blocks = text.split(/\n\s*\n/);
   return blocks.filter(b => b.trim()).map(block => {
     const lines = block.split('\n').filter(l => l.trim());
@@ -234,183 +210,40 @@ function prepEmployee(emp) {
 }
 
 // ─── Настройки ────────────────────────────────────────────────────────────────
-function loadSettings() {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
+async function loadSettings() {
+  const rows = await _all('SELECT key, value FROM settings');
   const s = Object.fromEntries(rows.map(r => [r.key, r.value]));
   try { s.positions = s.positions ? JSON.parse(s.positions) : []; } catch { s.positions = []; }
   return s;
 }
-function saveSettings(obj) {
-  const tx = db.transaction(() => {
+
+async function saveSettings(obj) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
     for (const [k, v] of Object.entries(obj)) {
       const val = k === 'positions' ? JSON.stringify(v) : String(v ?? '');
-      stSetSetting.run(k, val);
+      await client.query(
+        'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+        [k, val]
+      );
     }
-  });
-  tx();
-}
-
-// ─── Миграция из CSV ──────────────────────────────────────────────────────────
-function migrateFromCsv() {
-  const count = db.prepare('SELECT COUNT(*) cnt FROM employees').get().cnt;
-  if (count > 0) return;
-
-  const csvDir = DATA_DIR;
-  const csvFiles = ['employees.csv', 'pending_changes.csv', 'settings.csv'];
-
-  // Read CSV files using the old functions still in this file
-  // We need inline CSV parsing since we removed those functions
-  function readCsv(filePath) {
-    if (!fs.existsSync(filePath)) return [];
-    try {
-      const content = fs.readFileSync(filePath, 'utf8');
-      return parseCsv(content);
-    } catch { return []; }
-  }
-
-  function parseCsv(content) {
-    if (content.charCodeAt(0) === 0xFEFF) content = content.slice(1);
-    const rows = [];
-    const lines = content.split(/\r?\n/);
-    if (lines.length < 2) return rows;
-    const headers = parseRow(lines[0]);
-    let i = 1;
-    while (i < lines.length) {
-      if (!lines[i].trim()) { i++; continue; }
-      let line = lines[i];
-      let quoteCount = (line.match(/"/g) || []).length;
-      while (quoteCount % 2 !== 0 && i + 1 < lines.length) {
-        i++;
-        line += '\n' + lines[i];
-        quoteCount = (line.match(/"/g) || []).length;
-      }
-      const values = parseRow(line);
-      const obj = {};
-      headers.forEach((h, idx) => { obj[h] = values[idx] ?? ''; });
-      rows.push(obj);
-      i++;
-    }
-    return rows;
-  }
-
-  function parseRow(line) {
-    const fields = [];
-    let i = 0;
-    while (i < line.length) {
-      if (line[i] === '"') {
-        i++;
-        let val = '';
-        while (i < line.length) {
-          if (line[i] === '"' && line[i+1] === '"') { val += '"'; i += 2; }
-          else if (line[i] === '"') { i++; break; }
-          else { val += line[i]; i++; }
-        }
-        fields.push(val);
-        if (line[i] === ',') i++;
-      } else {
-        let end = line.indexOf(',', i);
-        if (end === -1) end = line.length;
-        fields.push(line.slice(i, end));
-        i = end + 1;
-      }
-    }
-    if (line.endsWith(',')) fields.push('');
-    return fields;
-  }
-
-  // migrate settings.csv
-  try {
-    const setRows = readCsv(path.join(csvDir, 'settings.csv'));
-    for (const r of setRows) {
-      if (r.key) stSetSetting.run(r.key, r.value ?? '');
-    }
-  } catch {}
-
-  // migrate pending_changes.csv
-  try {
-    const chgRows = readCsv(path.join(csvDir, 'pending_changes.csv'));
-    for (const r of chgRows) {
-      if (r.employee_id) {
-        stInsertChange.run(Number(r.employee_id), r.field_name || '', r.old_value || '', r.new_value || '', r.submitted_at || new Date().toISOString());
-      }
-    }
-  } catch {}
-
-  // migrate employees.csv with deduplication
-  try {
-    const empRows = readCsv(path.join(csvDir, 'employees.csv'));
-    const groups = {};
-    for (const r of empRows) {
-      if (!r.name) continue;
-      const key = normalizeName(r.name);
-      if (!groups[key]) { groups[key] = []; }
-      groups[key].push(r);
-    }
-
-    const insertTx = db.transaction((emps) => {
-      for (const e of emps) {
-        const p = prepEmployee(e);
-        stInsertEmployee.run(p);
-      }
-    });
-
-    const merged = [];
-    for (const [key, rows] of Object.entries(groups)) {
-      // Keep the one with most non-empty fields; tie-break by highest id
-      rows.sort((a, b) => {
-        const aFilled = Object.values(a).filter(v => v && v !== '').length;
-        const bFilled = Object.values(b).filter(v => v && v !== '').length;
-        if (aFilled !== bFilled) return bFilled - aFilled;
-        return (Number(b.id) || 0) - (Number(a.id) || 0);
-      });
-      merged.push(rows[0]);
-    }
-
-    insertTx(merged);
-
-    // rename CSV files to .bak
-    for (const f of csvFiles) {
-      const fp = path.join(csvDir, f);
-      if (fs.existsSync(fp)) {
-        const bak = fp + '.bak';
-        if (fs.existsSync(bak)) fs.unlinkSync(bak);
-        fs.renameSync(fp, bak);
-      }
-    }
-
-    console.log(`✅ Мигрировано ${merged.length} сотрудников из CSV в SQLite (удалено дубликатов: ${Object.keys(groups).length - merged.length})`);
+    await client.query('COMMIT');
   } catch (err) {
-    console.error('⚠️ Ошибка миграции CSV:', err.message);
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
 }
 
-// ─── Seed ──────────────────────────────────────────────────────────────────────
-const SEED = [
-  { name:'Бочкова Виктория Андреевна', education:'Красноярский государственный аграрный университет\nБакалавриат\nЗемлеустройство и кадастры\n2019', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nV.Bochkova@is1c.ru', experience:'Общий стаж: 5,5 лет\nАО «Корпоративные ИТ-проекты» Младший консультант по внедрению 1С, 01.2024 - настоящее время', about:'', competencies:'1С:ЗУП; 1С:ДО; бесшовная интеграция с «1С:Документооборотом»; внедрение ЭДО модуль Контур.Диадок для 1С', project_experience:'Клиент: ООО "ИНК"\nПродукты: 1С:ДО, Интеграция с 1С:ДО; модуль Контур.Диадок для 1С\nОбласти внедрения: бесшовная интеграция, работа с ЭДО, сопровождение', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Специалист-консультант по настройке и администрированию 1С:Документооборота;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Специалист-консультант. Бухгалтерия 8.\n\nОбучающие курсы: -', email:'V.Bochkova@is1c.ru', city:'Новосибирск' },
-  { name:'Батуева Мария Юрьевна', education:'Новосибирский государственный технический университет\nКонструкторско-технологическое обеспечение машиностроительных производств\n2025', position:'Стажер-консультант по внедрению 1С', contacts:'Новосибирск\nM.Bytueva@is1c.ru', experience:'Общий стаж: менее 1 года\nАО Корпоративные ИТ-проекты Стажер-консультант, 01.2025 - настоящее время', about:'', competencies:'Складской учет 1С:ERP УХ\nМоделирование БП\nПроектирование БП', project_experience:'2026\nКлиент: крупнейший производитель ПЭТ-упаковочной ленты в СНГ\nПродукт: 1С: ERP УХ\nОбласти внедрения: Складской учет', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8.\n\nОбучающие курсы: -', email:'M.Bytueva@is1c.ru', city:'Новосибирск' },
-  { name:'Рафальский Артём Владимирович', education:'Новосибирский государственный технический университет\nБакалавриат\nМенеджмент организаций\n2022', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nA.Rafalskij@is1c.ru', experience:'Общий стаж: 5 лет\nСтаж работы в 1С: 01.2023 - настоящее время', about:'', competencies:'1С:ERP', project_experience:'Казначейство\nЛогистика\nСклады\nЗакупки\nПродажи\nНСИ', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Профессионал. Бухгалтерия 8.\n\nОбучающие курсы: -', email:'A.Rafalskij@is1c.ru', city:'Новосибирск' },
-  { name:'Касимова Анна Владимировна', education:'Уточнить', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nA.Kasimova@is1c.ru', experience:'Общий стаж:', about:'', competencies:'', project_experience:'', certification:'Сертификация 1С:\n1С:Профессионал. Платформа 1С:Предприятие 8.3;\n1С:Специалист-консультант по внедрению подсистем регламентированного учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'A.Kasimova@is1c.ru', city:'Новосибирск' },
-  { name:'Чайкин Артём Алексеевич', education:'Уточнить', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nA.Chaikin@is1c.ru', experience:'Общий стаж:', about:'', competencies:'', project_experience:'', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Специалист-консультант. Бухгалтерия 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Профессионал. Документооборот 8.\n\nОбучающие курсы: -', email:'A.Chaikin@is1c.ru', city:'Новосибирск' },
-  { name:'Горчакова Екатерина Вадимовна', education:'Уточнить', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nE.Gorchakova@is1c.ru', experience:'Общий стаж:', about:'', competencies:'1С:ERP УП 2\n1С: БП КОРП 3.0\n1С УПП 1.3, блок ЗиК 2.5', project_experience:'Регламентированный учет (БУ и НУ)\nНалоговый учет (НДС)\nУчет затрат\nЗакрытие месяца\nЗарплатный учет', certification:'Сертификация 1С:\n1С:Профессионал по подсистеме Международный финансовый учет в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'E.Gorchakova@is1c.ru', city:'Новосибирск' },
-  { name:'Апухтина Радмила Олеговна', education:'Уточнить', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nR.Apuhtina@is1c.ru', experience:'Общий стаж:', about:'', competencies:'1С:ERP УП 2', project_experience:'Оперативный учет (закупки, склад, продажи)', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'R.Apuhtina@is1c.ru', city:'Новосибирск' },
-  { name:'Мазова Маргарита Михайловна', education:'Сибирский государственный университет путей сообщения\nЭкономика строительного бизнеса', position:'Консультант по внедрению 1С', contacts:'Новосибирск\nM.Mazova@is1c.ru', experience:'Общий стаж: 5 лет\nКонсультант по внедрению 1С, 2021 - настоящее время', about:'', competencies:'1С: ERP', project_experience:'Тестирование; написание инструкций; постановка задач программисту 1С; тестирование на соответствие ТЗ', certification:'Сертификация 1С:\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'M.Mazova@is1c.ru', city:'Новосибирск' },
-  { name:'Бордавкова Ксения Анатольевна', education:'Ульяновский государственный педагогический университет\nПреподаватель географии и экологии', position:'Консультант по внедрению 1С', contacts:'Ульяновск\nK.Bordavkova@is1c.ru', experience:'Общий стаж: 5 лет\nКонсультант по внедрению 1С, 2023 - настоящее время', about:'', competencies:'1С: ERP Управление предприятием 2;\n1С: Управление холдингом 3;\nТранспортная логистика КОРП;\nГНИВЦ: Налоговый мониторинг', project_experience:'Продукт: 1С: ERP Управление предприятием 2\nОбласти внедрения: Блок «Казначейство»\n\nПродукт: 1С: Управление холдингом 3\nОбласти внедрения: Блок «Согласование»', certification:'Сертификация 1С:\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'K.Bordavkova@is1c.ru', city:'Ульяновск' },
-  { name:'Барышников Артём Алексеевич', education:'Алтайский государственный технический университет им. И.И. Ползунова\n2026', position:'Стажер-консультант по внедрению 1С', contacts:'Барнаул\nA.Baryshnikov@is1c.ru', experience:'Общий стаж: 1 год\nАО «Корпоративные ИТ-проекты» Стажер-консультант, 2024 - настоящее время', about:'', competencies:'- Знание нотаций IDEF0, BPMN\n- Навыки формализации требований\n- Умение работать на стыке бизнеса и IT\n- Навыки обучения и создания инструкций', project_experience:'Клиент: поставщик ПО в сфере автоматизации управления предприятиями\nПродукты: 1С: ЗУП, СУЗ, ДО\n- Обследование бизнес-процессов\n- Разработка ТЗ\n- Тестирование функционала\n- Обучение пользователей', certification:'Сертификация 1С: нет данных — уточнить у сотрудника.\n\nОбучающие курсы: -', email:'A.Baryshnikov@is1c.ru', city:'Барнаул' },
-  { name:'Ворок Евгения Владимировна', education:'Алтайская академия экономики и права\nВысшее, экономическое, 2008', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nE.Vorok@is1c.ru', experience:'Общий стаж: 22 года\nСтаж в 1С: 13 лет\n2013 - настоящее время АО Корпоративные ИТ-проекты', about:'', competencies:'• Знание БУ и НУ при ОСН и УСН на базе 1С:БП, КА 2.4, ERP 2.5\n• Внедрение подсистем ЗУП в БП, ЗУП, КА, ERP\n• Составление регламентированной отчётности (НДС, прибыль, взносы, НДФЛ)\n• Опыт преподавательской деятельности и публикации статей', project_experience:'2025-2026\nКлиент: Независимая нефтегазодобывающая компания\nПродукт: 1С ERP. Управление холдингом 3.3\nПереход с ERP2.5.22\n\n2024-2025\nКлиент: Независимая нефтегазодобывающая компания\nПродукт: 1С: ERP\nОбласти внедрения: Регл.контур, блок НДС', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Платформа 1С:Предприятие 8.3;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'E.Vorok@is1c.ru', city:'Новосибирск' },
-  { name:'Коваленко Мария Владимировна', education:'Сибирский государственный университет телекоммуникаций и информатики\nИнфокоммуникационные технологии и системы связи\n2020', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nM.Fedorova@is1c.ru', experience:'Общий стаж: 5 лет\nАО Корпоративные ИТ-проекты Старший консультант, 2023 - настоящее время', about:'', competencies:'1С:ЗУП КОРП — кадровый учет, заработная плата\nСбор требований\nМоделирование бизнес-процессов\nПроектирование интеграций с 1С:ERP, 1С:УХ, 1С:ТЛЭ\nНаписание технических заданий', project_experience:'Клиент: Крупное сельскохозяйственное предприятие\nПродукт: 1С:ЗУП КОРП\nОбласти внедрения: Кадровый учет, заработная плата\n\nКлиент: Крупнейшая телевизионная и радиовещательная компания\nПродукт: 1С:ЗУП КОРП\nОбласти внедрения: Централизация баз филиалов; миграция данных', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант. Зарплата и управление персоналом 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'M.Fedorova@is1c.ru', city:'Новосибирск' },
-  { name:'Афанасьева Анастасия Евгеньевна', education:'Новосибирский государственный университет экономики и управления\nБухгалтерский учет, анализ и аудит\n2014', position:'Ведущий консультант по внедрению 1С', contacts:'Новосибирск\nA.Afanaseva@is1c.ru', experience:'Общий стаж: 15 лет\nАО «Корпоративные ИТ-проекты» Ведущий консультант, 2022 – настоящее время', about:'', competencies:'Налоговый мониторинг (1С:УХ, ГНИВЦ:НМ)\nМСФО (1C:НМ)\nФинансовый учет, Казначейство (1С:ERP)\nСкладской учет (1С:ERP)\nУчет ВНА (1С:ERP)', project_experience:'2025\nКлиент: крупнейший производитель ПЭТ-упаковочной ленты в СНГ\nПродукт: 1С: ERP УХ\nРоль: Ведущий консультант\n\n2023-2024\nКлиент: крупный производитель электроинструментов\nПродукт: 1С: Управление холдингом\nОбласти внедрения: Налоговый мониторинг; Интеграция с АИС Налог-3\nРоль: Ведущий консультант', certification:'Сертификация 1С:\n1С:Специалист-консультант по внедрению подсистемы "Бюджетирование" в 1С:ERP 2;\n1С:Профессионал. Управление холдингом 8;\n1С:Профессионал по 1С:Бухгалтерия 8;\n1С:Специалист-консультант по регламентированному учету в ERP;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'A.Afanaseva@is1c.ru', city:'Новосибирск' },
-  { name:'Афанасьев Вячеслав Андреевич', education:'Новосибирский государственный технический университет\nАвтоматизация технологических процессов и производств в машиностроении\n2005', position:'Консультант по внедрению 1С', contacts:'Новосибирск\nV.Afanasev@is1c.ru', experience:'Общий стаж: 20 лет\nАО «Корпоративные ИТ-проекты» Консультант, 2022 – настоящее время', about:'', competencies:'Складской учет, Закупки, Продажи, Маркетинг, Логистика (1C:ERP), 1С:ТоиР, 1С:УАТ, 1С:УТ, 1С:УНФ', project_experience:'Клиент: ООО ЛИФТ-КОМПЛЕКС ДС\nПродукты: 1С:ERP\nОбласти внедрения: Складской учет\n\nКлиент: ООО «ИНК-ИЗП»\nПродукты: 1С:ERP\nОбласти внедрения: Логистика\n\nКлиент: АО "Новосибирский патронный завод"\nОбласти внедрения: Сопровождение', certification:'Сертификация 1С:\n1С:Специалист-консультант по зарплате и управлению персоналом 8;\n1С:Специалист-консультант по регламентированному учету в ERP;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'V.Afanasev@is1c.ru', city:'Новосибирск' },
-  { name:'Токмин Михаил Александрович', education:'Новосибирский государственный университет экономики и управления\n2026', position:'Стажер-консультант по внедрению 1С', contacts:'Новосибирск\nM.Tokmin@is1c.ru', experience:'Общий стаж: 1 год\nАО «Корпоративные ИТ-проекты» Стажер-консультант, 2025 - настоящее время', about:'', competencies:'- Знание нотаций IDEF0, BPMN, DFD, EPC\n- Навыки формализации требований\n- Умение работать на стыке бизнеса и IT\n- Навыки обучения и создания инструкций', project_experience:'Клиент: поставщик ПО в сфере автоматизации управления предприятиями\nПродукты: 1С: ЗУП, СУЗ, ДО\n- Обследование бизнес-процессов\n- Разработка ТЗ\n- Тестирование функционала\n- Обучение пользователей', certification:'Сертификация 1С: нет данных — уточнить у сотрудника.\n\nОбучающие курсы: -', email:'M.Tokmin@is1c.ru', city:'Новосибирск' },
-  { name:'Ильенко Александра Вячеславовна', education:'Сибирский государственный университет телекоммуникаций и информатики\nПрикладная информатика в экономике\n2021', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nA.Ilenko@is1c.ru', experience:'Общий стаж: 7 лет\nИнфоСофт Старший консультант, 2021 - настоящее время', about:'', competencies:'1С: ДО, 1С: ERP, Интеграции и Обмены, продуктовая разработка, UX-UI на 1С', project_experience:'Клиент: АО АПЗ Ротор\nПродукты: 1С:Документооборот, 1С:ERP\nОбласти внедрения: автоматизация документооборота, интеграция с 1С:ERP\n\nКлиент: ООО «ИНК»\nПродукты: 1С:Документооборот, 1С:ERP, 1С:УПП\nОбласти внедрения: интеграция систем, автоматизация документов, ЭДО', certification:'Сертификация 1С:\n1С:Специалист-консультант по "Управление торговлей 8";\n1С:Специалист-консультант по внедрению подсистемы "Бюджетирование" в 1С:ERP 2;\n1С:Специалист-консультант по настройке и администрированию "1С:Документооборота";\n1С:Профессионал. ERP Управление предприятием 2;\n1С:CRM.\n\nОбучающие курсы: -', email:'A.Ilenko@is1c.ru', city:'Новосибирск' },
-  { name:'Бородина Екатерина Алексеевна', education:'Алтайский государственный технический университет им. И.И. Ползунова\nСпециалист по рекламе\n2009', position:'Старший консультант по внедрению 1С', contacts:'Барнаул\nE.Borodina@is1c.ru', experience:'Общий стаж: 19,5 лет\nАО "Корпоративные ИТ-проекты" Консультант, 2023 - настоящее время', about:'', competencies:'Управление инженерными данными\nПланирование производства\nДиспетчеризация производства\nПроизводственный учет (МЗК, МЦК, МУК)\nНормирование труда\nКонтроль в производстве', project_experience:'Клиент: ООО НЭМЗ «Тайра»\nПродукты: 1С:ERP\nОбласти внедрения: управление производством, сопровождение\n\nКлиент: АО "Новосибирский патронный завод"\nПродукты: 1С:ERP\nОбласти внедрения: управление складом, производством, учёт рабочего времени', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8;\n1С:Специалист-консультант по управленческому учету в ERP;\n1С:Специалист-консультант по управлению производством в ERP;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'E.Borodina@is1c.ru', city:'Барнаул' },
-  { name:'Сафина Зарина Илдаровна', education:'Сибирский университет потребительской кооперации\nБухгалтерский учет, анализ и аудит\n2007', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nZ.Safina@is1c.ru', experience:'Общий стаж: 18 лет\nАО «Корпоративные ИТ-проекты» Эксперт-консультант, 2019 – настоящее время', about:'', competencies:'• Моделирование бизнес процессов\n• Глубокое знание бухгалтерского и налогового учёта\n• Разработка технических заданий\n• Тестирование доработок\n• Разработка инструкций', project_experience:'2023-2025\nКлиент: Крупное сельскохозяйственное предприятие\nПродукты: 1С:ERP, 1С УХ\nОбласти внедрения: Полный оперативный контур; Регламентированный учёт\nРоль: Ведущий аналитик/Функциональный архитектор\n\n2021-2023\nКлиент: Завод по производству шин\nПродукты: 1С:ERP УХ\nРоль: Ведущий аналитик', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Документооборот 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учёта в 1С:ERP 2;\n1С:Специалист-консультант по внедрению подсистем регламентированного учёта в 1С:ERP 2.\n\nОбучающие курсы: -', email:'Z.Safina@is1c.ru', city:'Новосибирск' },
-];
-
+// ─── Парсеры legacy-форматов ──────────────────────────────────────────────────
 function parseLegacyEducation(val) {
   const lines = String(val || '').split('\n').filter(l => l.trim());
   if (lines.length <= 1) return [{ institution: lines[0] || '', degree: '', specialty: '', year: '' }];
   return [{ institution: lines[0] || '', degree: lines[1] || '', specialty: lines[2] || '', year: lines[3] || '' }];
 }
+
 function parseLegacyExperience(val) {
   const text = String(val || '');
   const totalMatch = text.match(/Общий стаж[:\s]+([^\n]+)/i);
@@ -433,6 +266,7 @@ function parseLegacyExperience(val) {
   }
   return { total: totalMatch ? totalMatch[1].trim() : text.split('\n')[0], jobs };
 }
+
 function parseLegacyProject(val) {
   const text = String(val || '').trim();
   if (!text) return [];
@@ -451,29 +285,40 @@ function parseLegacyProject(val) {
   });
 }
 
-function seedIfEmpty() {
-  const count = db.prepare('SELECT COUNT(*) cnt FROM employees').get().cnt;
-  if (count > 0) return;
-  const now = new Date().toISOString();
-  const tx = db.transaction(() => {
-    for (const s of SEED) {
-      const p = prepEmployee({
-        ...s,
-        education: parseLegacyEducation(s.education),
-        experience: parseLegacyExperience(s.experience),
-        project_experience: parseLegacyProject(s.project_experience),
-      });
-      stInsertEmployee.run(p);
-    }
-  });
-  tx();
-  console.log(`✅ Засеяно ${SEED.length} сотрудников`);
-}
+// ─── Seed данные ──────────────────────────────────────────────────────────────
+const SEED = [
+  { name:'Бочкова Виктория Андреевна', education:'Красноярский государственный аграрный университет\nБакалавриат\nЗемлеустройство и кадастры\n2019', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nV.Bochkova@is1c.ru', experience:'Общий стаж: 5,5 лет\nАО «Корпоративные ИТ-проекты» Младший консультант по внедрению 1С, 01.2024 - настоящее время', about:'', competencies:'1С:ЗУП; 1С:ДО; бесшовная интеграция с «1С:Документооборотом»; внедрение ЭДО модуль Контур.Диадок для 1С', project_experience:'Клиент: ООО "ИНК"\nПродукты: 1С:ДО, Интеграция с 1С:ДО; модуль Контур.Диадок для 1С\nОбласти внедрения: бесшовная интеграция, работа с ЭДО, сопровождение', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Специалист-консультант по настройке и администрированию 1С:Документооборота;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Специалист-консультант. Бухгалтерия 8.\n\nОбучающие курсы: -', email:'V.Bochkova@is1c.ru', city:'Новосибирск' },
+  { name:'Батуева Мария Юрьевна', education:'Новосибирский государственный технический университет\nКонструкторско-технологическое обеспечение машиностроительных производств\n2025', position:'Стажер-консультант по внедрению 1С', contacts:'Новосибирск\nM.Bytueva@is1c.ru', experience:'Общий стаж: менее 1 года\nАО Корпоративные ИТ-проекты Стажер-консультант, 01.2025 - настоящее время', about:'', competencies:'Складской учет 1С:ERP УХ\nМоделирование БП\nПроектирование БП', project_experience:'2026\nКлиент: крупнейший производитель ПЭТ-упаковочной ленты в СНГ\nПродукт: 1С: ERP УХ\nОбласти внедрения: Складской учет', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8.\n\nОбучающие курсы: -', email:'M.Bytueva@is1c.ru', city:'Новосибирск' },
+  { name:'Рафальский Артём Владимирович', education:'Новосибирский государственный технический университет\nБакалавриат\nМенеджмент организаций\n2022', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nA.Rafalskij@is1c.ru', experience:'Общий стаж: 5 лет\nСтаж работы в 1С: 01.2023 - настоящее время', about:'', competencies:'1С:ERP', project_experience:'Казначейство\nЛогистика\nСклады\nЗакупки\nПродажи\nНСИ', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Профессионал. Бухгалтерия 8.\n\nОбучающие курсы: -', email:'A.Rafalskij@is1c.ru', city:'Новосибирск' },
+  { name:'Касимова Анна Владимировна', education:'Уточнить', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nA.Kasimova@is1c.ru', experience:'Общий стаж:', about:'', competencies:'', project_experience:'', certification:'Сертификация 1С:\n1С:Профессионал. Платформа 1С:Предприятие 8.3;\n1С:Специалист-консультант по внедрению подсистем регламентированного учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'A.Kasimova@is1c.ru', city:'Новосибирск' },
+  { name:'Чайкин Артём Алексеевич', education:'Уточнить', position:'Младший консультант по внедрению 1С', contacts:'Новосибирск\nA.Chaikin@is1c.ru', experience:'Общий стаж:', about:'', competencies:'', project_experience:'', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Специалист-консультант. Бухгалтерия 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5;\n1С:Профессионал. Документооборот 8.\n\nОбучающие курсы: -', email:'A.Chaikin@is1c.ru', city:'Новосибирск' },
+  { name:'Горчакова Екатерина Вадимовна', education:'Уточнить', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nE.Gorchakova@is1c.ru', experience:'Общий стаж:', about:'', competencies:'1С:ERP УП 2\n1С: БП КОРП 3.0\n1С УПП 1.3, блок ЗиК 2.5', project_experience:'Регламентированный учет (БУ и НУ)\nНалоговый учет (НДС)\nУчет затрат\nЗакрытие месяца\nЗарплатный учет', certification:'Сертификация 1С:\n1С:Профессионал по подсистеме Международный финансовый учет в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'E.Gorchakova@is1c.ru', city:'Новосибирск' },
+  { name:'Апухтина Радмила Олеговна', education:'Уточнить', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nR.Apuhtina@is1c.ru', experience:'Общий стаж:', about:'', competencies:'1С:ERP УП 2', project_experience:'Оперативный учет (закупки, склад, продажи)', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'R.Apuhtina@is1c.ru', city:'Новосибирск' },
+  { name:'Мазова Маргарита Михайловна', education:'Сибирский государственный университет путей сообщения\nЭкономика строительного бизнеса', position:'Консультант по внедрению 1С', contacts:'Новосибирск\nM.Mazova@is1c.ru', experience:'Общий стаж: 5 лет\nКонсультант по внедрению 1С, 2021 - настоящее время', about:'', competencies:'1С: ERP', project_experience:'Тестирование; написание инструкций; постановка задач программисту 1С; тестирование на соответствие ТЗ', certification:'Сертификация 1С:\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'M.Mazova@is1c.ru', city:'Новосибирск' },
+  { name:'Бордавкова Ксения Анатольевна', education:'Ульяновский государственный педагогический университет\nПреподаватель географии и экологии', position:'Консультант по внедрению 1С', contacts:'Ульяновск\nK.Bordavkova@is1c.ru', experience:'Общий стаж: 5 лет\nКонсультант по внедрению 1С, 2023 - настоящее время', about:'', competencies:'1С: ERP Управление предприятием 2;\n1С: Управление холдингом 3;\nТранспортная логистика КОРП;\nГНИВЦ: Налоговый мониторинг', project_experience:'Продукт: 1С: ERP Управление предприятием 2\nОбласти внедрения: Блок «Казначейство»\n\nПродукт: 1С: Управление холдингом 3\nОбласти внедрения: Блок «Согласование»', certification:'Сертификация 1С:\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учета в 1С:ERP 2;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'K.Bordavkova@is1c.ru', city:'Ульяновск' },
+  { name:'Барышников Артём Алексеевич', education:'Алтайский государственный технический университет им. И.И. Ползунова\n2026', position:'Стажер-консультант по внедрению 1С', contacts:'Барнаул\nA.Baryshnikov@is1c.ru', experience:'Общий стаж: 1 год\nАО «Корпоративные ИТ-проекты» Стажер-консультант, 2024 - настоящее время', about:'', competencies:'- Знание нотаций IDEF0, BPMN\n- Навыки формализации требований\n- Умение работать на стыке бизнеса и IT\n- Навыки обучения и создания инструкций', project_experience:'Клиент: поставщик ПО в сфере автоматизации управления предприятиями\nПродукты: 1С: ЗУП, СУЗ, ДО\n- Обследование бизнес-процессов\n- Разработка ТЗ\n- Тестирование функционала\n- Обучение пользователей', certification:'Сертификация 1С: нет данных — уточнить у сотрудника.\n\nОбучающие курсы: -', email:'A.Baryshnikov@is1c.ru', city:'Барнаул' },
+  { name:'Ворок Евгения Владимировна', education:'Алтайская академия экономики и права\nВысшее, экономическое, 2008', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nE.Vorok@is1c.ru', experience:'Общий стаж: 22 года\nСтаж в 1С: 13 лет\n2013 - настоящее время АО Корпоративные ИТ-проекты', about:'', competencies:'• Знание БУ и НУ при ОСН и УСН на базе 1С:БП, КА 2.4, ERP 2.5\n• Внедрение подсистем ЗУП в БП, ЗУП, КА, ERP\n• Составление регламентированной отчётности (НДС, прибыль, взносы, НДФЛ)\n• Опыт преподавательской деятельности и публикации статей', project_experience:'2025-2026\nКлиент: Независимая нефтегазодобывающая компания\nПродукт: 1С ERP. Управление холдингом 3.3\nПереход с ERP2.5.22\n\n2024-2025\nКлиент: Независимая нефтегазодобывающая компания\nПродукт: 1С: ERP\nОбласти внедрения: Регл.контур, блок НДС', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Платформа 1С:Предприятие 8.3;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8.\n\nОбучающие курсы: -', email:'E.Vorok@is1c.ru', city:'Новосибирск' },
+  { name:'Коваленко Мария Владимировна', education:'Сибирский государственный университет телекоммуникаций и информатики\nИнфокоммуникационные технологии и системы связи\n2020', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nM.Fedorova@is1c.ru', experience:'Общий стаж: 5 лет\nАО Корпоративные ИТ-проекты Старший консультант, 2023 - настоящее время', about:'', competencies:'1С:ЗУП КОРП — кадровый учет, заработная плата\nСбор требований\nМоделирование бизнес-процессов\nПроектирование интеграций с 1С:ERP, 1С:УХ, 1С:ТЛЭ\nНаписание технических заданий', project_experience:'Клиент: Крупное сельскохозяйственное предприятие\nПродукт: 1С:ЗУП КОРП\nОбласти внедрения: Кадровый учет, заработная плата\n\nКлиент: Крупнейшая телевизионная и радиовещательная компания\nПродукт: 1С:ЗУП КОРП\nОбласти внедрения: Централизация баз филиалов; миграция данных', certification:'Сертификация 1С:\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Зарплата и управление персоналом 8;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Управление холдингом 8;\n1С:Специалист-консультант. Зарплата и управление персоналом 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'M.Fedorova@is1c.ru', city:'Новосибирск' },
+  { name:'Афанасьева Анастасия Евгеньевна', education:'Новосибирский государственный университет экономики и управления\nБухгалтерский учет, анализ и аудит\n2014', position:'Ведущий консультант по внедрению 1С', contacts:'Новосибирск\nA.Afanaseva@is1c.ru', experience:'Общий стаж: 15 лет\nАО «Корпоративные ИТ-проекты» Ведущий консультант, 2022 – настоящее время', about:'', competencies:'Налоговый мониторинг (1С:УХ, ГНИВЦ:НМ)\nМСФО (1C:НМ)\nФинансовый учет, Казначейство (1С:ERP)\nСкладской учет (1С:ERP)\nУчет ВНА (1С:ERP)', project_experience:'2025\nКлиент: крупнейший производитель ПЭТ-упаковочной ленты в СНГ\nПродукт: 1С: ERP УХ\nРоль: Ведущий консультант\n\n2023-2024\nКлиент: крупный производитель электроинструментов\nПродукт: 1С: Управление холдингом\nОбласти внедрения: Налоговый мониторинг; Интеграция с АИС Налог-3\nРоль: Ведущий консультант', certification:'Сертификация 1С:\n1С:Специалист-консультант по внедрению подсистемы "Бюджетирование" в 1С:ERP 2;\n1С:Профессионал. Управление холдингом 8;\n1С:Профессионал по 1С:Бухгалтерия 8;\n1С:Специалист-консультант по регламентированному учету в ERP;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'A.Afanaseva@is1c.ru', city:'Новосибирск' },
+  { name:'Афанасьев Вячеслав Андреевич', education:'Новосибирский государственный технический университет\nАвтоматизация технологических процессов и производств в машиностроении\n2005', position:'Консультант по внедрению 1С', contacts:'Новосибирск\nV.Afanasev@is1c.ru', experience:'Общий стаж: 20 лет\nАО «Корпоративные ИТ-проекты» Консультант, 2022 – настоящее время', about:'', competencies:'Складской учет, Закупки, Продажи, Маркетинг, Логистика (1C:ERP), 1С:ТоиР, 1С:УАТ, 1С:УТ, 1С:УНФ', project_experience:'Клиент: ООО ЛИФТ-КОМПЛЕКС ДС\nПродукты: 1С:ERP\nОбласти внедрения: Складской учет\n\nКлиент: ООО «ИНК-ИЗП»\nПродукты: 1С:ERP\nОбласти внедрения: Логистика\n\nКлиент: АО "Новосибирский патронный завод"\nОбласти внедрения: Сопровождение', certification:'Сертификация 1С:\n1С:Специалист-консультант по зарплате и управлению персоналом 8;\n1С:Специалист-консультант по регламентированному учету в ERP;\n1С:Профессионал. Управление торговлей 8;\n1С:Профессионал. Документооборот 8;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'V.Afanasev@is1c.ru', city:'Новосибирск' },
+  { name:'Токмин Михаил Александрович', education:'Новосибирский государственный университет экономики и управления\n2026', position:'Стажер-консультант по внедрению 1С', contacts:'Новосибирск\nM.Tokmin@is1c.ru', experience:'Общий стаж: 1 год\nАО «Корпоративные ИТ-проекты» Стажер-консультант, 2025 - настоящее время', about:'', competencies:'- Знание нотаций IDEF0, BPMN, DFD, EPC\n- Навыки формализации требований\n- Умение работать на стыке бизнеса и IT\n- Навыки обучения и создания инструкций', project_experience:'Клиент: поставщик ПО в сфере автоматизации управления предприятиями\nПродукты: 1С: ЗУП, СУЗ, ДО\n- Обследование бизнес-процессов\n- Разработка ТЗ\n- Тестирование функционала\n- Обучение пользователей', certification:'Сертификация 1С: нет данных — уточнить у сотрудника.\n\nОбучающие курсы: -', email:'M.Tokmin@is1c.ru', city:'Новосибирск' },
+  { name:'Ильенко Александра Вячеславовна', education:'Сибирский государственный университет телекоммуникаций и информатики\nПрикладная информатика в экономике\n2021', position:'Старший консультант по внедрению 1С', contacts:'Новосибирск\nA.Ilenko@is1c.ru', experience:'Общий стаж: 7 лет\nИнфоСофт Старший консультант, 2021 - настоящее время', about:'', competencies:'1С: ДО, 1С: ERP, Интеграции и Обмены, продуктовая разработка, UX-UI на 1С', project_experience:'Клиент: АО АПЗ Ротор\nПродукты: 1С:Документооборот, 1С:ERP\nОбласти внедрения: автоматизация документооборота, интеграция с 1С:ERP\n\nКлиент: ООО «ИНК»\nПродукты: 1С:Документооборот, 1С:ERP, 1С:УПП\nОбласти внедрения: интеграция систем, автоматизация документов, ЭДО', certification:'Сертификация 1С:\n1С:Специалист-консультант по "Управление торговлей 8";\n1С:Специалист-консультант по внедрению подсистемы "Бюджетирование" в 1С:ERP 2;\n1С:Специалист-консультант по настройке и администрированию "1С:Документооборота";\n1С:Профессионал. ERP Управление предприятием 2;\n1С:CRM.\n\nОбучающие курсы: -', email:'A.Ilenko@is1c.ru', city:'Новосибирск' },
+  { name:'Бородина Екатерина Алексеевна', education:'Алтайский государственный технический университет им. И.И. Ползунова\nСпециалист по рекламе\n2009', position:'Старший консультант по внедрению 1С', contacts:'Барнаул\nE.Borodina@is1c.ru', experience:'Общий стаж: 19,5 лет\nАО "Корпоративные ИТ-проекты" Консультант, 2023 - настоящее время', about:'', competencies:'Управление инженерными данными\nПланирование производства\nДиспетчеризация производства\nПроизводственный учет (МЗК, МЦК, МУК)\nНормирование труда\nКонтроль в производстве', project_experience:'Клиент: ООО НЭМЗ «Тайра»\nПродукты: 1С:ERP\nОбласти внедрения: управление производством, сопровождение\n\nКлиент: АО "Новосибирский патронный завод"\nПродукты: 1С:ERP\nОбласти внедрения: управление складом, производством, учёт рабочего времени', certification:'Сертификация 1С:\n1С:Профессионал. Управление торговлей 8;\n1С:Специалист-консультант по управленческому учету в ERP;\n1С:Специалист-консультант по управлению производством в ERP;\n1С:Профессионал. ERP Управление предприятием ред. 2.5.\n\nОбучающие курсы: -', email:'E.Borodina@is1c.ru', city:'Барнаул' },
+  { name:'Сафина Зарина Илдаровна', education:'Сибирский университет потребительской кооперации\nБухгалтерский учет, анализ и аудит\n2007', position:'Эксперт-консультант по внедрению 1С', contacts:'Новосибирск\nZ.Safina@is1c.ru', experience:'Общий стаж: 18 лет\nАО «Корпоративные ИТ-проекты» Эксперт-консультант, 2019 – настоящее время', about:'', competencies:'• Моделирование бизнес процессов\n• Глубокое знание бухгалтерского и налогового учёта\n• Разработка технических заданий\n• Тестирование доработок\n• Разработка инструкций', project_experience:'2023-2025\nКлиент: Крупное сельскохозяйственное предприятие\nПродукты: 1С:ERP, 1С УХ\nОбласти внедрения: Полный оперативный контур; Регламентированный учёт\nРоль: Ведущий аналитик/Функциональный архитектор\n\n2021-2023\nКлиент: Завод по производству шин\nПродукты: 1С:ERP УХ\nРоль: Ведущий аналитик', certification:'Сертификация 1С:\n1С:Профессионал. ERP Управление предприятием 2;\n1С:Профессионал. Бухгалтерия 8;\n1С:Профессионал. Документооборот 8;\n1С:Специалист-консультант по внедрению подсистем управленческого учёта в 1С:ERP 2;\n1С:Специалист-консультант по внедрению подсистем регламентированного учёта в 1С:ERP 2.\n\nОбучающие курсы: -', email:'Z.Safina@is1c.ru', city:'Новосибирск' },
+];
 
-// ─── Инициализация ────────────────────────────────────────────────────────────
-function init() {
-  // Настройки
-  let settings = loadSettings();
+// ─── Инициализация БД ─────────────────────────────────────────────────────────
+async function init() {
+  await _run(SCHEMA_SQL);
+
+  // Миграции колонок (IF NOT EXISTS для PostgreSQL)
+  await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'").catch(() => {});
+  await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE pending_changes ADD COLUMN IF NOT EXISTS reviewed_by TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
+
+  // Настройки умолчания
+  let settings = await loadSettings();
   let changed = false;
   const defs = { smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'' };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
@@ -481,7 +326,7 @@ function init() {
     settings.positions = ['Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];
     changed = true;
   }
-  if (changed) saveSettings(settings);
+  if (changed) await saveSettings(settings);
 
   // Миграция: переименовать 'Аналитик' → 'Консультант' в компетенциях
   const oldComps = helpers.getPositionCompetencies();
@@ -492,7 +337,7 @@ function init() {
     console.log('✅ Компетенции: группа «Аналитик» переименована в «Консультант»');
   }
 
-  // Seed: если positionCompetencies пусто, заполнить по умолчанию
+  // Seed компетенций по умолчанию
   const comps = helpers.getPositionCompetencies();
   const DEFAULT_COMPS = {
     'Разработчик': [
@@ -544,222 +389,324 @@ function init() {
   }
 
   // Создать первого менеджера, если нет ни одного
-  const managerCount = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
-  if (managerCount === 0) {
+  const mgrCount = await _get('SELECT COUNT(*)::int cnt FROM managers');
+  if (mgrCount.cnt === 0) {
     const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 10);
     const login = 'admin';
-    stInsertManager.run('Главный администратор', login, hash, 'admin', new Date().toISOString());
+    await _run(
+      'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5)',
+      ['Главный администратор', login, hash, 'admin', new Date().toISOString()]
+    );
     console.log(`✅ Создан менеджер по умолчанию: ${login}`);
   }
-  // Миграция: установить роль 'admin' всем менеджерам без роли
-  db.prepare("UPDATE managers SET role = 'admin' WHERE role IS NULL OR role = ''").run();
-  // Миграция: если есть старый manager_password_hash, удалить его из настроек
+
+  // Миграция: установить роль всем менеджерам без роли
+  await _run("UPDATE managers SET role = 'admin' WHERE role IS NULL OR role = ''");
+  // Миграция: удалить старый manager_password_hash
   if (settings.manager_password_hash) {
-    db.prepare("DELETE FROM settings WHERE key = 'manager_password_hash'").run();
+    await _run("DELETE FROM settings WHERE key = 'manager_password_hash'");
   }
 
-  // Миграция из CSV если есть
-  migrateFromCsv();
-
-  // Seed если пусто
-  seedIfEmpty();
-
-  // ── Пост-миграции ──────────────────────────────────────────────────────────
-  // Конвертировать legacy-текст в JSON, удалить устаревшие pending_changes
-  const fixTx = db.transaction(() => {
-    const allRows = db.prepare("SELECT id, education, experience, project_experience FROM employees").all();
+  // Пост-миграции: конвертировать legacy-текст в JSON
+  const allRows = await _all("SELECT id, education, experience, project_experience FROM employees");
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
     for (const row of allRows) {
       if (row.education && !row.education.startsWith('[') && row.education.trim()) {
         const parsed = parseLegacyEducationLines(row.education);
-        db.prepare("UPDATE employees SET education = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
+        await client.query('UPDATE employees SET education = $1 WHERE id = $2', [JSON.stringify(parsed), row.id]);
       }
       if (row.experience && !row.experience.startsWith('{') && row.experience.trim()) {
         const parsed = parseLegacyExperience(row.experience);
-        db.prepare("UPDATE employees SET experience = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
+        await client.query('UPDATE employees SET experience = $1 WHERE id = $2', [JSON.stringify(parsed), row.id]);
       }
       if (row.project_experience && !row.project_experience.startsWith('[') && row.project_experience.trim()) {
         const parsed = parseLegacyProject(row.project_experience);
-        db.prepare("UPDATE employees SET project_experience = ? WHERE id = ?").run(JSON.stringify(parsed), row.id);
+        await client.query('UPDATE employees SET project_experience = $1 WHERE id = $2', [JSON.stringify(parsed), row.id]);
       }
     }
-    db.prepare("DELETE FROM pending_changes WHERE field_name IN ('courses','cert_date')").run();
-  });
-  fixTx();
+    await client.query("DELETE FROM pending_changes WHERE field_name IN ('courses','cert_date')");
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  // Seed если пусто
+  const empCount = await _get('SELECT COUNT(*)::int cnt FROM employees');
+  if (empCount.cnt === 0) {
+    const seedClient = await pool.connect();
+    try {
+      await seedClient.query('BEGIN');
+      for (const s of SEED) {
+        const p = prepEmployee({
+          ...s,
+          education: parseLegacyEducation(s.education),
+          experience: parseLegacyExperience(s.experience),
+          project_experience: parseLegacyProject(s.project_experience),
+        });
+        const cols = Object.keys(p);
+        const vals = Object.values(p);
+        const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+        await seedClient.query(
+          `INSERT INTO employees (${cols.join(', ')}) VALUES (${placeholders})`,
+          vals
+        );
+      }
+      await seedClient.query('COMMIT');
+      console.log(`✅ Засеяно ${SEED.length} сотрудников`);
+    } catch (err) {
+      await seedClient.query('ROLLBACK');
+      throw err;
+    } finally {
+      seedClient.release();
+    }
+  }
+
+  // Очистка просроченных сессий
+  setInterval(() => {
+    _run('DELETE FROM sessions WHERE expired <= $1', [Date.now()]).catch(() => {});
+  }, 15 * 60 * 1000);
 }
 
 // ─── Публичные helpers ────────────────────────────────────────────────────────
 const helpers = {
   // ── Настройки ───────────────────────────────────────────────────────────────
   getSetting(key) {
-    const r = stGetSetting.get(key);
-    return r ? r.value : '';
+    return _get('SELECT value FROM settings WHERE key = $1', [key]).then(r => r ? r.value : '');
   },
   setSetting(key, value) {
-    stSetSetting.run(key, String(value ?? ''));
+    return _run(
+      'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
+      [key, String(value ?? '')]
+    );
   },
 
   // ── Сотрудники ───────────────────────────────────────────────────────────────
-  getAllEmployees() {
-    const employees = castEmployees(stGetAllEmployeesAll.all());
-    const pendingIds = new Set(
-      db.prepare('SELECT DISTINCT employee_id FROM pending_changes WHERE status = ?').all('pending').map(r => r.employee_id)
-    );
+  async getAllEmployees() {
+    const employees = castEmployees(await _all("SELECT * FROM employees ORDER BY CASE WHEN status='archived' THEN 1 ELSE 0 END, name_lower"));
+    const pendingRows = await _all('SELECT DISTINCT employee_id FROM pending_changes WHERE status = $1', ['pending']);
+    const pendingIds = new Set(pendingRows.map(r => r.employee_id));
     return employees.map(e => ({ ...e, pendingCount: pendingIds.has(e.id) ? 1 : 0 }));
   },
 
   getEmployee(id) {
-    return castEmployee(stGetEmployee.get(Number(id)));
+    return _get('SELECT * FROM employees WHERE id = $1', [Number(id)]).then(castEmployee);
   },
 
   getEmployeeByToken(token) {
-    return castEmployee(stGetByToken.get(token));
+    return _get('SELECT * FROM employees WHERE token = $1', [token]).then(castEmployee);
   },
 
-  createEmployee(data) {
-    const tx = db.transaction(() => {
-      // check for duplicate by normalized name
+  async createEmployee(data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
       const norm = normalizeName(data.name);
-      const existing = stGetByName.get(norm);
-      if (existing) {
-        // Update existing
+      const existing = await client.query('SELECT * FROM employees WHERE name_lower = $1 LIMIT 1', [norm]);
+      if (existing.rows.length > 0) {
         const now = new Date().toISOString();
-        const p = { ...prepEmployee(data), id: existing.id };
-        stUpdateEmployee.run(p);
-        const updated = castEmployee(stGetEmployee.get(existing.id));
-
-        // Если имя совпадает, но изменилось — обновить
-        return updated;
+        const p = prepEmployee(data);
+        const setClauses = [];
+        const params = [now, existing.rows[0].id];
+        let idx = 3;
+        for (const [k, v] of Object.entries(p)) {
+          if (k === 'token' || k === 'created_at') continue;
+          setClauses.push(`${k} = $${idx}`);
+          params.push(v);
+          idx++;
+        }
+        setClauses.push('updated_at = $1');
+        await client.query(`UPDATE employees SET ${setClauses.join(', ')} WHERE id = $2`, params);
+        const updated = await client.query('SELECT * FROM employees WHERE id = $1', [existing.rows[0].id]);
+        await client.query('COMMIT');
+        return castEmployee(updated.rows[0]);
       }
       const p = prepEmployee(data);
-      const info = stInsertEmployee.run(p);
-      return castEmployee(stGetEmployee.get(info.lastInsertRowid));
-    });
-    return tx();
+      const cols = Object.keys(p);
+      const vals = Object.values(p);
+      const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+      const result = await client.query(
+        `INSERT INTO employees (${cols.join(', ')}) VALUES (${placeholders}) RETURNING *`,
+        vals
+      );
+      await client.query('COMMIT');
+      return castEmployee(result.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  updateEmployee(id, fields) {
-    const tx = db.transaction(() => {
-      const emp = stGetEmployee.get(Number(id));
-      if (!emp) return null;
+  async updateEmployee(id, fields) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const emp = await client.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
+      if (!emp.rows[0]) { await client.query('ROLLBACK'); return null; }
       const now = new Date().toISOString();
       const updates = {};
       for (const k of ALLOWED_FIELDS) {
         if (fields[k] !== undefined) updates[k] = fields[k];
       }
-      if (Object.keys(updates).length === 0) return castEmployee(emp);
-      // Build dynamic update SQL safely
+      if (Object.keys(updates).length === 0) {
+        await client.query('COMMIT');
+        return castEmployee(emp.rows[0]);
+      }
       const setClauses = [];
-      const params = { id: Number(id) };
+      const params = [Number(id)];
+      let idx = 2;
       for (const [k, v] of Object.entries(updates)) {
-        setClauses.push(`${k} = @${k}`);
-        params[k] = typeof v === 'object' ? JSON.stringify(v) : String(v ?? '');
+        setClauses.push(`${k} = $${idx}`);
+        params.push(typeof v === 'object' ? JSON.stringify(v) : String(v ?? ''));
+        idx++;
       }
       if (updates.name) {
-        setClauses.push('name_lower = @name_lower');
-        params.name_lower = normalizeName(updates.name);
+        setClauses.push(`name_lower = $${idx}`);
+        params.push(normalizeName(updates.name));
+        idx++;
       }
-      setClauses.push('updated_at = @updated_at');
-      params.updated_at = now;
-      const sql = `UPDATE employees SET ${setClauses.join(', ')} WHERE id = @id`;
-      db.prepare(sql).run(params);
-      return castEmployee(stGetEmployee.get(Number(id)));
-    });
-    return tx();
+      setClauses.push(`updated_at = $${idx}`);
+      params.push(now);
+      const sql = `UPDATE employees SET ${setClauses.join(', ')} WHERE id = $1`;
+      await client.query(sql, params);
+      const updated = await client.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
+      await client.query('COMMIT');
+      return castEmployee(updated.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  regenerateToken(id) {
-    const tx = db.transaction(() => {
-      const emp = stGetEmployee.get(Number(id));
-      if (!emp) return null;
+  async regenerateToken(id) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const emp = await client.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
+      if (!emp.rows[0]) { await client.query('ROLLBACK'); return null; }
       const newToken = uuidv4();
-      db.prepare('UPDATE employees SET token = ?, updated_at = ? WHERE id = ?').run(newToken, new Date().toISOString(), Number(id));
-      return castEmployee({ ...emp, token: newToken });
-    });
-    return tx();
+      await client.query('UPDATE employees SET token = $1, updated_at = $2 WHERE id = $3', [newToken, new Date().toISOString(), Number(id)]);
+      await client.query('COMMIT');
+      return castEmployee({ ...emp.rows[0], token: newToken });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  // ── Архивация (мягкое удаление) ──────────────────────────────────────────────
-  archiveEmployee(id) {
-    const emp = stGetEmployee.get(Number(id));
+  async archiveEmployee(id) {
+    const emp = await _get('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     if (!emp) return false;
-    stArchiveEmployee.run(new Date().toISOString(), Number(id));
+    await _run("UPDATE employees SET status='archived', updated_at=$1 WHERE id=$2", [new Date().toISOString(), Number(id)]);
     return true;
   },
-  restoreEmployee(id) {
-    const emp = stGetEmployee.get(Number(id));
+
+  async restoreEmployee(id) {
+    const emp = await _get('SELECT * FROM employees WHERE id = $1', [Number(id)]);
     if (!emp) return false;
-    stRestoreEmployee.run(new Date().toISOString(), Number(id));
+    await _run("UPDATE employees SET status='active', updated_at=$1 WHERE id=$2", [new Date().toISOString(), Number(id)]);
     return true;
   },
 
-  // Полная очистка списка сотрудников (используется перед импортом Excel,
-  // когда файл должен полностью заменить текущие данные). Настройки (SMTP,
-  // должности, пароль) не затрагиваются.
-  deleteAllEmployees() {
-    const tx = db.transaction(() => {
-      const count = db.prepare('SELECT COUNT(*) cnt FROM employees').get().cnt;
-      db.prepare('DELETE FROM employees').run();
-      return count;
-    });
-    return tx();
+  async deleteAllEmployees() {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const count = await client.query('SELECT COUNT(*)::int cnt FROM employees');
+      await client.query('DELETE FROM employees');
+      await client.query('COMMIT');
+      return count.rows[0].cnt;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  upsertEmployee(data) {
-    const tx = db.transaction(() => {
+  async upsertEmployee(data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
       const norm = normalizeName(data.name);
-      let existing = stGetByName.get(norm);
-      if (!existing && data.email) existing = stGetByEmail.get(data.email);
+      let existing = await client.query('SELECT * FROM employees WHERE name_lower = $1 LIMIT 1', [norm]);
+      if (!existing.rows[0] && data.email) {
+        existing = await client.query("SELECT * FROM employees WHERE email = $1 AND email != '' LIMIT 1", [data.email]);
+      }
       const now = new Date().toISOString();
-      if (existing) {
+      let result;
+      if (existing.rows[0]) {
         const allowed = ['education','position','contacts','experience','about','competencies','project_experience','certification','email','city'];
-        const p = { ...prepEmployee(existing), id: existing.id };
+        const p = { ...prepEmployee(existing.rows[0]), id: existing.rows[0].id };
         for (const k of allowed) {
           if (data[k] !== undefined) {
-            const val = typeof data[k] === 'object' ? JSON.stringify(data[k]) : String(data[k] ?? '');
-            p[k] = val;
+            p[k] = typeof data[k] === 'object' ? JSON.stringify(data[k]) : String(data[k] ?? '');
           }
         }
         p.updated_at = now;
-        stUpdateEmployee.run(p);
-        return 'updated';
+        // Build update
+        const cols = Object.keys(p).filter(k => k !== 'id' && k !== 'created_at');
+        const setClauses = cols.map((k, i) => `${k} = $${i + 1}`);
+        const vals = cols.map(k => p[k]);
+        vals.push(p.id);
+        await client.query(`UPDATE employees SET ${setClauses.join(', ')} WHERE id = $${vals.length}`, vals);
+        result = 'updated';
       } else {
         const p = { ...prepEmployee(data), created_at: now, updated_at: now };
-        stInsertEmployee.run(p);
-        return 'inserted';
+        const cols = Object.keys(p);
+        const vals = Object.values(p);
+        const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+        await client.query(`INSERT INTO employees (${cols.join(', ')}) VALUES (${placeholders})`, vals);
+        result = 'inserted';
       }
-    });
-    return tx();
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   // ── Должности ────────────────────────────────────────────────────────────────
-  getPositions() {
-    const s = loadSettings();
+  async getPositions() {
+    const s = await loadSettings();
     return s.positions || [];
   },
-  addPosition(name) {
-    const s = loadSettings();
+  async addPosition(name) {
+    const s = await loadSettings();
     if (!s.positions) s.positions = [];
     if (!s.positions.includes(name)) s.positions.push(name);
-    saveSettings(s);
+    await saveSettings(s);
     return s.positions;
   },
-  removePosition(name) {
-    const s = loadSettings();
+  async removePosition(name) {
+    const s = await loadSettings();
     if (!s.positions) s.positions = [];
     s.positions = s.positions.filter(p => p !== name);
-    saveSettings(s);
+    await saveSettings(s);
     return s.positions;
   },
 
   // ── Изменения ────────────────────────────────────────────────────────────────
-  getPendingGrouped() {
-    const all = stGetChanges.all('pending');
-    // Фильтр на случай, если в БД остались устаревшие записи
+  async getPendingGrouped() {
+    const all = await _all('SELECT * FROM pending_changes WHERE status = $1 ORDER BY submitted_at', ['pending']);
     const changes = all.filter(c => c.field_name !== 'courses' && c.field_name !== 'cert_date');
     const empIds = [...new Set(changes.map(c => c.employee_id))];
     const emps = {};
     for (const id of empIds) {
-      const e = stGetEmployee.get(id);
+      const e = await _get('SELECT * FROM employees WHERE id = $1', [id]);
       if (e) emps[id] = e;
     }
     const grouped = {};
@@ -780,167 +727,212 @@ const helpers = {
   },
 
   getPendingByEmployee(employeeId) {
-    return stGetChangesByEmp.all(Number(employeeId), 'pending');
+    return _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']);
   },
 
-  hasPendingForEmployee(employeeId) {
-    const r = stHasPending.get(Number(employeeId));
+  async hasPendingForEmployee(employeeId) {
+    const r = await _get("SELECT 1 as one FROM pending_changes WHERE employee_id = $1 AND status = 'pending' LIMIT 1", [Number(employeeId)]);
     return !!r;
   },
 
-  countPending() {
-    const r = stCountPending.get();
+  async countPending() {
+    const r = await _get("SELECT COUNT(DISTINCT employee_id)::int cnt FROM pending_changes WHERE status = 'pending'");
     return r ? r.cnt : 0;
   },
 
   getChangeById(id) {
-    return stGetChange.get(Number(id)) || null;
+    return _get('SELECT * FROM pending_changes WHERE id = $1', [Number(id)]).then(r => r || null);
   },
 
   getPendingChangesForEmployee(employeeId) {
-    return stGetChangesByEmp.all(Number(employeeId), 'pending') || [];
+    return _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']).then(r => r || []);
   },
 
-  submitChanges(employeeId, changesArray) {
-    const tx = db.transaction(() => {
-      stDelPendingForEmp.run(Number(employeeId));
+  async submitChanges(employeeId, changesArray) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]);
       const now = new Date().toISOString();
       for (const ch of changesArray) {
-        stInsertChange.run(Number(employeeId), ch.field_name || '', ch.old_value || '', ch.new_value || '', now);
+        await client.query(
+          "INSERT INTO pending_changes (employee_id, field_name, old_value, new_value, submitted_at, status) VALUES ($1, $2, $3, $4, $5, 'pending')",
+          [Number(employeeId), ch.field_name || '', ch.old_value || '', ch.new_value || '', now]
+        );
       }
-    });
-    tx();
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  approveChange(changeId, reviewerName = '') {
-    const tx = db.transaction(() => {
-      const ch = stGetChange.get(Number(changeId));
-      if (!ch || ch.status !== 'pending') return false;
-      const emp = stGetEmployee.get(ch.employee_id);
-      if (emp && ALLOWED_FIELDS.has(ch.field_name)) {
+  async approveChange(changeId, reviewerName = '') {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const ch = await client.query('SELECT * FROM pending_changes WHERE id = $1', [Number(changeId)]);
+      if (!ch.rows[0] || ch.rows[0].status !== 'pending') { await client.query('ROLLBACK'); return false; }
+      const change = ch.rows[0];
+      const emp = await client.query('SELECT * FROM employees WHERE id = $1', [change.employee_id]);
+      if (emp.rows[0] && ALLOWED_FIELDS.has(change.field_name)) {
         const now = new Date().toISOString();
-        db.prepare(`UPDATE employees SET "${ch.field_name}" = ?, updated_at = ? WHERE id = ?`).run(ch.new_value, now, ch.employee_id);
+        await client.query(`UPDATE employees SET "${change.field_name}" = $1, updated_at = $2 WHERE id = $3`, [change.new_value, now, change.employee_id]);
       }
-      stApproveChange.run(new Date().toISOString(), reviewerName, Number(changeId));
+      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [new Date().toISOString(), reviewerName, Number(changeId)]);
+      await client.query('COMMIT');
       return true;
-    });
-    return tx();
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  rejectChange(changeId, reason = '', reviewerName = '') {
-    const ch = stGetChange.get(Number(changeId));
+  async rejectChange(changeId, reason = '', reviewerName = '') {
+    const ch = await _get('SELECT * FROM pending_changes WHERE id = $1', [Number(changeId)]);
     if (!ch || ch.status !== 'pending') return false;
-    stRejectChange.run(new Date().toISOString(), reviewerName, reason, Number(changeId));
+    await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE id = $4",
+      [new Date().toISOString(), reviewerName, reason, Number(changeId)]);
     return true;
   },
 
-  approveAllForEmployee(employeeId, reviewerName = '') {
-    const tx = db.transaction(() => {
-      const changes = stGetChangesByEmp.all(Number(employeeId), 'pending');
+  async approveAllForEmployee(employeeId, reviewerName = '') {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const changes = await client.query('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']);
       const now = new Date().toISOString();
-      const emp = stGetEmployee.get(Number(employeeId));
-      if (emp) {
-        for (const ch of changes) {
+      const emp = await client.query('SELECT * FROM employees WHERE id = $1', [Number(employeeId)]);
+      if (emp.rows[0]) {
+        for (const ch of changes.rows) {
           if (ALLOWED_FIELDS.has(ch.field_name)) {
-            db.prepare(`UPDATE employees SET "${ch.field_name}" = ?, updated_at = ? WHERE id = ?`).run(ch.new_value, now, ch.employee_id);
+            await client.query(`UPDATE employees SET "${ch.field_name}" = $1, updated_at = $2 WHERE id = $3`, [ch.new_value, now, ch.employee_id]);
           }
         }
       }
-      stApproveAll.run(now, reviewerName, Number(employeeId));
-      return changes.length;
-    });
-    return tx();
+      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE employee_id = $3 AND status = 'pending'",
+        [now, reviewerName, Number(employeeId)]);
+      await client.query('COMMIT');
+      return changes.rows.length;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
-  rejectAllForEmployee(employeeId, reason = '', reviewerName = '') {
-    stRejectAll.run(new Date().toISOString(), reviewerName, reason, Number(employeeId));
-    const changes = stGetChangesByEmp.all(Number(employeeId), 'pending');
+  async rejectAllForEmployee(employeeId, reason = '', reviewerName = '') {
+    await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE employee_id = $4 AND status = 'pending'",
+      [new Date().toISOString(), reviewerName, reason, Number(employeeId)]);
+    const changes = await _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']);
     return changes.length;
   },
 
-  getStats() {
-    const empCount = db.prepare("SELECT COUNT(*) cnt FROM employees WHERE status = 'active'").get().cnt;
-    const pendingCount = stCountPending.get().cnt;
-    const approvedCount = db.prepare("SELECT COUNT(*) cnt FROM pending_changes WHERE status = 'approved'").get().cnt;
-    return { total: empCount, pending: pendingCount, approved: approvedCount };
+  async getStats() {
+    const empCount = await _get("SELECT COUNT(*)::int cnt FROM employees WHERE status = 'active'");
+    const pendingCount = await _get("SELECT COUNT(DISTINCT employee_id)::int cnt FROM pending_changes WHERE status = 'pending'");
+    const approvedCount = await _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE status = 'approved'");
+    return { total: empCount.cnt, pending: pendingCount.cnt, approved: approvedCount.cnt };
   },
 
   saveFeedback(employeeId, rating, comment) {
-    stInsertFeedback.run(Number(employeeId), rating || null, comment || '', new Date().toISOString());
+    return _run('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES ($1, $2, $3, $4)',
+      [Number(employeeId), rating || null, comment || '', new Date().toISOString()]);
   },
 
   // ── Менеджеры ────────────────────────────────────────────────────────────────
   getManagerByLogin(login) {
-    return stGetManagerByEmail.get(String(login).trim().toLowerCase());
+    return _get('SELECT * FROM managers WHERE email = $1', [String(login).trim().toLowerCase()]);
   },
   getManagerById(id) {
-    return stGetManagerById.get(Number(id));
+    return _get('SELECT * FROM managers WHERE id = $1', [Number(id)]);
   },
   getAllManagers() {
-    return stGetAllManagers.all();
+    return _all('SELECT id, name, email, role, created_at FROM managers ORDER BY name');
   },
-  createManager(name, login, passwordHash, role) {
-    const tx = db.transaction(() => {
-      const existing = stGetManagerByEmail.get(String(login).trim().toLowerCase());
-      if (existing) throw new Error('Менеджер с таким логином уже существует');
+
+  async createManager(name, login, passwordHash, role) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const existing = await client.query('SELECT * FROM managers WHERE email = $1', [String(login).trim().toLowerCase()]);
+      if (existing.rows[0]) throw new Error('Менеджер с таким логином уже существует');
       const validRoles = ['admin', 'scrum', 'leader'];
       const managerRole = validRoles.includes(role) ? role : 'scrum';
-      stInsertManager.run(
-        String(name || '').trim(),
-        String(login).trim().toLowerCase(),
-        passwordHash,
-        managerRole,
-        new Date().toISOString()
+      const result = await client.query(
+        'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [String(name || '').trim(), String(login).trim().toLowerCase(), passwordHash, managerRole, new Date().toISOString()]
       );
-      return stGetManagerByEmail.get(String(login).trim().toLowerCase());
-    });
-    return tx();
+      await client.query('COMMIT');
+      return result.rows[0];
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
-  deleteManager(id) {
-    const tx = db.transaction(() => {
-      const count = db.prepare('SELECT COUNT(*) cnt FROM managers').get().cnt;
-      if (count <= 1) throw new Error('Нельзя удалить последнего менеджера');
-      stDeleteManager.run(Number(id));
-    });
-    tx();
+
+  async deleteManager(id) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const count = await client.query('SELECT COUNT(*)::int cnt FROM managers');
+      if (count.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего менеджера');
+      await client.query('DELETE FROM managers WHERE id = $1', [Number(id)]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
+
   updateManagerPassword(id, newHash) {
-    db.prepare('UPDATE managers SET password_hash = ? WHERE id = ?').run(newHash, Number(id));
+    return _run('UPDATE managers SET password_hash = $1 WHERE id = $2', [newHash, Number(id)]);
   },
-  updateManagerRole(id, role) {
+
+  async updateManagerRole(id, role) {
     const validRoles = ['admin', 'scrum', 'leader'];
     if (!validRoles.includes(role)) throw new Error('Неверная роль');
-    db.prepare('UPDATE managers SET role = ? WHERE id = ?').run(role, Number(id));
+    await _run('UPDATE managers SET role = $1 WHERE id = $2', [role, Number(id)]);
   },
 
   // ── Компетенции по должностям ──────────────────────────────────────────────
   getPositionCompetencies() {
-    const val = helpers.getSetting('position_competencies');
-    try { return JSON.parse(val || '{}'); } catch { return {}; }
+    return helpers.getSetting('position_competencies').then(val => {
+      try { return JSON.parse(val || '{}'); } catch { return {}; }
+    });
   },
   setPositionCompetencies(obj) {
-    helpers.setSetting('position_competencies', JSON.stringify(obj));
+    return helpers.setSetting('position_competencies', JSON.stringify(obj));
   },
-  addPositionCompetency(position, competency) {
-    const all = helpers.getPositionCompetencies();
+  async addPositionCompetency(position, competency) {
+    const all = await helpers.getPositionCompetencies();
     if (!all[position]) all[position] = [];
     if (!all[position].includes(competency)) all[position].push(competency);
-    helpers.setPositionCompetencies(all);
+    await helpers.setPositionCompetencies(all);
     return all[position];
   },
-  removePositionCompetency(position, competency) {
-    const all = helpers.getPositionCompetencies();
+  async removePositionCompetency(position, competency) {
+    const all = await helpers.getPositionCompetencies();
     if (all[position]) {
       all[position] = all[position].filter(c => c !== competency);
       if (all[position].length === 0) delete all[position];
     }
-    helpers.setPositionCompetencies(all);
+    await helpers.setPositionCompetencies(all);
     return all[position] || [];
   },
 
   // ── Уникальные значения для фильтров ──────────────────────────────────────
-  getFilterData() {
-    const rows = db.prepare("SELECT position, city, certification FROM employees WHERE status = 'active'").all();
+  async getFilterData() {
+    const rows = await _all("SELECT position, city, certification FROM employees WHERE status = 'active'");
     const positions = new Set();
     const cities = new Set();
     const certs = new Set();
@@ -948,10 +940,8 @@ const helpers = {
       if (r.position) positions.add(r.position);
       if (r.city) cities.add(r.city);
       if (r.certification) {
-        // Parse individual cert names from certification text
         const lines = r.certification.split(/\n/).map(l => l.trim()).filter(Boolean);
         for (const line of lines) {
-          // Remove common prefixes and get cert name
           const cleaned = line.replace(/^[-•]\s*/, '').replace(/^Сертификация 1С:?\s*/i, '').trim();
           if (cleaned && !cleaned.startsWith('Обучающие курсы') && cleaned !== '-') {
             certs.add(cleaned);
@@ -967,5 +957,24 @@ const helpers = {
   },
 };
 
-init();
-module.exports = { helpers, FIELD_LABELS };
+// ─── Session helpers (для index.js) ──────────────────────────────────────────
+const sessions = {
+  get(sid) {
+    return _get('SELECT sess FROM sessions WHERE sid = $1 AND expired > $2', [sid, Date.now()]);
+  },
+  set(sid, session, maxAge) {
+    return _run('INSERT INTO sessions (sid, expired, sess) VALUES ($1, $2, $3) ON CONFLICT (sid) DO UPDATE SET expired = $2, sess = $3',
+      [sid, Date.now() + maxAge, JSON.stringify(session)]);
+  },
+  destroy(sid) {
+    return _run('DELETE FROM sessions WHERE sid = $1', [sid]);
+  },
+  touch(sid, maxAge) {
+    return _run('UPDATE sessions SET expired = $1 WHERE sid = $2', [Date.now() + maxAge, sid]);
+  },
+};
+
+// ─── Запуск инициализации ─────────────────────────────────────────────────────
+let initPromise = init();
+
+module.exports = { helpers, FIELD_LABELS, pool, sessions, initPromise };
