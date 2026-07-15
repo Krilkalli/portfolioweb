@@ -108,8 +108,7 @@ router.get('/:token', (req, res) => {
     emp.courses = parts[1]?.replace(/^Обучающие курсы:?\s*/i, '').trim() || '';
     emp.cert_date = parts[2]?.replace(/^Дата актуализации:?\s*/i, '').trim() || '';
   }
-  const lastReview = helpers.getLastReview(emp.id);
-  res.json({ ...emp, hasPending: helpers.hasPendingForEmployee(emp.id), lastReview });
+  res.json({ ...emp, hasPending: helpers.hasPendingForEmployee(emp.id) });
 });
 
 router.post('/:token/submit', async (req, res) => {
@@ -168,16 +167,12 @@ router.post('/:token/submit', async (req, res) => {
   }
 
   // Save photo directly if changed
-  let photoChanged = false;
   if (submitFields.photo !== undefined && submitFields.photo !== (emp.photo || '')) {
     helpers.updateEmployee(emp.id, { photo: submitFields.photo });
-    photoChanged = true;
   }
 
-  if (changes.length === 0) {
-    if (photoChanged) return res.json({ ok: true, changed: 1, message: 'Фото обновлено' });
+  if (changes.length === 0)
     return res.json({ ok: true, changed: 0, message: 'Изменений не обнаружено' });
-  }
 
   helpers.submitChanges(emp.id, changes);
 

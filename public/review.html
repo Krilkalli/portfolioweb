@@ -110,41 +110,21 @@
   <div id="reviewList"></div>
 </main>
 
-<!-- Approve Modal -->
-<div class="modal-overlay" id="approveModal">
-  <div class="modal">
-    <div class="modal-header">
-      <span class="modal-title">✅ Подтвердить изменения</span>
-      <button class="btn btn-ghost btn-icon" id="closeApproveModal">✕</button>
-    </div>
-    <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
-      Добавьте комментарий для сотрудника (необязательно). Он получит уведомление на email.
-    </p>
-    <div class="reject-modal-form">
-      <textarea id="approveComment" class="form-control" rows="3" placeholder="Комментарий..."></textarea>
-      <div style="display:flex;gap:8px;justify-content:flex-end;">
-        <button class="btn btn-ghost" id="cancelApprove">Отмена</button>
-        <button class="btn btn-success" id="confirmApprove">✅ Подтвердить</button>
-      </div>
-    </div>
-  </div>
-</div>
-
 <!-- Reject Modal -->
 <div class="modal-overlay" id="rejectModal">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title">❌ Отклонить изменения</span>
+      <span class="modal-title">Отклонить изменения</span>
       <button class="btn btn-ghost btn-icon" id="closeRejectModal">✕</button>
     </div>
     <p style="color:var(--text-secondary);font-size:0.875rem;margin-bottom:16px;">
       Укажите причину отклонения (необязательно). Сотрудник получит уведомление на email.
     </p>
     <div class="reject-modal-form">
-      <textarea id="rejectReason" class="form-control" rows="3" placeholder="Комментарий..."></textarea>
+      <textarea id="rejectReason" class="form-control" rows="3" placeholder="Причина отклонения..."></textarea>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button class="btn btn-ghost" id="cancelReject">Отмена</button>
-        <button class="btn btn-danger" id="confirmReject">❌ Отклонить</button>
+        <button class="btn btn-danger" id="confirmReject">Отклонить</button>
       </div>
     </div>
   </div>

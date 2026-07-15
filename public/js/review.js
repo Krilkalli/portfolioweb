@@ -106,10 +106,6 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 let pendingGroups = [];
 let rejectTargetId = null;
 let rejectTargetType = null; // 'employee' | 'change'
-let rejectTargetEmployeeId = null;
-let approveTargetId = null;
-let approveTargetType = null; // 'employee' | 'change'
-let approveTargetEmployeeId = null;
 
 // ─── Загрузка ─────────────────────────────────────────────────────────────────
 async function loadPending() {
@@ -164,7 +160,7 @@ function renderEmployeeCard(group) {
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
       <div class="actions">
-        <button class="btn btn-success btn-sm" onclick="openApproveModal(${group.employee_id}, 'employee')">✅ Подтвердить всё</button>
+        <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})">✅ Подтвердить всё</button>
         <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')">❌ Отклонить всё</button>
       </div>
     </div>
@@ -185,7 +181,7 @@ function renderDiffField(change) {
       <div class="diff-field-label">
         <span>${label}</span>
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openApproveModal(${change.id}, 'change', ${change.employee_id})">✅</button>
+          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})">✅</button>
           <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})">❌</button>
         </div>
       </div>
@@ -263,70 +259,6 @@ function removeEmployeeCard(employeeId) {
     }, 300);
   }
 }
-
-// ─── Подтверждение с комментарием ─────────────────────────────────────────────
-function openApproveModal(id, type, employeeId = null) {
-  approveTargetId = id;
-  approveTargetType = type;
-  approveTargetEmployeeId = employeeId;
-  document.getElementById('approveComment').value = '';
-  document.getElementById('approveModal').classList.add('active');
-}
-
-document.getElementById('closeApproveModal').addEventListener('click', () => {
-  document.getElementById('approveModal').classList.remove('active');
-});
-document.getElementById('cancelApprove').addEventListener('click', () => {
-  document.getElementById('approveModal').classList.remove('active');
-});
-document.getElementById('approveModal').addEventListener('click', (e) => {
-  if (e.target === e.currentTarget) document.getElementById('approveModal').classList.remove('active');
-});
-
-document.getElementById('confirmApprove').addEventListener('click', async () => {
-  const comment = document.getElementById('approveComment').value.trim();
-  document.getElementById('approveModal').classList.remove('active');
-
-  try {
-    let r;
-    if (approveTargetType === 'employee') {
-      r = await fetch(`/api/employees/${approveTargetId}/approve-all`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment }),
-      });
-      if (r.ok) {
-        const d = await r.json();
-        toast(`Все изменения подтверждены (${d.applied} полей)`, 'success');
-        removeEmployeeCard(approveTargetId);
-      }
-    } else {
-      r = await fetch(`/api/pending/${approveTargetId}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment }),
-      });
-      if (r.ok) {
-        toast('Изменение подтверждено', 'success');
-        const el = document.getElementById(`change-${approveTargetId}`);
-        if (el) {
-          el.style.transition = 'opacity 0.3s';
-          el.style.opacity = '0';
-          setTimeout(() => {
-            el.remove();
-            if (!document.querySelector('.diff-field')) removeEmployeeCard(approveTargetEmployeeId);
-          }, 300);
-        }
-      }
-    }
-    if (!r.ok) {
-      const d = await r.json();
-      toast(d.error || 'Ошибка', 'error');
-    }
-  } catch {
-    toast('Ошибка при подтверждении', 'error');
-  }
-});
 
 // ─── Отклонение ───────────────────────────────────────────────────────────────
 function openRejectModal(id, type, employeeId = null) {

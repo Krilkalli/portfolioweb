@@ -31,11 +31,8 @@ async function sendMail({ to, subject, html }) {
 
 async function testConnection() {
   const t = getTransport();
-  if (!t) throw new Error('SMTP не настроен. Проверьте хост, логин и пароль.');
-  await Promise.race([
-    t.transport.verify(),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Таймаут подключения — проверьте хост и порт')), 15000)),
-  ]);
+  if (!t) throw new Error('SMTP не настроен');
+  await t.transport.verify();
 }
 
 // ─── Шаблоны писем ───────────────────────────────────────────────────────────
@@ -87,7 +84,7 @@ async function notifyEmployeeSubmitted(employee) {
   });
 }
 
-async function notifyEmployeeApproved(employee, comment = '') {
+async function notifyEmployeeApproved(employee) {
   if (!employee.email) return;
   await sendMail({
     to: employee.email,
@@ -100,7 +97,6 @@ async function notifyEmployeeApproved(employee, comment = '') {
         <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
           <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
           <p>✅ Менеджер подтвердил обновление вашего профиля. Данные успешно сохранены.</p>
-          ${comment ? `<p><strong>Комментарий:</strong> ${comment}</p>` : ''}
         </div>
       </div>
     `,
