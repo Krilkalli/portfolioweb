@@ -195,11 +195,27 @@ async function loadSettings() {
     if (document.getElementById('ai_provider')) {
       document.getElementById('ai_provider').value = s.ai_provider || 'yandexgpt';
       document.getElementById('ai_folder_id').value = s.ai_folder_id || '';
-      document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || '';
-      document.getElementById('ai_prompt_review').value = s.ai_prompt_review || '';
+      document.getElementById('ai_base_url').value = s.ai_base_url || 'https://api.openai.com/v1';
+      document.getElementById('ai_model_name').value = s.ai_model_name || 'gpt-3.5-turbo';
+      document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.';
+      document.getElementById('ai_prompt_review').value = s.ai_prompt_review || 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".';
+      if (window.toggleAiFields) window.toggleAiFields();
     }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
 }
+
+window.toggleAiFields = function() {
+  const provider = document.getElementById('ai_provider').value;
+  const yandexFields = document.querySelectorAll('.ai-yandex-only');
+  const openaiFields = document.querySelectorAll('.ai-openai-only');
+  if (provider === 'yandexgpt') {
+    yandexFields.forEach(el => el.style.display = 'block');
+    openaiFields.forEach(el => el.style.display = 'none');
+  } else {
+    yandexFields.forEach(el => el.style.display = 'none');
+    openaiFields.forEach(el => el.style.display = 'block');
+  }
+};
 
 // ─── Save SMTP ──────────────────────────────────────────────────────────────
 document.getElementById('smtpForm').addEventListener('submit', async (e) => {
@@ -250,6 +266,8 @@ document.getElementById('aiForm').addEventListener('submit', async (e) => {
   const payload = {
     ai_provider:      document.getElementById('ai_provider').value,
     ai_folder_id:     document.getElementById('ai_folder_id').value.trim(),
+    ai_base_url:      document.getElementById('ai_base_url').value.trim(),
+    ai_model_name:    document.getElementById('ai_model_name').value.trim(),
     ai_prompt_fill:   document.getElementById('ai_prompt_fill').value.trim(),
     ai_prompt_review: document.getElementById('ai_prompt_review').value.trim(),
   };

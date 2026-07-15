@@ -731,3 +731,7 @@ input[type="checkbox"]:active {
     margin-left: 0 !important;
   }
 }
+ . i s - i n v a l i d   {   b o r d e r - c o l o r :   # e f 4 4 4 4   ! i m p o r t a n t ;   b o x - s h a d o w :   0   0   0   2 p x   r g b a ( 2 3 9 ,   6 8 ,   6 8 ,   0 . 2 )   ! i m p o r t a n t ;   }  
+ 
+.is-valid { border-color: #10b981 !important; }
+

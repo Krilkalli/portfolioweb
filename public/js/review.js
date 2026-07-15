@@ -160,7 +160,7 @@ function renderEmployeeCard(group) {
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
       <div class="actions">
-        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id})">✨ Анализ ИИ</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id}, this)">✨ Анализ ИИ</button>
         <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})">✅ Подтвердить всё</button>
         <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')">❌ Отклонить всё</button>
       </div>
@@ -261,7 +261,23 @@ function removeEmployeeCard(employeeId) {
   }
 }
 
-window.reviewWithAI = async function(employeeId) {
+window.showModal = function(title, bodyHtml) {
+  const modal = document.getElementById('messageModal');
+  if (modal) {
+    document.getElementById('messageModalTitle').textContent = title;
+    document.getElementById('messageModalBody').innerHTML = bodyHtml;
+    modal.classList.add('active');
+  } else {
+    alert(title + '\n\n' + bodyHtml.replace(/<[^>]+>/g, ''));
+  }
+};
+
+window.closeMessageModal = function() {
+  const modal = document.getElementById('messageModal');
+  if (modal) modal.classList.remove('active');
+};
+
+window.reviewWithAI = async function(employeeId, btn) {
   const group = pendingGroups.find(g => g.employee_id === employeeId);
   if (!group) return;
   
@@ -270,7 +286,7 @@ window.reviewWithAI = async function(employeeId) {
     payloadData[c.field_name] = c.new_value;
   });
 
-  const btn = event.target;
+  btn = btn || document.activeElement;
   const originalText = btn.textContent;
   btn.textContent = '⏳ Анализ...';
   btn.disabled = true;
@@ -281,14 +297,73 @@ window.reviewWithAI = async function(employeeId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ data: payloadData })
     });
-    const d = await r.json();
+    const text = await r.text();
+    let d;
+    try {
+      d = JSON.parse(text);
+    } catch(err) {
+      throw new Error("Invalid JSON: " + text.substring(0, 100));
+    }
     if (r.ok) {
-      showModal('✨ Результат проверки ИИ', `<div style="white-space:pre-wrap;">${d.result}</div>`);
+      let resultDiv = document.getElementById('ai-review-result-' + employeeId);
+      if (!resultDiv) {
+        resultDiv = document.createElement('div');
+        resultDiv.id = 'ai-review-result-' + employeeId;
+        resultDiv.className = 'ai-review-result';
+        resultDiv.style.margin = '0 16px 16px 16px';
+        resultDiv.style.padding = '16px';
+        resultDiv.style.backgroundColor = 'rgba(124, 58, 237, 0.05)';
+        resultDiv.style.borderRadius = '8px';
+        resultDiv.style.border = '1px solid rgba(124, 58, 237, 0.2)';
+        resultDiv.style.borderLeft = '4px solid var(--accent)';
+        const card = document.getElementById('emp-card-' + employeeId);
+        if (card) {
+          const diffWrap = card.querySelector('.diff-wrap');
+          card.insertBefore(resultDiv, diffWrap);
+        } else if (btn && btn.parentNode) {
+          btn.parentNode.appendChild(resultDiv);
+        } else {
+          document.body.appendChild(resultDiv);
+        }
+      }
+      
+      let errors = Array.isArray(d.result) ? d.result : [];
+      let textContent = '';
+      
+      if (errors.length === 0) {
+        textContent = 'Анкета заполнена отлично! Замечаний нет.';
+      } else {
+        const FIELD_NAMES = {
+          name: 'ФИО', position: 'Должность', email: 'E-mail',
+          total_experience: 'Общий стаж', experience: 'Опыт работы',
+          about: 'Обо мне', competencies: 'Компетенции',
+          project_experience: 'Проектный опыт', education: 'Образование',
+          certificates: 'Сертификаты', courses: 'Курсы'
+        };
+        
+        textContent = errors.map(err => {
+          const fieldNameRu = FIELD_NAMES[err.field] || err.field;
+          let html = `<strong>${escHtml(fieldNameRu)}</strong>: ${escHtml(err.error)}`;
+          if (err.suggestion) {
+            html += `<br><em style="color:var(--text-muted); font-size:0.9em;">Предложение: ${escHtml(err.suggestion)}</em>`;
+          }
+          return `<div style="margin-bottom:8px;">${html}</div>`;
+        }).join('');
+      }
+
+      resultDiv.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+          <span style="font-size:1.2rem;">✨</span>
+          <h4 style="margin:0; color:var(--accent); font-weight:600;">Анализ от ИИ</h4>
+        </div>
+        <div style="font-size:0.95rem; line-height:1.5; color:var(--text-primary);">${textContent}</div>
+      `;
     } else {
       toast(d.error || 'Ошибка ИИ', 'error');
     }
   } catch (e) {
-    toast('Ошибка сети', 'error');
+    console.error('Fetch error:', e);
+    toast('Ошибка сети или сервера (см. консоль)', 'error');
   } finally {
     btn.textContent = originalText;
     btn.disabled = false;

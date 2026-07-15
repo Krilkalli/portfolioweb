@@ -23,69 +23,12 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-const SPELLER_URL = 'https://speller.yandex.net/services/spellservice.json/checkText';
-
-function spellerRequest(text) {
-  return new Promise((resolve, reject) => {
-    const body = querystring.stringify({ text, options: 0, lang: 'ru' });
-    const req = https.request(SPELLER_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Content-Length': Buffer.byteLength(body) },
-    }, (res) => {
-      let data = '';
-      res.on('data', c => data += c);
-      res.on('end', () => {
-        try { resolve(JSON.parse(data)); } catch { resolve([]); }
-      });
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-function applySpeller(text, errors) {
-  if (!errors || errors.length === 0) return text;
-  let result = text;
-  const sorted = [...errors].sort((a, b) => b.pos - a.pos);
-  for (const err of sorted) {
-    if (!err.s || err.s.length === 0) continue;
-    const word = err.word;
-    let suggestion = err.s[0];
-    // Yandex Speller sometimes returns suggestions with context prefix (e.g. "- слово")
-    // Strip leading non-alphanumeric/chars that don't match the original word
-    if (!word[0] || /[-\s]/.test(suggestion[0]) && !/[-\s]/.test(word[0])) {
-      suggestion = suggestion.replace(/^[^a-zA-Zа-яА-ЯёЁ0-9]+/, '');
-    }
-    const searchFrom = Math.max(0, err.pos - 2);
-    const idx = result.indexOf(word, searchFrom);
-    if (idx >= 0) {
-      result = result.slice(0, idx) + suggestion + result.slice(idx + word.length);
-    }
-  }
-  return result;
-}
-
-async function correctTextField(text) {
-  if (!text || !text.trim()) return text;
-  const errors = await spellerRequest(text);
-  return applySpeller(text, errors);
-}
-
-function collectTextFields(fields) {
-  const textFields = ['about', 'competencies', 'certification', 'courses'];
-  const result = {};
-  for (const key of textFields) {
-    if (fields[key] !== undefined) result[key] = fields[key];
-  }
-  return result;
-}
+const { enhanceText, enhanceJSON } = require('../ai');
 
 const EDITABLE_FIELDS = [
   'education','position','contacts','experience',
   'about','competencies','project_experience','certification','photo',
 ];
-
 router.get('/positions', (req, res) => {
   res.json({ positions: helpers.getPositions() });
 });
@@ -183,22 +126,6 @@ router.post('/:token/submit', async (req, res) => {
   res.json({ ok: true, changed: changes.length });
 });
 
-router.post('/correct-text', async (req, res) => {
-  try {
-    const { fields } = req.body;
-    if (!fields || typeof fields !== 'object')
-      return res.status(400).json({ error: 'Нет данных для проверки' });
-    const corrected = {};
-    for (const [key, value] of Object.entries(collectTextFields(fields))) {
-      corrected[key] = await correctTextField(value);
-    }
-    res.json({ ok: true, corrected });
-  } catch (e) {
-    console.warn('Speller error:', e.message);
-    res.status(500).json({ error: 'Ошибка проверки текста' });
-  }
-});
-
 router.post('/:token/feedback', (req, res) => {
   const emp = helpers.getEmployeeByToken(req.params.token);
   if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
@@ -232,6 +159,26 @@ router.post('/:token/photo', upload.single('photo'), (req, res) => {
   helpers.updateEmployee(emp.id, { photo: newPhotoName });
 
   res.json({ ok: true, photo: newPhotoName });
+});
+
+router.post('/correct-text', async (req, res) => {
+  try {
+    const { fields } = req.body;
+    if (!fields || typeof fields !== 'object')
+      return res.status(400).json({ error: 'Нет данных для проверки' });
+    
+    // We send the entire fields object (minus photo, email, etc. if we want to be safe)
+    const safeFields = JSON.parse(JSON.stringify(fields));
+    delete safeFields.photo;
+    delete safeFields.email;
+    delete safeFields.course_year;
+    
+    const corrected = await enhanceJSON(safeFields);
+    res.json({ ok: true, corrected });
+  } catch (e) {
+    console.warn('AI Enhance Error:', e.message);
+    res.status(500).json({ error: 'Ошибка проверки текста' });
+  }
 });
 
 module.exports = router;

@@ -598,6 +598,7 @@ function setViewMode(view) {
   const formState = document.getElementById('formState');
   document.getElementById('editModeBtn')?.classList.toggle('hidden', !view);
   document.getElementById('headerSubtitle').textContent = view ? '— Просмотр профиля' : '— Обновление профиля';
+  document.getElementById('spellerBtn')?.classList.toggle('hidden', view);
   formState.classList.toggle('view-mode', view);
   if (view) {
     document.getElementById('changedFieldsBadge')?.classList.add('hidden');
@@ -691,6 +692,7 @@ function collectFormFields() {
     course_name: document.getElementById('f_course_name')?.value.trim() || '',
     course_year: document.getElementById('f_course_year')?.value.trim() || '',
     photo: document.getElementById('f_photo')?.value.trim() || '',
+    total_experience: document.getElementById('f_total_experience')?.value.trim() || '',
     education: getEducationData(),
     experience: getJobData(),
     project_experience: getProjectData(),
@@ -991,37 +993,7 @@ function loadEmployeePhoto(emp) {
   if (photoEl) photoEl.oninput = trackChanges;
 }
 
-// ─── Speller (Yandex) ──────────────────────────────────────────────────────
-document.getElementById('spellerBtn').addEventListener('click', async () => {
-  const btn = document.getElementById('spellerBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner" style="width:14px;height:14px;border-width:2px;display:inline-block;margin:0;"></span> Исправление...';
-  try {
-    const fields = collectFormFields();
-    const r = await fetch('/api/form/correct-text', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields }),
-    });
-    if (!r.ok) { const d = await r.json(); throw new Error(d.error || 'Ошибка'); }
-    const data = await r.json();
-    if (!data.ok) throw new Error('Ошибка ответа');
-    const c = data.corrected;
-    for (const [key, val] of Object.entries(c)) {
-      const el = document.getElementById('f_' + key);
-      if (el && val !== undefined) {
-        el.value = val;
-        el.dispatchEvent(new Event('input'));
-      }
-    }
-    trackChanges();
-    toast('Текст исправлен', 'success');
-  } catch (e) {
-    toast('Ошибка исправления: ' + e.message, 'error');
-  }
-  btn.disabled = false;
-  btn.innerHTML = '✨ Исправить текст';
-});
+
 
 // ─── Init ──────────────────────────────────────────────────────────────────
 async function initForm() {
@@ -1057,49 +1029,6 @@ async function initForm() {
   }
 
   // --- AI Listeners ---
-  document.querySelectorAll('.ai-enhance-btn').forEach(btn => {
-    btn.addEventListener('click', async () => {
-      const targetId = btn.getAttribute('data-target');
-      const textarea = document.getElementById(targetId);
-      const text = textarea.value.trim();
-      if (!text) {
-        toast('Сначала введите текст для улучшения', 'warning');
-        return;
-      }
-      
-      const originalText = btn.textContent;
-      btn.textContent = '⏳ Обработка...';
-      btn.disabled = true;
-      
-      try {
-        const r = await fetch('/api/ai/enhance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text })
-        });
-        const d = await r.json();
-        if (r.ok) {
-          const suggestionBox = document.getElementById('ai_suggestion_' + targetId);
-          if (suggestionBox) {
-            suggestionBox.style.display = 'block';
-            suggestionBox.innerHTML = `
-              <strong>✨ Предложение ИИ:</strong><br>
-              <div style="white-space:pre-wrap; margin-top:8px; margin-bottom:8px;">${d.result}</div>
-              <button class="btn btn-sm btn-primary" onclick="applyAiSuggestion('${targetId}', \`${d.result.replace(/`/g, '\\`')}\`)">Применить</button>
-              <button class="btn btn-sm btn-ghost" onclick="document.getElementById('ai_suggestion_${targetId}').style.display='none'">Отклонить</button>
-            `;
-          }
-        } else {
-          toast(d.error || 'Ошибка ИИ', 'error');
-        }
-      } catch (e) {
-        toast('Ошибка сети', 'error');
-      } finally {
-        btn.textContent = originalText;
-        btn.disabled = false;
-      }
-    });
-  });
 
   const aiReviewBtn = document.getElementById('aiReviewBtn');
   if (aiReviewBtn) {
@@ -1108,21 +1037,82 @@ async function initForm() {
       const originalText = aiReviewBtn.textContent;
       aiReviewBtn.textContent = '⏳ Анализ...';
       try {
-        const fields = collectFormData();
-        const r = await fetch('/api/ai/review', {
+        const fields = collectFormFields();
+        const r = await fetch('/api/ai/review-fields', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ data: fields })
         });
-        const d = await r.json();
+        const text = await r.text();
+        let d;
+        try {
+          d = JSON.parse(text);
+        } catch(err) {
+          throw new Error("Invalid JSON: " + text.substring(0, 100));
+        }
         if (r.ok) {
-          // Show modal with AI comments
-          showModal('✨ Результат проверки ИИ', `<div style="white-space:pre-wrap;">${d.result}</div>`);
+          // Clear previous highlights
+          document.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+          document.querySelectorAll('.is-valid').forEach(el => el.classList.remove('is-valid'));
+          document.querySelectorAll('.ai-error-feedback').forEach(el => el.remove());
+          
+          let errors = Array.isArray(d.result) ? d.result : [];
+          
+          if (errors.length === 0) {
+            toast('Анкета заполнена отлично! ИИ не нашел замечаний.', 'success');
+          } else {
+            toast(`ИИ нашел замечания в ${errors.length} полях`, 'warning');
+            
+            errors.forEach(err => {
+              const domIdMap = {
+                'education': 'educationContainer',
+                'experience': 'experienceContainer',
+                'project_experience': 'projectsContainer',
+                'total_experience': 'f_total_experience'
+              };
+              const targetId = domIdMap[err.field] || ('f_' + err.field);
+              const el = document.getElementById(targetId) || document.getElementById(err.field);
+              if (el) {
+                el.classList.add('is-invalid');
+                const feedback = document.createElement('div');
+                feedback.className = 'ai-error-feedback';
+                feedback.style.color = '#ef4444';
+                feedback.style.fontSize = '0.85rem';
+                feedback.style.marginTop = '4px';
+                feedback.style.padding = '8px';
+                feedback.style.border = '1px solid #fca5a5';
+                feedback.style.borderRadius = '4px';
+                feedback.style.backgroundColor = '#fef2f2';
+                
+                const fieldNameRu = FIELD_NAMES[err.field] || err.field;
+                let html = `<strong>${escHtml(fieldNameRu)}:</strong> ${escHtml(err.error)}`;
+                
+                if (err.suggestion) {
+                  const targetId = el.id;
+                  const safeSuggestion = escHtml(err.suggestion);
+                  const complexFields = ['education', 'experience', 'project_experience'];
+                  html += `<div style="margin-top:6px;"><strong>Предложение ИИ:</strong><br><em style="color:#1f2937;">${safeSuggestion}</em></div>`;
+                  
+                  if (!complexFields.includes(err.field)) {
+                    html += `<button type="button" class="btn btn-sm btn-outline mt-2" onclick="window.applyAiSuggestion('${targetId}', this.dataset.suggestion)" style="border-color:#10b981; color:#10b981;">Применить предложение</button>`;
+                  }
+                }
+                
+                feedback.innerHTML = html;
+                const btn = feedback.querySelector('button');
+                if (err.suggestion && btn) {
+                   btn.dataset.suggestion = err.suggestion;
+                }
+                el.parentNode.insertBefore(feedback, el.nextSibling);
+              }
+            });
+          }
         } else {
           toast(d.error || 'Ошибка ИИ', 'error');
         }
       } catch (e) {
-        toast('Ошибка сети', 'error');
+        console.error('AI Review Error:', e);
+        toast('Ошибка сети или сервера (см. консоль)', 'error');
       } finally {
         aiReviewBtn.textContent = originalText;
         aiReviewBtn.disabled = false;

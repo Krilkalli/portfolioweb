@@ -110,6 +110,13 @@ router.post('/pending/:changeId/reject', requireCanReview, (req, res) => {
   helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
   const emp = helpers.getEmployee(change.employee_id);
   if (emp) {
+    if (!emp.email && change.field_name === 'email') {
+      emp.email = change.new_value;
+    } else if (!emp.email) {
+      const allPending = helpers.getPendingChangesForEmployee(change.employee_id);
+      const emailChange = allPending.find(c => c.field_name === 'email');
+      if (emailChange) emp.email = emailChange.new_value;
+    }
     const labels = [FIELD_LABELS[change.field_name] || change.field_name];
     notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
   }
@@ -132,6 +139,10 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res) => {
   const emp = helpers.getEmployee(id);
   if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
   const pendingChanges = helpers.getPendingChangesForEmployee(id);
+  if (!emp.email) {
+    const emailChange = pendingChanges.find(c => c.field_name === 'email');
+    if (emailChange && emailChange.new_value) emp.email = emailChange.new_value;
+  }
   helpers.rejectAllForEmployee(id, req.body.reason || '', req.session.managerName || '');
   const labels = pendingChanges.map(c => FIELD_LABELS[c.field_name] || c.field_name);
   notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
@@ -320,7 +331,7 @@ router.get('/settings', requireAuth, (req, res) => {
 router.put('/settings', requireAuth, (req, res) => {
   const role = req.session.managerRole || 'admin';
   // SMTP and AI Settings - admin only
-  const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_prompt_fill', 'ai_prompt_review'];
+  const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review'];
   // Email - editable by scrumменеджера — для админа и скрама
   const canEdit = ['manager_email'];
   if (role === 'admin') {

@@ -234,8 +234,7 @@
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
     <button id="editModeBtn" class="btn btn-primary btn-sm hidden">✏️ Редактировать</button>
-    <button id="spellerBtn" class="btn btn-ghost btn-sm edit-only" title="Исправить грамматические и пунктуационные ошибки">✨ Исправить текст</button>
-    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌗</button>
   </div>
 </header>
 
@@ -368,7 +367,6 @@
         <div class="section-card">
           <div class="section-card-title">
             👤 Обо мне
-            <button type="button" class="btn btn-ghost ai-enhance-btn edit-only" data-target="f_about" style="float:right; padding:2px 8px; font-size:0.8rem;">✨ ИИ-Ассистент</button>
           </div>
           <div class="ai-suggestion-box" id="ai_suggestion_f_about" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
@@ -385,8 +383,7 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">
-            📋Компетенции
-            <button type="button" class="btn btn-ghost ai-enhance-btn edit-only" data-target="f_competencies" style="float:right; padding:2px 8px; font-size:0.8rem;">✨ ИИ-Ассистент</button>
+            📋 Компетенции
           </div>
           <div class="ai-suggestion-box" id="ai_suggestion_f_competencies" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_competencies" class="form-control edit-only" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
@@ -459,7 +456,7 @@
 
     <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">📤 Отправить на проверку</button>
-      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);">✨ Проверить анкету ИИ</button>
+      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);">✨ Проверить Текст</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
       <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
     </div>
@@ -502,6 +499,6 @@
 
 <div class="toast-container" id="toastContainer"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
-<script src="/js/form.js"></script>
+<script src="/js/form.js?v=4"></script>
 </body>
 </html>
