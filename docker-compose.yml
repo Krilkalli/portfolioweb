@@ -1,5 +1,25 @@
-
 services:
+  # PostgreSQL база данных
+  postgres:
+    image: postgres:15
+    container_name: portfolio-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: portfolio
+      POSTGRES_PASSWORD: portfolio_password
+      POSTGRES_DB: portfolio
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - portfolio-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U portfolio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Ваш Node.js сервер
   app:
     build: .
@@ -12,7 +32,23 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Подключение к PostgreSQL (внутри Docker сети)
+      - DATABASE_URL=postgresql://portfolio:portfolio_password@postgres:5432/portfolio
+      # Или для локального подключения с хоста:
+      # - DATABASE_URL=postgresql://portfolio:portfolio_password@localhost:5432/portfolio
+    depends_on:
+      postgres:
+        condition: service_healthy
     shm_size: "1gb"
     tmpfs:
       - /tmp
     restart: unless-stopped
+    networks:
+      - portfolio-network
+
+volumes:
+  postgres_data:
+
+networks:
+  portfolio-network:
+    driver: bridge
