@@ -150,6 +150,34 @@
       <div id="positionResult" style="margin-top:8px;font-size:0.85rem;"></div>
     </div>
 
+    <!-- Position Aliases Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">🏷️ Аналоги должностей для выгрузки</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Задайте краткие/английские аналоги для должностей. При включённом чекбоксе в резюме (Word/PDF) будет подставляться аналог вместо полного названия.
+      </p>
+      <div id="aliasTableWrap">
+        <table id="aliasTable" style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:8px 6px;font-size:0.85rem;color:var(--text-muted);font-weight:500;">Должность</th>
+              <th style="text-align:left;padding:8px 6px;font-size:0.85rem;color:var(--text-muted);font-weight:500;">Аналог</th>
+            </tr>
+          </thead>
+          <tbody id="aliasRows"></tbody>
+        </table>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;font-size:0.85rem;">
+        <input type="checkbox" id="useAliasesCheck">
+        Использовать аналоги должностей при выгрузке (Word/PDF)
+      </label>
+      <button class="btn btn-primary" id="saveAliasesBtn">Сохранить аналоги</button>
+      <div id="aliasesResult" style="margin-top:8px;font-size:0.85rem;"></div>
+    </div>
+
     <!-- Competencies per Position Card -->
     <div class="card collapsible" data-role="admin,scrum">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">

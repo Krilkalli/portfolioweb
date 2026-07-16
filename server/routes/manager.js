@@ -189,10 +189,41 @@ router.delete('/positions/:name', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Position Aliases ──────────────────────────────────────────────────────────
+async function getAliasesSettings() {
+  const raw = await helpers.getSetting('position_aliases');
+  try { return JSON.parse(raw || '{}'); } catch { return { aliases: {}, useAliases: false }; }
+}
+
+async function applyPositionAlias(emp) {
+  if (!emp) return emp;
+  const settings = await getAliasesSettings();
+  if (settings.useAliases && settings.aliases && settings.aliases[emp.position]) {
+    return { ...emp, position: settings.aliases[emp.position] };
+  }
+  return emp;
+}
+
+router.get('/position-aliases', requireAuth, async (req, res, next) => {
+  try {
+    const settings = await getAliasesSettings();
+    res.json(settings);
+  } catch (err) { next(err); }
+});
+
+router.put('/position-aliases', requireAuth, async (req, res, next) => {
+  try {
+    const { aliases, useAliases } = req.body;
+    await helpers.setSetting('position_aliases', JSON.stringify({ aliases: aliases || {}, useAliases: !!useAliases }));
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.get('/employees/:id/resume', requireAuth, async (req, res, next) => {
   try {
-    const emp = await helpers.getEmployee(Number(req.params.id));
+    let emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+    emp = await applyPositionAlias(emp);
     const fmt = req.query.format || 'docx';
     let buf, fn, mime;
     if (fmt === 'pdf') {
@@ -230,8 +261,9 @@ router.post('/employees/export', requireAuth, async (req, res, next) => {
     archive.pipe(res);
 
     for (const id of ids) {
-      const emp = await helpers.getEmployee(Number(id));
+      let emp = await helpers.getEmployee(Number(id));
       if (!emp) continue;
+      emp = await applyPositionAlias(emp);
       try {
         const buf = fmt === 'pdf' ? await convertToPdf(emp) : await generateFromTemplate(emp);
         const fn = `resume_${emp.name.replace(/\s+/g, '_')}.${ext}`;
@@ -304,8 +336,9 @@ router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
 
     const empResults = [];
     for (const id of ids) {
-      const e = await helpers.getEmployee(Number(id));
+      let e = await helpers.getEmployee(Number(id));
       if (!e) continue;
+      e = await applyPositionAlias(e);
       empResults.push({
         'ФИО':                 e.name,
         'Образование':         fmtEducation(e.education),
