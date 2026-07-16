@@ -78,6 +78,7 @@ app.use('/api/auth',    require('./routes/auth'));
 app.use('/api',         require('./routes/manager'));
 app.use('/api/form',    require('./routes/employee'));
 app.use('/api/excel',   require('./routes/excel'));
+app.use('/api/ai',      require('./routes/ai'));
 
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {

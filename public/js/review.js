@@ -3,7 +3,7 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
   t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
@@ -95,7 +95,7 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   }
 }
 
@@ -103,7 +103,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ async function loadPending() {
 
     pendingGroups = d.groups;
     document.getElementById('headerBadge').innerHTML =
-      `<span class="badge badge-warning" style="font-size:0.9rem;padding:6px 14px;">⚡ ${d.count} сотрудников</span>`;
+      `<span class="badge badge-warning" style="font-size:0.9rem;padding:6px 14px;"><i class="fi fi-rr-bolt"></i> ${d.count} сотрудников</span>`;
 
     list.innerHTML = '';
     for (const group of d.groups) {
@@ -164,8 +164,9 @@ function renderEmployeeCard(group) {
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
       <div class="actions">
-        <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})">✅ Подтвердить всё</button>
-        <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')">❌ Отклонить всё</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id}, this)"><i class="fi fi-rr-magic-wand"></i> Анализ ИИ</button>
+        <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})"><i class="fi fi-rr-check-circle"></i> Подтвердить всё</button>
+        <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')"><i class="fi fi-rr-cross-circle"></i> Отклонить всё</button>
       </div>
     </div>
     <div class="diff-wrap">
@@ -193,8 +194,8 @@ function renderDiffField(change) {
       <div class="diff-field-label">
         <span>${label}</span>
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})">✅</button>
-          <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})">❌</button>
+          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})"><i class="fi fi-rr-check-circle"></i></button>
+          <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})"><i class="fi fi-rr-cross-circle"></i></button>
         </div>
       </div>
       <div class="diff-cols">
@@ -271,6 +272,115 @@ function removeEmployeeCard(employeeId) {
     }, 300);
   }
 }
+
+window.showModal = function(title, bodyHtml) {
+  const modal = document.getElementById('messageModal');
+  if (modal) {
+    document.getElementById('messageModalTitle').textContent = title;
+    document.getElementById('messageModalBody').innerHTML = bodyHtml;
+    modal.classList.add('active');
+  } else {
+    alert(title + '\n\n' + bodyHtml.replace(/<[^>]+>/g, ''));
+  }
+};
+
+window.closeMessageModal = function() {
+  const modal = document.getElementById('messageModal');
+  if (modal) modal.classList.remove('active');
+};
+
+window.reviewWithAI = async function(employeeId, btn) {
+  const group = pendingGroups.find(g => g.employee_id === employeeId);
+  if (!group) return;
+  
+  const payloadData = {};
+  group.changes.forEach(c => {
+    payloadData[c.field_name] = c.new_value;
+  });
+
+  btn = btn || document.activeElement;
+  const originalText = btn.textContent;
+  btn.innerHTML = '<i class="fi fi-rr-hourglass"></i> Анализ...';
+  btn.disabled = true;
+
+  try {
+    const r = await fetch('/api/ai/review', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ data: payloadData })
+    });
+    const text = await r.text();
+    let d;
+    try {
+      d = JSON.parse(text);
+    } catch(err) {
+      throw new Error("Invalid JSON: " + text.substring(0, 100));
+    }
+    if (r.ok) {
+      let resultDiv = document.getElementById('ai-review-result-' + employeeId);
+      if (!resultDiv) {
+        resultDiv = document.createElement('div');
+        resultDiv.id = 'ai-review-result-' + employeeId;
+        resultDiv.className = 'ai-review-result';
+        resultDiv.style.margin = '0 16px 16px 16px';
+        resultDiv.style.padding = '16px';
+        resultDiv.style.backgroundColor = 'rgba(124, 58, 237, 0.05)';
+        resultDiv.style.borderRadius = '8px';
+        resultDiv.style.border = '1px solid rgba(124, 58, 237, 0.2)';
+        resultDiv.style.borderLeft = '4px solid var(--accent)';
+        const card = document.getElementById('emp-card-' + employeeId);
+        if (card) {
+          const diffWrap = card.querySelector('.diff-wrap');
+          card.insertBefore(resultDiv, diffWrap);
+        } else if (btn && btn.parentNode) {
+          btn.parentNode.appendChild(resultDiv);
+        } else {
+          document.body.appendChild(resultDiv);
+        }
+      }
+      
+      let errors = Array.isArray(d.result) ? d.result : [];
+      let textContent = '';
+      
+      if (errors.length === 0) {
+        textContent = 'Анкета заполнена отлично! Замечаний нет.';
+      } else {
+        const FIELD_NAMES = {
+          name: 'ФИО', position: 'Должность', email: 'E-mail',
+          total_experience: 'Общий стаж', experience: 'Опыт работы',
+          about: 'Обо мне', competencies: 'Компетенции',
+          project_experience: 'Проектный опыт', education: 'Образование',
+          certificates: 'Сертификаты', courses: 'Курсы'
+        };
+        
+        textContent = errors.map(err => {
+          const fieldNameRu = FIELD_NAMES[err.field] || err.field;
+          let html = `<strong>${escHtml(fieldNameRu)}</strong>: ${escHtml(err.error)}`;
+          if (err.suggestion) {
+            html += `<br><em style="color:var(--text-muted); font-size:0.9em;">Предложение: ${escHtml(err.suggestion)}</em>`;
+          }
+          return `<div style="margin-bottom:8px;">${html}</div>`;
+        }).join('');
+      }
+
+      resultDiv.innerHTML = `
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+          <span style="font-size:1.2rem;"><i class="fi fi-rr-magic-wand"></i></span>
+          <h4 style="margin:0; color:var(--accent); font-weight:600;">Анализ от ИИ</h4>
+        </div>
+        <div style="font-size:0.95rem; line-height:1.5; color:var(--text-primary);">${textContent}</div>
+      `;
+    } else {
+      toast(d.error || 'Ошибка ИИ', 'error');
+    }
+  } catch (e) {
+    console.error('Fetch error:', e);
+    toast('Ошибка сети или сервера (см. консоль)', 'error');
+  } finally {
+    btn.textContent = originalText;
+    btn.disabled = false;
+  }
+};
 
 // ─── Отклонение ───────────────────────────────────────────────────────────────
 function openRejectModal(id, type, employeeId = null) {

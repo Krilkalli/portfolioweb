@@ -6,6 +6,7 @@
   <title>Вход — Портфолио IS1C</title>
   <meta name="description" content="Вход в систему управления портфолио сотрудников IS1C">
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
 <body>
 <div class="login-page">
@@ -59,7 +60,7 @@
       </p>
     </form>
     <div style="text-align:center;margin-top:16px;">
-      <button id="themeToggleLogin" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+      <button id="themeToggleLogin" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
     </div>
   </div>
 </div>
@@ -72,12 +73,12 @@
   document.addEventListener('DOMContentLoaded', () => {
     const btn = document.getElementById('themeToggleLogin');
     if (btn) {
-      if (saved === 'light') btn.textContent = '☀️';
+      if (saved === 'light') btn.innerHTML = '<i class="fi fi-rr-sun"></i>';
       btn.addEventListener('click', () => {
         document.body.classList.toggle('light-theme');
         const isLight = document.body.classList.contains('light-theme');
         localStorage.setItem('theme', isLight ? 'light' : 'dark');
-        btn.textContent = isLight ? '☀️' : '🌙';
+        btn.innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
       });
     }
   });

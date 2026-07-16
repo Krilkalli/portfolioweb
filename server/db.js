@@ -320,7 +320,16 @@ async function init() {
   // Настройки умолчания
   let settings = await loadSettings();
   let changed = false;
-  const defs = { smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'' };
+  const defs = { 
+    smtp_host:'', smtp_port:'587', smtp_user:'', smtp_pass:'', smtp_from:'Портфолио IS1C <noreply@is1c.ru>', manager_email:'',
+    ai_provider: 'yandexgpt',
+    ai_api_key: '',
+    ai_folder_id: '',
+    ai_base_url: 'https://api.openai.com/v1',
+    ai_model_name: 'gpt-3.5-turbo',
+    ai_prompt_fill: 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.',
+    ai_prompt_review: 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".'
+  };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
   if (!settings.positions || !Array.isArray(settings.positions) || settings.positions.length === 0) {
     settings.positions = ['Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];
@@ -470,6 +479,38 @@ async function init() {
   setInterval(() => {
     _run('DELETE FROM sessions WHERE expired <= $1', [Date.now()]).catch(() => {});
   }, 15 * 60 * 1000);
+
+  // Очистка брошенных фото
+  const cleanupPhotos = async () => {
+    try {
+      const uploadsDir = path.join(__dirname, '..', 'uploads');
+      if (!fs.existsSync(uploadsDir)) return;
+      const files = fs.readdirSync(uploadsDir);
+      if (files.length === 0) return;
+      const empRows = await _all("SELECT photo FROM employees WHERE photo != ''");
+      const pendRows = await _all("SELECT old_value, new_value FROM pending_changes WHERE field_name = 'photo'");
+      const used = new Set();
+      empRows.forEach(r => used.add(r.photo));
+      pendRows.forEach(r => {
+        if (r.old_value) used.add(r.old_value);
+        if (r.new_value) used.add(r.new_value);
+      });
+      const now = Date.now();
+      for (const file of files) {
+        if (file === '.gitkeep') continue;
+        if (!used.has(file)) {
+          const filePath = path.join(uploadsDir, file);
+          const stat = fs.statSync(filePath);
+          if (now - stat.mtimeMs > 60 * 60 * 1000) {
+            fs.unlinkSync(filePath);
+            console.log(`✅ Удалено неиспользуемое фото: ${file}`);
+          }
+        }
+      }
+    } catch (e) { console.error('Ошибка при очистке фото:', e); }
+  };
+  cleanupPhotos();
+  setInterval(cleanupPhotos, 60 * 60 * 1000);
 }
 
 // ─── Публичные helpers ────────────────────────────────────────────────────────
@@ -748,11 +789,19 @@ const helpers = {
     return _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']).then(r => r || []);
   },
 
+  getReviewedChangesForEmployee(employeeId) {
+    return _all("SELECT * FROM pending_changes WHERE employee_id = $1 AND status IN ('approved','rejected') AND reviewed_at != ''", [Number(employeeId)]);
+  },
+
+  countPendingForEmployee(employeeId) {
+    return _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]).then(r => r ? r.cnt : 0);
+  },
+
   async submitChanges(employeeId, changesArray) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]);
+      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status IN ('pending','approved','rejected')", [Number(employeeId)]);
       const now = new Date().toISOString();
       for (const ch of changesArray) {
         await client.query(
@@ -776,12 +825,18 @@ const helpers = {
       const ch = await client.query('SELECT * FROM pending_changes WHERE id = $1', [Number(changeId)]);
       if (!ch.rows[0] || ch.rows[0].status !== 'pending') { await client.query('ROLLBACK'); return false; }
       const change = ch.rows[0];
+      const now = new Date().toISOString();
       const emp = await client.query('SELECT * FROM employees WHERE id = $1', [change.employee_id]);
       if (emp.rows[0] && ALLOWED_FIELDS.has(change.field_name)) {
-        const now = new Date().toISOString();
         await client.query(`UPDATE employees SET "${change.field_name}" = $1, updated_at = $2 WHERE id = $3`, [change.new_value, now, change.employee_id]);
+        if (change.field_name === 'contacts') {
+          const lines = (change.new_value || '').split('\n').filter(l => l.trim());
+          if (lines[0]) await client.query('UPDATE employees SET city = $1 WHERE id = $2', [lines[0], change.employee_id]);
+          const email = lines.find(l => l.includes('@'));
+          if (email) await client.query('UPDATE employees SET email = $1 WHERE id = $2', [email, change.employee_id]);
+        }
       }
-      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [new Date().toISOString(), reviewerName, Number(changeId)]);
+      await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [now, reviewerName, Number(changeId)]);
       await client.query('COMMIT');
       return true;
     } catch (err) {
@@ -811,6 +866,12 @@ const helpers = {
         for (const ch of changes.rows) {
           if (ALLOWED_FIELDS.has(ch.field_name)) {
             await client.query(`UPDATE employees SET "${ch.field_name}" = $1, updated_at = $2 WHERE id = $3`, [ch.new_value, now, ch.employee_id]);
+            if (ch.field_name === 'contacts') {
+              const lines = (ch.new_value || '').split('\n').filter(l => l.trim());
+              if (lines[0]) await client.query('UPDATE employees SET city = $1 WHERE id = $2', [lines[0], ch.employee_id]);
+              const email = lines.find(l => l.includes('@'));
+              if (email) await client.query('UPDATE employees SET email = $1 WHERE id = $2', [email, ch.employee_id]);
+            }
           }
         }
       }
@@ -843,6 +904,11 @@ const helpers = {
   saveFeedback(employeeId, rating, comment) {
     return _run('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES ($1, $2, $3, $4)',
       [Number(employeeId), rating || null, comment || '', new Date().toISOString()]);
+  },
+
+  getAllFeedback() {
+    return _all(`    SELECT f.id, f.employee_id, e.name AS employee_name, e.position, f.rating, f.comment, f.submitted_at
+      FROM employee_feedback f JOIN employees e ON f.employee_id = e.id ORDER BY f.submitted_at DESC`);
   },
 
   // ── Менеджеры ────────────────────────────────────────────────────────────────

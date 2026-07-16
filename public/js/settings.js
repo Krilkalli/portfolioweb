@@ -4,7 +4,7 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
   t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
@@ -15,7 +15,7 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   }
 }
 
@@ -23,7 +23,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── Positions ──────────────────────────────────────────────────────────────
@@ -125,6 +125,7 @@ async function removeComp(position, competency) {
 function renderPositions() {
   const list = document.getElementById('positionList');
   if (!list) return;
+  renderAliases();
   if (positions.length === 0) {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет добавленных должностей</p>';
     return;
@@ -178,6 +179,126 @@ document.getElementById('newPositionInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addPositionBtn').click(); }
 });
 
+// ─── Position Aliases ────────────────────────────────────────────────────────
+let positionAliases = {};
+let useAliases = false;
+
+async function loadPositionAliases() {
+  try {
+    const r = await fetch('/api/position-aliases');
+    if (r.ok) {
+      const d = await r.json();
+      positionAliases = d.aliases || {};
+      useAliases = d.useAliases || false;
+      renderAliases();
+    }
+  } catch {}
+}
+
+function renderAliases() {
+  const tbody = document.getElementById('aliasRows');
+  if (!tbody) return;
+  document.getElementById('useAliasesCheck').checked = useAliases;
+  if (positions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Сначала добавьте должности</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => `
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;font-size:0.85rem;">${escHtml(p)}</td>
+      <td style="padding:4px 6px;">
+        <input type="text" class="form-control alias-input" data-position="${escHtml(p).replace(/"/g, '&quot;')}" value="${escHtml(positionAliases[p] || '')}" placeholder="Например, ${escHtml(getExampleAlias(p))}" style="width:100%;font-size:0.85rem;padding:6px 8px;">
+      </td>
+    </tr>
+  `).join('');
+}
+
+function getExampleAlias(pos) {
+  const m = { 'Разработчик': 'Junior Developer', 'Архитектор': 'Junior Architect', 'Консультант': 'Junior Consultant' };
+  return m[pos] || 'Junior ' + pos;
+}
+
+document.getElementById('saveAliasesBtn')?.addEventListener('click', async () => {
+  const inputs = document.querySelectorAll('.alias-input');
+  const aliases = {};
+  inputs.forEach(inp => {
+    const pos = inp.getAttribute('data-position');
+    const val = inp.value.trim();
+    if (val) aliases[pos] = val;
+  });
+  const useAliasesVal = document.getElementById('useAliasesCheck').checked;
+  try {
+    const r = await fetch('/api/position-aliases', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aliases, useAliases: useAliasesVal }),
+    });
+    if (r.ok) {
+      positionAliases = aliases;
+      useAliases = useAliasesVal;
+      document.getElementById('aliasesResult').style.color = 'var(--success)';
+      document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-check-circle"></i> Аналоги сохранены';
+      toast('Аналоги должностей сохранены', 'success');
+    } else {
+      const d = await r.json();
+      document.getElementById('aliasesResult').style.color = 'var(--danger)';
+      document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка');
+    }
+  } catch {
+    document.getElementById('aliasesResult').style.color = 'var(--danger)';
+    document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения';
+  }
+  setTimeout(() => { document.getElementById('aliasesResult').textContent = ''; }, 5000);
+});
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+async function loadFeedback() {
+  try {
+    const r = await fetch('/api/feedback');
+    if (!r.ok) return;
+    const d = await r.json();
+    renderFeedback(d.feedback || []);
+  } catch {}
+}
+
+function renderFeedback(list) {
+  const tbody = document.getElementById('feedbackRows');
+  const empty = document.getElementById('feedbackEmpty');
+  const statsDiv = document.getElementById('feedbackStats');
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    statsDiv.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let total = 0, sum = 0;
+
+  tbody.innerHTML = list.map(f => {
+    const r = Number(f.rating);
+    if (r >= 1 && r <= 5) { ratingCounts[r]++; total++; sum += r; }
+    const stars = r >= 1 && r <= 5 ? '★'.repeat(r) + '☆'.repeat(5 - r) : '—';
+    const date = f.submitted_at ? new Date(f.submitted_at).toLocaleString('ru-RU') : '';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;">${escHtml(f.employee_name)}</td>
+      <td style="padding:8px 6px;white-space:nowrap;">${stars}</td>
+      <td style="padding:8px 6px;max-width:300px;word-break:break-word;">${escHtml(f.comment || '—')}</td>
+      <td style="padding:8px 6px;white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">${date}</td>
+    </tr>`;
+  }).join('');
+
+  const avg = total > 0 ? (sum / total).toFixed(1) : '—';
+  statsDiv.innerHTML = `
+    <div class="stat-box"><strong>${list.length}</strong><br><span>Всего отзывов</span></div>
+    <div class="stat-box"><strong>${avg}</strong><br><span>Средняя оценка</span></div>
+    ${[5,4,3,2,1].map(i => `<div class="stat-box"><strong>${'★'.repeat(i)}${'☆'.repeat(5-i)}</strong><br><span>${ratingCounts[i]}</span></div>`).join('')}
+  `;
+}
+
 // ─── Settings Load ──────────────────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -190,8 +311,32 @@ async function loadSettings() {
     document.getElementById('smtp_user').value    = s.smtp_user    || '';
     document.getElementById('smtp_from').value    = s.smtp_from    || '';
     document.getElementById('manager_email').value = s.manager_email || '';
+
+    // AI Settings
+    if (document.getElementById('ai_provider')) {
+      document.getElementById('ai_provider').value = s.ai_provider || 'yandexgpt';
+      document.getElementById('ai_folder_id').value = s.ai_folder_id || '';
+      document.getElementById('ai_base_url').value = s.ai_base_url || 'https://api.openai.com/v1';
+      document.getElementById('ai_model_name').value = s.ai_model_name || 'gpt-3.5-turbo';
+      document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.';
+      document.getElementById('ai_prompt_review').value = s.ai_prompt_review || 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".';
+      if (window.toggleAiFields) window.toggleAiFields();
+    }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
 }
+
+window.toggleAiFields = function() {
+  const provider = document.getElementById('ai_provider').value;
+  const yandexFields = document.querySelectorAll('.ai-yandex-only');
+  const openaiFields = document.querySelectorAll('.ai-openai-only');
+  if (provider === 'yandexgpt') {
+    yandexFields.forEach(el => el.style.display = 'block');
+    openaiFields.forEach(el => el.style.display = 'none');
+  } else {
+    yandexFields.forEach(el => el.style.display = 'none');
+    openaiFields.forEach(el => el.style.display = 'block');
+  }
+};
 
 // ─── Save SMTP ──────────────────────────────────────────────────────────────
 document.getElementById('smtpForm').addEventListener('submit', async (e) => {
@@ -220,18 +365,57 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
     if (r.ok) {
       toast('Настройки сохранены', 'success');
       result.style.color = 'var(--success)';
-      result.textContent = '✅ Настройки успешно сохранены';
+      result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Настройки успешно сохранены';
       document.getElementById('smtp_pass').value = '';
     } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
-  } catch { toast('Ошибка соединения', 'error'); }
+  } catch { toast('Ошибка сети', 'error'); }
   finally {
     btn.disabled = false;
-    btn.textContent = '💾 Сохранить настройки';
+    btn.textContent = 'Сохранить настройки';
     setTimeout(() => { result.textContent = ''; }, 5000);
   }
 });
 
-// ─── Test SMTP ──────────────────────────────────────────────────────────────
+// -- Save AI --
+document.getElementById('aiForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('saveAiBtn');
+  const result = document.getElementById('aiResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Сохранение...';
+
+  const payload = {
+    ai_provider:      document.getElementById('ai_provider').value,
+    ai_folder_id:     document.getElementById('ai_folder_id').value.trim(),
+    ai_base_url:      document.getElementById('ai_base_url').value.trim(),
+    ai_model_name:    document.getElementById('ai_model_name').value.trim(),
+    ai_prompt_fill:   document.getElementById('ai_prompt_fill').value.trim(),
+    ai_prompt_review: document.getElementById('ai_prompt_review').value.trim(),
+  };
+  const key = document.getElementById('ai_api_key').value;
+  if (key) payload.ai_api_key = key;
+
+  try {
+    const r = await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      toast('Настройки ИИ сохранены', 'success');
+      result.style.color = 'var(--success)';
+      result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Настройки успешно сохранены';
+      document.getElementById('ai_api_key').value = '';
+    } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
+  } catch { toast('Ошибка сети', 'error'); }
+  finally {
+    btn.disabled = false;
+    btn.textContent = 'Сохранить настройки ИИ';
+    setTimeout(() => { result.textContent = ''; }, 5000);
+  }
+});
+
+// -- Test SMTP --──────────────────────────────────────────────────────────────
 document.getElementById('testEmailBtn').addEventListener('click', async () => {
   const btn = document.getElementById('testEmailBtn');
   const result = document.getElementById('smtpResult');
@@ -241,10 +425,10 @@ document.getElementById('testEmailBtn').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/settings/test-email', { method: 'POST' });
     const d = await r.json();
-    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = `✅ ${d.message}`; toast('Соединение успешно!', 'success'); }
-    else { result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; toast('Ошибка соединения', 'error'); }
-  } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка запроса'; }
-  finally { btn.disabled = false; btn.textContent = '🔌 Проверить соединение'; }
+    if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = `<i class="fi fi-rr-check-circle"></i> ${d.message}`; toast('Соединение успешно!', 'success'); }
+    else { result.style.color = 'var(--danger)'; result.innerHTML = `<i class="fi fi-rr-cross-circle"></i> ${d.error}`; toast('Ошибка соединения', 'error'); }
+  } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка запроса'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-plug"></i> Проверить соединение'; }
 });
 
 // ─── Change Password ────────────────────────────────────────────────────────
@@ -256,9 +440,9 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   const newPass = document.getElementById('new_password').value;
   const confirm = document.getElementById('confirm_password').value;
 
-  if (!currentPass) { result.style.color = 'var(--danger)'; result.textContent = '❌ Введите текущий пароль'; return; }
-  if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароль должен быть не менее 8 символов'; return; }
-  if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароли не совпадают'; return; }
+  if (!currentPass) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Введите текущий пароль'; return; }
+  if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароль должен быть не менее 8 символов'; return; }
+  if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароли не совпадают'; return; }
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Сохранение...';
@@ -269,10 +453,10 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
     });
-    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
-    else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; }
-  } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
-  finally { btn.disabled = false; btn.textContent = '🔑 Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
+    if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
+    else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = `<i class="fi fi-rr-cross-circle"></i> ${d.error}`; }
+  } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-key"></i> Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
 });
 
 // ─── Managers Management ────────────────────────────────────────────────────
@@ -384,8 +568,8 @@ async function loadTemplateInfo() {
     const r = await fetch('/api/template/info');
     const d = await r.json();
     const el = document.getElementById('templateInfo');
-    if (d.custom) el.innerHTML = '<span style="color:var(--success)">✅ Пользовательский шаблон загружен</span>';
-    else el.innerHTML = '<span style="color:var(--text-muted)">📄 Используется базовый шаблон</span>';
+    if (d.custom) el.innerHTML = '<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Пользовательский шаблон загружен</span>';
+    else el.innerHTML = '<span style="color:var(--text-muted)"><i class="fi fi-rr-document"></i> Используется базовый шаблон</span>';
   } catch {}
 }
 
@@ -402,10 +586,10 @@ document.getElementById('templateUploadForm').addEventListener('submit', async (
   try {
     const r = await fetch('/api/template/upload', { method: 'POST', body: fd });
     const d = await r.json();
-    if (r.ok) { result.textContent = '✅ Шаблон загружен'; result.style.color = 'var(--success)'; toast('Шаблон загружен', 'success'); loadTemplateInfo(); }
-    else { result.textContent = '❌ ' + (d.error || 'Ошибка'); result.style.color = 'var(--danger)'; }
-  } catch { result.textContent = '❌ Ошибка соединения'; result.style.color = 'var(--danger)'; }
-  finally { btn.disabled = false; btn.textContent = '📤 Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
+    if (r.ok) { result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Шаблон загружен'; result.style.color = 'var(--success)'; toast('Шаблон загружен', 'success'); loadTemplateInfo(); }
+    else { result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка'); result.style.color = 'var(--danger)'; }
+  } catch { result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; result.style.color = 'var(--danger)'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-upload"></i> Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
 });
 
 // ─── Import Excel ────────────────────────────────────────────────────────────
@@ -429,14 +613,14 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
     const d = await r.json();
     e.target.value = '';
     if (r.ok) {
-      result.innerHTML = '<span style="color:var(--success)">✅ Импорт завершён</span>';
+      result.innerHTML = '<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Импорт завершён</span>';
       toast(`Импорт завершён: добавлено ${d.imported} сотрудников (удалено: ${d.removed})`, 'success');
     } else {
-      result.innerHTML = '<span style="color:var(--danger)">❌ ' + (d.error || 'Ошибка импорта') + '</span>';
+      result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка импорта') + '</span>';
       toast(d.error || 'Ошибка импорта', 'error');
     }
   } catch {
-    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+    result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> Ошибка при импорте файла</span>';
     toast('Ошибка при импорте файла', 'error');
   }
   setTimeout(() => { result.innerHTML = ''; }, 5000);
@@ -451,7 +635,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
   initTheme();
   applyRoleUI(currentManager?.role);
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
 })();
 
 function applyRoleUI(role) {
@@ -470,7 +654,7 @@ function applyRoleUI(role) {
   if (role === 'scrum') {
     document.querySelectorAll('.collapsible').forEach(c => {
       const title = c.querySelector('.card-title')?.textContent || '';
-      if (title.includes('Должности') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
+      if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Обратная') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
         c.style.display = 'none';
       }
     });
@@ -501,9 +685,9 @@ if (scrumEmailForm) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_email: document.getElementById('scrum_manager_email').value.trim() }),
       });
-      if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Сохранено'; toast('Email сохранён', 'success'); }
-      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = '❌ ' + (d.error || 'Ошибка'); }
-    } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
+      if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Сохранено'; toast('Email сохранён', 'success'); }
+      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка'); }
+    } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
     finally { btn.disabled = false; btn.textContent = 'Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
   });
 }

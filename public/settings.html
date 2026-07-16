@@ -53,7 +53,11 @@
       margin-bottom: 16px;
       line-height: 1.5;
     }
+  .stat-box { background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;flex:1; }
+  .stat-box strong { font-size:1.1rem;color:var(--text); }
+  .stat-box span { font-size:0.78rem;color:var(--text-muted); }
   </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
 <body class="page-wrapper">
 
@@ -64,7 +68,7 @@
     <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
-    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
     <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -78,7 +82,7 @@
     <!-- SMTP Card -->
     <div class="card" data-role="admin">
       <div class="card-header">
-        <span class="card-title">📧 SMTP / Email — настройка почтовых уведомлений</span>
+        <span class="card-title"><i class="fi fi-rr-envelope"></i> SMTP / Email — настройка почтовых уведомлений</span>
       </div>
       <div class="smtp-hint">
         Система использует SMTP для отправки уведомлений сотрудникам и менеджеру.
@@ -113,16 +117,64 @@
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="submit" class="btn btn-primary" id="saveSmtpBtn">Сохранить настройки</button>
-          <button type="button" class="btn btn-ghost" id="testEmailBtn">🔌 Проверить соединение</button>
+          <button type="button" class="btn btn-ghost" id="testEmailBtn"><i class="fi fi-rr-plug"></i> Проверить соединение</button>
         </div>
         <div id="smtpResult" style="margin-top:12px;font-size:0.875rem;"></div>
+      </form>
+    </div>
+
+    <!-- AI Settings Card -->
+    <div class="card" data-role="admin">
+      <div class="card-header">
+        <span class="card-title"><i class="fi fi-rr-magic-wand"></i> ИИ-Ассистент (Нейросети)</span>
+      </div>
+      <div class="smtp-hint">
+        Настройка искусственного интеллекта для помощи сотрудникам при заполнении профиля и менеджерам при проверке.
+      </div>
+      <form id="aiForm">
+        <div class="form-group">
+          <label class="form-label" for="ai_provider">Провайдер ИИ</label>
+          <select id="ai_provider" name="ai_provider" class="form-control" onchange="toggleAiFields()">
+            <option value="yandexgpt">YandexGPT</option>
+            <option value="openai">OpenAI-совместимый API (Любой другой)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_api_key">API Ключ (Secret Key) <span class="text-muted" style="font-weight:400;">- для всех</span></label>
+          <input id="ai_api_key" name="ai_api_key" type="password" class="form-control" placeholder="Оставьте пустым, чтобы не менять">
+        </div>
+        <div class="form-group ai-yandex-only">
+          <label class="form-label" for="ai_folder_id">ID каталога (Folder ID) <span class="text-muted" style="font-weight:400;">- для YandexGPT</span></label>
+          <input id="ai_folder_id" name="ai_folder_id" type="text" class="form-control" placeholder="Пример: b1g76p4n2vjdpk61g8q6">
+        </div>
+        <div class="form-group ai-openai-only" style="display:none;">
+          <label class="form-label" for="ai_base_url">Базовый URL <span class="text-muted" style="font-weight:400;">- для OpenAI API</span></label>
+          <input id="ai_base_url" name="ai_base_url" type="text" class="form-control" placeholder="Пример: https://api.openai.com/v1">
+        </div>
+        <div class="form-group ai-openai-only" style="display:none;">
+          <label class="form-label" for="ai_model_name">Название модели <span class="text-muted" style="font-weight:400;">- для OpenAI API</span></label>
+          <input id="ai_model_name" name="ai_model_name" type="text" class="form-control" placeholder="Пример: gpt-3.5-turbo, llama3">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_prompt_fill">Промпт для помощи сотруднику <span class="text-muted" style="font-weight:400;">— Автоматический запрос при улучшении текста</span></label>
+          <textarea id="ai_prompt_fill" name="ai_prompt_fill" class="form-control" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_prompt_review">Промпт для проверки (ревью) <span class="text-muted" style="font-weight:400;">— Автоматический запрос при поиске ошибок</span></label>
+          <textarea id="ai_prompt_review" name="ai_prompt_review" class="form-control" rows="3"></textarea>
+        </div>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary" id="saveAiBtn">Сохранить настройки ИИ</button>
+        </div>
+        <div id="aiResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
 
     <!-- Scrum-only email section -->
     <div class="card" data-role="scrum" style="display:none;">
       <div class="card-header">
-        <span class="card-title">📧 Email менеджера</span>
+        <span class="card-title"><i class="fi fi-rr-envelope"></i> Email менеджера</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">На этот адрес приходят уведомления о новых изменениях.</p>
       <form id="scrumEmailForm">
@@ -138,7 +190,7 @@
     <!-- Positions Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">👔 Управление должностями</span>
+        <span class="card-title"><i class="fi fi-rr-briefcase"></i> Управление должностями</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список должностей, доступных для выбора сотрудниками в форме.</p>
@@ -150,10 +202,38 @@
       <div id="positionResult" style="margin-top:8px;font-size:0.85rem;"></div>
     </div>
 
+    <!-- Position Aliases Card -->
+    <div class="card collapsible">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title"><i class="fi fi-rr-tags"></i> Аналоги должностей для выгрузки</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Задайте краткие/английские аналоги для должностей. При включённом чекбоксе в резюме (Word/PDF) будет подставляться аналог вместо полного названия.
+      </p>
+      <div id="aliasTableWrap">
+        <table id="aliasTable" style="width:100%;border-collapse:collapse;margin-bottom:12px;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:8px 6px;font-size:0.85rem;color:var(--text-muted);font-weight:500;">Должность</th>
+              <th style="text-align:left;padding:8px 6px;font-size:0.85rem;color:var(--text-muted);font-weight:500;">Аналог</th>
+            </tr>
+          </thead>
+          <tbody id="aliasRows"></tbody>
+        </table>
+      </div>
+      <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;font-size:0.85rem;">
+        <input type="checkbox" id="useAliasesCheck">
+        Использовать аналоги должностей при выгрузке (Word/PDF)
+      </label>
+      <button class="btn btn-primary" id="saveAliasesBtn">Сохранить аналоги</button>
+      <div id="aliasesResult" style="margin-top:8px;font-size:0.85rem;"></div>
+    </div>
+
     <!-- Competencies per Position Card -->
     <div class="card collapsible" data-role="admin,scrum">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📋 Компетенции по должностям</span>
+        <span class="card-title"><i class="fi fi-rr-clipboard"></i> Компетенции по должностям</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -177,7 +257,7 @@
     <!-- Password Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">🔑 Смена пароля</span>
+        <span class="card-title"><i class="fi fi-rr-key"></i> Смена пароля</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Изменение пароля для вашей учётной записи (<span id="currentManagerLogin"></span>).</p>
@@ -194,7 +274,7 @@
           <label class="form-label" for="confirm_password">Повторите пароль</label>
           <input id="confirm_password" type="password" class="form-control" placeholder="Повторите пароль">
         </div>
-        <button type="submit" class="btn btn-primary" id="savePasswordBtn">🔑 Сменить пароль</button>
+        <button type="submit" class="btn btn-primary" id="savePasswordBtn"><i class="fi fi-rr-key"></i> Сменить пароль</button>
         <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
@@ -202,7 +282,7 @@
     <!-- Managers Card -->
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">👥 Управление менеджерами</span>
+        <span class="card-title"><i class="fi fi-rr-users"></i> Управление менеджерами</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
@@ -217,7 +297,7 @@
           <option value="leader">Руководитель</option>
           <option value="admin">Главный администратор</option>
         </select>
-        <button class="btn btn-primary" id="addManagerBtn">➕ Добавить менеджера</button>
+        <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить менеджера</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>
       </div>
     </div>
@@ -225,7 +305,7 @@
     Import Card
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📥 Импорт сотрудников из Excel</span>
+        <span class="card-title"><i class="fi fi-rr-download"></i> Импорт сотрудников из Excel</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -233,7 +313,7 @@
         Все существующие сотрудники будут удалены.
       </p>
       <label class="btn btn-primary" for="importFile" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
-        📥 Выбрать файл и импортировать
+        <i class="fi fi-rr-download"></i> Выбрать файл и импортировать
         <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none;">
       </label>
       <div id="importResult" style="margin-top:12px;font-size:0.85rem;"></div>
@@ -242,7 +322,7 @@
     <!-- Template Card -->
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📄 Шаблон резюме</span>
+        <span class="card-title"><i class="fi fi-rr-document"></i> Шаблон резюме</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -253,15 +333,41 @@
         <div class="form-group">
           <input type="file" id="templateFile" accept=".docx" class="form-control" style="padding:8px;">
         </div>
-        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">📤 Загрузить шаблон</button>
+        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn"><i class="fi fi-rr-upload"></i> Загрузить шаблон</button>
         <div id="templateResult" style="margin-top:10px;font-size:0.85rem;"></div>
       </form>
+    </div>
+
+    <!-- Feedback Card -->
+    <div class="card collapsible" data-role="admin">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title"><i class="fi fi-rr-stats"></i> Обратная связь сотрудников</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Отзывы, оставленные сотрудниками через анкеты обратной связи. Собираются в таблицу вместо отправки на почту.</p>
+
+      <div id="feedbackStats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+      <div style="overflow-x:auto;">
+        <table id="feedbackTable" style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Сотрудник</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Оценка</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Комментарий</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Дата</th>
+            </tr>
+          </thead>
+          <tbody id="feedbackRows"></tbody>
+        </table>
+      </div>
+      <div id="feedbackEmpty" style="display:none;padding:20px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Пока нет отзывов от сотрудников.</div>
     </div>
 
     <!-- Info Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">ℹ️ О системе</span>
+        <span class="card-title"><i class="fi fi-rr-info"></i> О системе</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.7;">

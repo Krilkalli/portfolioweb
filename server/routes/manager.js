@@ -11,11 +11,23 @@ const { convertToPdf, hasLibreOffice } = require('../pdfconv');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-const { notifyEmployeeApproved, notifyEmployeeRejected, testConnection } = require('../mailer');
+const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection } = require('../mailer');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
 const upload = multer({ dest: path.join(__dirname, '..', '..', 'uploads') });
+
+async function sendReviewSummaryIfDone(employeeId, req) {
+  const pendingCount = await helpers.countPendingForEmployee(employeeId);
+  if (pendingCount > 0) return;
+  const emp = await helpers.getEmployee(employeeId);
+  if (!emp) return;
+  const base = `${req.protocol}://${req.get('host')}`;
+  const reviewed = await helpers.getReviewedChangesForEmployee(employeeId);
+  const approvedLabels = reviewed.filter(c => c.status === 'approved').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: '' }));
+  const rejectedLabels = reviewed.filter(c => c.status === 'rejected').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: c.reject_reason || '' }));
+  notifyEmployeeReviewCompleted(emp, approvedLabels, rejectedLabels, base).catch(() => {});
+}
 
 function requireAuth(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -43,6 +55,7 @@ function requireCanEdit(req, res, next) {
 }
 
 router.get('/employees', requireAuth, async (req, res, next) => {
+
   try {
     const base = `${req.protocol}://${req.get('host')}`;
     const list = (await helpers.getAllEmployees()).map(e => ({
@@ -61,7 +74,7 @@ router.get('/employees/:id', requireAuth, async (req, res, next) => {
     res.json({
       ...emp,
       pendingChanges: await helpers.getPendingByEmployee(emp.id),
-      link: `${base}/form.html?token=${emp.token}&as=manager`,
+      link: `${base}/form.html?token=${emp.token}&as`,
     });
   } catch (err) { next(err); }
 });
@@ -95,7 +108,7 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
     const emp = await helpers.regenerateToken(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
     const base = `${req.protocol}://${req.get('host')}`;
-    res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as=manager`, employee: emp });
+    res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as`, employee: emp });
   } catch (err) { next(err); }
 });
 
@@ -107,8 +120,10 @@ router.get('/pending', requireAuth, async (req, res, next) => {
 
 router.post('/pending/:changeId/approve', requireCanReview, async (req, res, next) => {
   try {
-    const ok = await helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
-    if (!ok) return res.status(404).json({ error: 'Изменение не найдено' });
+    const change = await helpers.getChangeById(Number(req.params.changeId));
+    if (!change) return res.status(404).json({ error: 'Изменение не найдено' });
+    await helpers.approveChange(Number(req.params.changeId), req.session.managerName || '');
+    await sendReviewSummaryIfDone(change.employee_id, req);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -118,11 +133,7 @@ router.post('/pending/:changeId/reject', requireCanReview, async (req, res, next
     const change = await helpers.getChangeById(Number(req.params.changeId));
     if (!change) return res.status(404).json({ error: 'Изменение не найдено' });
     await helpers.rejectChange(Number(req.params.changeId), req.body.reason || '', req.session.managerName || '');
-    const emp = await helpers.getEmployee(change.employee_id);
-    if (emp) {
-      const labels = [FIELD_LABELS[change.field_name] || change.field_name];
-      notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
-    }
+    await sendReviewSummaryIfDone(change.employee_id, req);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -133,7 +144,7 @@ router.post('/employees/:id/approve-all', requireCanReview, async (req, res, nex
     const emp = await helpers.getEmployee(id);
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
     const applied = await helpers.approveAllForEmployee(id, req.session.managerName || '');
-    notifyEmployeeApproved(emp).catch(() => {});
+    await sendReviewSummaryIfDone(id, req);
     res.json({ ok: true, applied });
   } catch (err) { next(err); }
 });
@@ -143,10 +154,8 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res, next
     const id  = Number(req.params.id);
     const emp = await helpers.getEmployee(id);
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найдена' });
-    const pendingChanges = await helpers.getPendingChangesForEmployee(id);
     await helpers.rejectAllForEmployee(id, req.body.reason || '', req.session.managerName || '');
-    const labels = pendingChanges.map(c => FIELD_LABELS[c.field_name] || c.field_name);
-    notifyEmployeeRejected(emp, req.body.reason, labels).catch(() => {});
+    await sendReviewSummaryIfDone(id, req);
     res.json({ ok: true });
   } catch (err) { next(err); }
 });
@@ -155,7 +164,7 @@ router.post('/employees', requireCanEdit, async (req, res, next) => {
   try {
     const emp = await helpers.createEmployee(req.body);
     const base = `${req.protocol}://${req.get('host')}`;
-    res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as=manager` } });
+    res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
   } catch (err) { next(err); }
 });
 
@@ -181,10 +190,41 @@ router.delete('/positions/:name', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// ─── Position Aliases ──────────────────────────────────────────────────────────
+async function getAliasesSettings() {
+  const raw = await helpers.getSetting('position_aliases');
+  try { return JSON.parse(raw || '{}'); } catch { return { aliases: {}, useAliases: false }; }
+}
+
+async function applyPositionAlias(emp) {
+  if (!emp) return emp;
+  const settings = await getAliasesSettings();
+  if (settings.useAliases && settings.aliases && settings.aliases[emp.position]) {
+    return { ...emp, position: settings.aliases[emp.position] };
+  }
+  return emp;
+}
+
+router.get('/position-aliases', requireAuth, async (req, res, next) => {
+  try {
+    const settings = await getAliasesSettings();
+    res.json(settings);
+  } catch (err) { next(err); }
+});
+
+router.put('/position-aliases', requireAuth, async (req, res, next) => {
+  try {
+    const { aliases, useAliases } = req.body;
+    await helpers.setSetting('position_aliases', JSON.stringify({ aliases: aliases || {}, useAliases: !!useAliases }));
+    res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
 router.get('/employees/:id/resume', requireAuth, async (req, res, next) => {
   try {
-    const emp = await helpers.getEmployee(Number(req.params.id));
+    let emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
+    emp = await applyPositionAlias(emp);
     const fmt = req.query.format || 'docx';
     let buf, fn, mime;
     if (fmt === 'pdf') {
@@ -222,8 +262,9 @@ router.post('/employees/export', requireAuth, async (req, res, next) => {
     archive.pipe(res);
 
     for (const id of ids) {
-      const emp = await helpers.getEmployee(Number(id));
+      let emp = await helpers.getEmployee(Number(id));
       if (!emp) continue;
+      emp = await applyPositionAlias(emp);
       try {
         const buf = fmt === 'pdf' ? await convertToPdf(emp) : await generateFromTemplate(emp);
         const fn = `resume_${emp.name.replace(/\s+/g, '_')}.${ext}`;
@@ -296,8 +337,9 @@ router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
 
     const empResults = [];
     for (const id of ids) {
-      const e = await helpers.getEmployee(Number(id));
+      let e = await helpers.getEmployee(Number(id));
       if (!e) continue;
+      e = await applyPositionAlias(e);
       empResults.push({
         'ФИО':                 e.name,
         'Образование':         fmtEducation(e.education),
@@ -340,7 +382,7 @@ router.get('/settings', requireAuth, async (req, res, next) => {
 router.put('/settings', requireAuth, async (req, res, next) => {
   try {
     const role = req.session.managerRole || 'admin';
-    const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from'];
+    const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review'];
     const canEdit = ['manager_email'];
     if (role === 'admin') {
       for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) await helpers.setSetting(k, req.body[k]);
@@ -351,6 +393,7 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     }
     res.json({ ok: true });
   } catch (err) { next(err); }
+
 });
 
 router.post('/settings/test-email', requireAuth, async (req, res, next) => {
@@ -484,6 +527,13 @@ router.post('/feedback/notify-manager', requireAuth, async (req, res, next) => {
     const { notifyManagerFeedback } = require('../mailer');
     await notifyManagerFeedback(emp, feedback);
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+router.get('/feedback', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await helpers.getAllFeedback();
+    res.json({ feedback: rows });
   } catch (err) { next(err); }
 });
 
