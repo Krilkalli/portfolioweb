@@ -13,4 +13,11 @@ module.exports = {
     from: process.env.SMTP_FROM || 'Портфолио IS1C <noreply@is1c.ru>',
   },
   managerEmail: process.env.MANAGER_EMAIL || '',
+  pg: {
+    host: process.env.PG_HOST || 'localhost',
+    port: parseInt(process.env.PG_PORT || '5432'),
+    database: process.env.PG_DATABASE || 'portfolio',
+    user: process.env.PG_USER || 'postgres',
+    password: process.env.PG_PASSWORD || '',
+  },
 };

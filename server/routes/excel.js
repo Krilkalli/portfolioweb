@@ -22,15 +22,6 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-// ─── Разбор текстовых блоков из выгрузки ────────────────────────────────────
-// Формат ячеек в реальных выгрузках — многострочный текст с подписанными
-// полями ("Учебное заведение: ...", "Общий стаж: ...", и т.д.), при этом
-// заголовки колонок в файле могут не совпадать 1-в-1 с ожидаемыми (лишние
-// пробелы, отсутствующий заголовок у колонки с контактами). Поэтому вместо
-// прямого копирования текста в поле БД мы разбираем эти блоки на структуру,
-// которую ожидает остальная часть приложения (education: массив, experience:
-// {total, jobs}, project_experience: массив).
-
 function extractField(line, label) {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
   const re = new RegExp('^\\s*' + escaped + '\\s*:\\s*(.*)$', 'i');
@@ -115,12 +106,10 @@ function parseCompetencies(raw) {
 
 function cleanCertification(raw) {
   let t = String(raw || '').trim();
-  // Убираем пустой раздел "Обучающие курсы: -" (означает "нет курсов")
   t = t.replace(/\n\s*\n\s*Обучающие курсы:\s*\n?\s*-\s*$/i, '');
   return t;
 }
 
-// ─── Определение колонок по заголовку (устойчиво к опечаткам/пробелам) ─────
 function buildHeaderMap(headerRow) {
   const map = {};
   headerRow.forEach((h, idx) => {
@@ -143,9 +132,6 @@ function resolveColumns(headerRow) {
     certification: map['Сертификация 1С'],
     contacts: map['Контактные данные'],
   };
-  // Колонка с контактами (Город/Email) в реальных выгрузках может идти без
-  // заголовка вовсе — тогда ищем пустой заголовок между "Должность" и
-  // "Стаж работы".
   if (idx.contacts === undefined) {
     const from = (idx.position ?? -1) + 1;
     const to = idx.experience !== undefined ? idx.experience : headerRow.length;
@@ -156,13 +142,9 @@ function resolveColumns(headerRow) {
   return idx;
 }
 
-// ── Импорт Excel / CSV ────────────────────────────────────────────────────────
-// Режимы:
-//   mode=replace (по умолчанию) — полностью заменяет всех сотрудников (только admin)
-//   mode=add — добавляет новых, пропускает дубликаты (проверка по ФИО + контактам)
-router.post('/import', requireAuth, upload.single('file'), (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+router.post('/import', requireAuth, upload.single('file'), async (req, res, next) => {
   try {
+    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const mode = req.body.mode || 'replace';
     if (mode === 'replace' && req.session.managerRole !== 'admin') {
       if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -187,14 +169,12 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
     let removed = 0, imported = 0, skipped = 0;
 
     if (mode === 'replace') {
-      removed = helpers.deleteAllEmployees();
+      removed = await helpers.deleteAllEmployees();
     }
 
-    // В режиме add — собираем существующие для проверки дубликатов
     let existingEmployees = [];
     if (mode === 'add') {
-      const { helpers: h } = require('../db');
-      existingEmployees = h.getAllEmployees();
+      existingEmployees = await helpers.getAllEmployees();
     }
 
     for (let r = 1; r < rows.length; r++) {
@@ -229,7 +209,7 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
         if (isDuplicate) { skipped++; continue; }
       }
 
-      helpers.createEmployee(data);
+      await helpers.createEmployee(data);
       imported++;
     }
 
@@ -241,83 +221,85 @@ router.post('/import', requireAuth, upload.single('file'), (req, res) => {
   }
 });
 
-// ── Экспорт в Excel ───────────────────────────────────────────────────────────
-router.get('/export', requireAuth, (req, res) => {
-  const base = `${req.protocol}://${req.get('host')}`;
-  function fmtEducation(edu) {
-    if (typeof edu === 'string') return edu;
-    if (Array.isArray(edu)) {
-      return edu.map(e => [
-        e.institution ? `Учебное заведение: ${e.institution}` : '',
-        e.degree ? `Степень: ${e.degree}` : '',
-        e.specialty ? `Специальность: ${e.specialty}` : '',
-        e.year ? `Год окончания: ${e.year}` : '',
-      ].filter(Boolean).join('\n')).join('\n\n');
-    }
-    return String(edu || '');
-  }
-  function fmtExperience(exp) {
-    if (typeof exp === 'string') return exp;
-    if (exp && typeof exp === 'object') {
-      const lines = [];
-      if (exp.total) lines.push('Общий стаж: ' + exp.total);
-      if (Array.isArray(exp.jobs) && exp.jobs.length > 0) {
-        for (const j of exp.jobs) {
-          const parts = [];
-          if (j.company) parts.push('Компания: ' + j.company);
-          if (j.position) parts.push('Должность: ' + j.position);
-          if (j.period) parts.push('Период: ' + j.period);
-          if (parts.length) lines.push(parts.join('\n'));
-        }
+router.get('/export', requireAuth, async (req, res, next) => {
+  try {
+    const base = `${req.protocol}://${req.get('host')}`;
+    function fmtEducation(edu) {
+      if (typeof edu === 'string') return edu;
+      if (Array.isArray(edu)) {
+        return edu.map(e => [
+          e.institution ? `Учебное заведение: ${e.institution}` : '',
+          e.degree ? `Степень: ${e.degree}` : '',
+          e.specialty ? `Специальность: ${e.specialty}` : '',
+          e.year ? `Год окончания: ${e.year}` : '',
+        ].filter(Boolean).join('\n')).join('\n\n');
       }
-      return lines.join('\n');
+      return String(edu || '');
     }
-    return '';
-  }
-  function fmtProject(proj) {
-    if (typeof proj === 'string') return proj;
-    if (Array.isArray(proj)) {
-      return proj.map(p => {
+    function fmtExperience(exp) {
+      if (typeof exp === 'string') return exp;
+      if (exp && typeof exp === 'object') {
         const lines = [];
-        if (p.period) lines.push('Период работы: ' + p.period);
-        if (p.position) lines.push('Должность: ' + p.position);
-        if (p.role) lines.push('Роль: ' + p.role);
-        if (p.team_size) lines.push('Размер команды: ' + p.team_size);
-        if (p.client) lines.push('Заказчик: ' + p.client);
-        if (p.project_description) lines.push('Описание проекта: ' + p.project_description);
-        if (p.task_description) lines.push('Задача, реализованная сотрудником: ' + p.task_description);
-        if (p.technologies) lines.push('Программные продукты / Технологии: ' + p.technologies);
+        if (exp.total) lines.push('Общий стаж: ' + exp.total);
+        if (Array.isArray(exp.jobs) && exp.jobs.length > 0) {
+          for (const j of exp.jobs) {
+            const parts = [];
+            if (j.company) parts.push('Компания: ' + j.company);
+            if (j.position) parts.push('Должность: ' + j.position);
+            if (j.period) parts.push('Период: ' + j.period);
+            if (parts.length) lines.push(parts.join('\n'));
+          }
+        }
         return lines.join('\n');
-      }).join('\n\n');
+      }
+      return '';
     }
-    return String(proj || '');
-  }
+    function fmtProject(proj) {
+      if (typeof proj === 'string') return proj;
+      if (Array.isArray(proj)) {
+        return proj.map(p => {
+          const lines = [];
+          if (p.period) lines.push('Период работы: ' + p.period);
+          if (p.position) lines.push('Должность: ' + p.position);
+          if (p.role) lines.push('Роль: ' + p.role);
+          if (p.team_size) lines.push('Размер команды: ' + p.team_size);
+          if (p.client) lines.push('Заказчик: ' + p.client);
+          if (p.project_description) lines.push('Описание проекта: ' + p.project_description);
+          if (p.task_description) lines.push('Задача, реализованная сотрудником: ' + p.task_description);
+          if (p.technologies) lines.push('Программные продукты / Технологии: ' + p.technologies);
+          return lines.join('\n');
+        }).join('\n\n');
+      }
+      return String(proj || '');
+    }
 
-  const data = helpers.getAllEmployees().map(e => ({
-    'ФИО':                 e.name,
-    'Образование':         fmtEducation(e.education),
-    'Должность':           e.position,
-    'Контактные данные':   e.contacts,
-    'Стаж работы':         fmtExperience(e.experience),
-    'Обо мне':             e.about,
-    'Компетенции':         e.competencies,
-    'Проектный опыт':      fmtProject(e.project_experience),
-    'Сертификация 1С':     e.certification,
-    'Ссылка на резюме':    `${base}/api/employees/${e.id}/resume`,
-  }));
+    const allEmps = await helpers.getAllEmployees();
+    const data = allEmps.map(e => ({
+      'ФИО':                 e.name,
+      'Образование':         fmtEducation(e.education),
+      'Должность':           e.position,
+      'Контактные данные':   e.contacts,
+      'Стаж работы':         fmtExperience(e.experience),
+      'Обо мне':             e.about,
+      'Компетенции':         e.competencies,
+      'Проектный опыт':      fmtProject(e.project_experience),
+      'Сертификация 1С':     e.certification,
+      'Ссылка на резюме':    `${base}/api/employees/${e.id}/resume`,
+    }));
 
-  const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [
-    {wch:30},{wch:40},{wch:35},{wch:30},{wch:40},
-    {wch:40},{wch:50},{wch:60},{wch:60},{wch:50},
-  ];
-  const wb  = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Сотрудники');
-  const buf = XLSX.write(wb, { type:'buffer', bookType:'xlsx' });
-  const fn  = `portfolio_${new Date().toISOString().slice(0,10)}.xlsx`;
-  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
-  res.send(buf);
+    const ws = XLSX.utils.json_to_sheet(data);
+    ws['!cols'] = [
+      {wch:30},{wch:40},{wch:35},{wch:30},{wch:40},
+      {wch:40},{wch:50},{wch:60},{wch:60},{wch:50},
+    ];
+    const wb  = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Сотрудники');
+    const buf = XLSX.write(wb, { type:'buffer', bookType:'xlsx' });
+    const fn  = `portfolio_${new Date().toISOString().slice(0,10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
+    res.send(buf);
+  } catch (err) { next(err); }
 });
 
 module.exports = router;

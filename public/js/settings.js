@@ -125,6 +125,7 @@ async function removeComp(position, competency) {
 function renderPositions() {
   const list = document.getElementById('positionList');
   if (!list) return;
+  renderAliases();
   if (positions.length === 0) {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет добавленных должностей</p>';
     return;
@@ -177,6 +178,126 @@ document.getElementById('addPositionBtn').addEventListener('click', async () => 
 document.getElementById('newPositionInput').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addPositionBtn').click(); }
 });
+
+// ─── Position Aliases ────────────────────────────────────────────────────────
+let positionAliases = {};
+let useAliases = false;
+
+async function loadPositionAliases() {
+  try {
+    const r = await fetch('/api/position-aliases');
+    if (r.ok) {
+      const d = await r.json();
+      positionAliases = d.aliases || {};
+      useAliases = d.useAliases || false;
+      renderAliases();
+    }
+  } catch {}
+}
+
+function renderAliases() {
+  const tbody = document.getElementById('aliasRows');
+  if (!tbody) return;
+  document.getElementById('useAliasesCheck').checked = useAliases;
+  if (positions.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" style="padding:16px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Сначала добавьте должности</td></tr>';
+    return;
+  }
+  tbody.innerHTML = positions.map(p => `
+    <tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;font-size:0.85rem;">${escHtml(p)}</td>
+      <td style="padding:4px 6px;">
+        <input type="text" class="form-control alias-input" data-position="${escHtml(p).replace(/"/g, '&quot;')}" value="${escHtml(positionAliases[p] || '')}" placeholder="Например, ${escHtml(getExampleAlias(p))}" style="width:100%;font-size:0.85rem;padding:6px 8px;">
+      </td>
+    </tr>
+  `).join('');
+}
+
+function getExampleAlias(pos) {
+  const m = { 'Разработчик': 'Junior Developer', 'Архитектор': 'Junior Architect', 'Консультант': 'Junior Consultant' };
+  return m[pos] || 'Junior ' + pos;
+}
+
+document.getElementById('saveAliasesBtn')?.addEventListener('click', async () => {
+  const inputs = document.querySelectorAll('.alias-input');
+  const aliases = {};
+  inputs.forEach(inp => {
+    const pos = inp.getAttribute('data-position');
+    const val = inp.value.trim();
+    if (val) aliases[pos] = val;
+  });
+  const useAliasesVal = document.getElementById('useAliasesCheck').checked;
+  try {
+    const r = await fetch('/api/position-aliases', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ aliases, useAliases: useAliasesVal }),
+    });
+    if (r.ok) {
+      positionAliases = aliases;
+      useAliases = useAliasesVal;
+      document.getElementById('aliasesResult').style.color = 'var(--success)';
+      document.getElementById('aliasesResult').textContent = '✅ Аналоги сохранены';
+      toast('Аналоги должностей сохранены', 'success');
+    } else {
+      const d = await r.json();
+      document.getElementById('aliasesResult').style.color = 'var(--danger)';
+      document.getElementById('aliasesResult').textContent = '❌ ' + (d.error || 'Ошибка');
+    }
+  } catch {
+    document.getElementById('aliasesResult').style.color = 'var(--danger)';
+    document.getElementById('aliasesResult').textContent = '❌ Ошибка соединения';
+  }
+  setTimeout(() => { document.getElementById('aliasesResult').textContent = ''; }, 5000);
+});
+
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+async function loadFeedback() {
+  try {
+    const r = await fetch('/api/feedback');
+    if (!r.ok) return;
+    const d = await r.json();
+    renderFeedback(d.feedback || []);
+  } catch {}
+}
+
+function renderFeedback(list) {
+  const tbody = document.getElementById('feedbackRows');
+  const empty = document.getElementById('feedbackEmpty');
+  const statsDiv = document.getElementById('feedbackStats');
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    statsDiv.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let total = 0, sum = 0;
+
+  tbody.innerHTML = list.map(f => {
+    const r = Number(f.rating);
+    if (r >= 1 && r <= 5) { ratingCounts[r]++; total++; sum += r; }
+    const stars = r >= 1 && r <= 5 ? '★'.repeat(r) + '☆'.repeat(5 - r) : '—';
+    const date = f.submitted_at ? new Date(f.submitted_at).toLocaleString('ru-RU') : '';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;">${escHtml(f.employee_name)}</td>
+      <td style="padding:8px 6px;white-space:nowrap;">${stars}</td>
+      <td style="padding:8px 6px;max-width:300px;word-break:break-word;">${escHtml(f.comment || '—')}</td>
+      <td style="padding:8px 6px;white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">${date}</td>
+    </tr>`;
+  }).join('');
+
+  const avg = total > 0 ? (sum / total).toFixed(1) : '—';
+  statsDiv.innerHTML = `
+    <div class="stat-box"><strong>${list.length}</strong><br><span>Всего отзывов</span></div>
+    <div class="stat-box"><strong>${avg}</strong><br><span>Средняя оценка</span></div>
+    ${[5,4,3,2,1].map(i => `<div class="stat-box"><strong>${'★'.repeat(i)}${'☆'.repeat(5-i)}</strong><br><span>${ratingCounts[i]}</span></div>`).join('')}
+  `;
+}
 
 // ─── Settings Load ──────────────────────────────────────────────────────────
 async function loadSettings() {
@@ -514,7 +635,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
   initTheme();
   applyRoleUI(currentManager?.role);
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
 })();
 
 function applyRoleUI(role) {
@@ -533,7 +654,7 @@ function applyRoleUI(role) {
   if (role === 'scrum') {
     document.querySelectorAll('.collapsible').forEach(c => {
       const title = c.querySelector('.card-title')?.textContent || '';
-      if (title.includes('Должности') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
+      if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Обратная') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
         c.style.display = 'none';
       }
     });

@@ -34,6 +34,8 @@
     .employees-card { padding: 0; }
     .employees-card .table-wrap { overflow-x: auto; }
     #employeesTable { width: 100%; table-layout: fixed; }
+    #employeesTable thead { position: sticky; top: 0; z-index: 10; }
+    #employeesTable thead th { background: var(--bg-secondary); }
     #employeesTable .col-link { width: 200px; overflow: hidden; }
     #employeesTable .col-link .link-cell {
       display: block;
@@ -281,7 +283,7 @@
             <th style="text-align:left;">Город</th>
             <th style="text-align:left;">Статус</th>
             <th class="col-date" style="text-align:left;">Обновлено</th>
-            <th class="col-link" style="text-align:left;">Перссылка</th>
+            <th class="col-link" style="text-align:left;">Ссылка</th>
             <th class="col-resume" style="text-align:center;">Резюме</th>
             <th class="col-actions" style="text-align:center;"></th>
           </tr>

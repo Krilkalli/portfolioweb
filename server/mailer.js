@@ -1,12 +1,12 @@
 const nodemailer = require('nodemailer');
 const { helpers } = require('./db');
 
-function getTransport() {
-  const host = helpers.getSetting('smtp_host');
-  const port = parseInt(helpers.getSetting('smtp_port') || '587');
-  const user = helpers.getSetting('smtp_user');
-  const pass = helpers.getSetting('smtp_pass');
-  const from = helpers.getSetting('smtp_from') || 'Портфолио IS1C <noreply@is1c.ru>';
+async function getTransport() {
+  const host = await helpers.getSetting('smtp_host');
+  const port = parseInt(await helpers.getSetting('smtp_port') || '587');
+  const user = await helpers.getSetting('smtp_user');
+  const pass = await helpers.getSetting('smtp_pass');
+  const from = await helpers.getSetting('smtp_from') || 'Портфолио IS1C <noreply@is1c.ru>';
 
   if (!host || !user || !pass) return null;
 
@@ -14,7 +14,7 @@ function getTransport() {
 }
 
 async function sendMail({ to, subject, html }) {
-  const t = getTransport();
+  const t = await getTransport();
   if (!t) {
     console.warn('⚠️  SMTP не настроен — письмо не отправлено:', subject);
     return false;
@@ -30,15 +30,13 @@ async function sendMail({ to, subject, html }) {
 }
 
 async function testConnection() {
-  const t = getTransport();
+  const t = await getTransport();
   if (!t) throw new Error('SMTP не настроен');
   await t.transport.verify();
 }
 
-// ─── Шаблоны писем ───────────────────────────────────────────────────────────
-
 async function notifyManagerNewSubmission(employee, serverUrl) {
-  const managerEmail = helpers.getSetting('manager_email');
+  const managerEmail = await helpers.getSetting('manager_email');
   if (!managerEmail) return;
 
   await sendMail({
@@ -103,6 +101,35 @@ async function notifyEmployeeApproved(employee) {
   });
 }
 
+async function notifyEmployeeReviewCompleted(employee, approvedFields, rejectedFields, serverUrl) {
+  if (!employee.email) return;
+  const hasApproved = approvedFields.length > 0;
+  const hasRejected = rejectedFields.length > 0;
+  let subject;
+  if (hasApproved && hasRejected) subject = '📋 Результаты проверки вашего профиля';
+  else if (hasApproved) subject = '✅ Ваш профиль обновлён';
+  else subject = '❌ Изменения профиля не приняты';
+  const formLink = serverUrl ? `${serverUrl}/form.html?token=${employee.token}` : '';
+  await sendMail({
+    to: employee.email,
+    subject,
+    html: `
+      <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+        <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
+          <h2 style="margin:0;">Портфолио IS1C</h2>
+        </div>
+        <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
+          <p>Здравствуйте, ${employee.name.split(' ')[1] || employee.name}!</p>
+          ${hasApproved ? `<p><strong>✅ Принятые поля:</strong></p><ul style="padding-left:20px;margin:8px 0;">${approvedFields.map(f => `<li>${f.label}${f.reason ? ' — ' + f.reason : ''}</li>`).join('')}</ul>` : ''}
+          ${hasRejected ? `<p><strong>❌ Не принятые поля:</strong></p><ul style="padding-left:20px;margin:8px 0;">${rejectedFields.map(f => `<li>${f.label}${f.reason ? ' — ' + f.reason : ''}</li>`).join('')}</ul>` : ''}
+          ${hasRejected ? `<p>Пожалуйста, перезаполните отклонённые поля и отправьте их на повторную проверку.</p>` : ''}
+          <p style="margin-top:16px;"><a href="${formLink}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Перейти к анкете</a></p>
+        </div>
+      </div>
+    `,
+  });
+}
+
 async function notifyEmployeeRejected(employee, reason, rejectedFields = []) {
   if (!employee.email) return;
   const fieldList = rejectedFields.length > 0
@@ -129,9 +156,9 @@ async function notifyEmployeeRejected(employee, reason, rejectedFields = []) {
 }
 
 async function notifyManagerFeedback(employee, feedback) {
-  const managerEmail = helpers.getSetting('manager_email');
+  const managerEmail = await helpers.getSetting('manager_email');
   if (!managerEmail || !feedback) return;
-  
+
   await sendMail({
     to: managerEmail,
     subject: `💬 Обратная связь от ${employee.name}`,
@@ -189,6 +216,7 @@ module.exports = {
   notifyEmployeeSubmitted,
   notifyEmployeeApproved,
   notifyEmployeeRejected,
+  notifyEmployeeReviewCompleted,
   notifyManagerFeedback,
   notifyMassMailing,
 };
