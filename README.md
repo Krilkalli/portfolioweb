@@ -86,3 +86,5 @@ docker exec -it samba-ad samba-tool user show petrova
 docker exec -it samba-ad samba-tool user list
 # Проверить, что пользователь может аутентифицироваться
 docker exec -it samba-ad samba-tool domain auth --username=petrova --password=P@ssw0rd456
+
+Ребилд для внесения изменений: docker compose up -d --build

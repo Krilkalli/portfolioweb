@@ -203,7 +203,7 @@ function renderTable(list) {
       <td class="col-actions" style="text-align:center;">
         <div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
-            ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
+            ? `<button class="btn btn-primary btn-icon" style="width:32px;height:32px;" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Восстановить"><i class="fi fi-rr-undo"></i></button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
                <div class="action-dropdown">
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>

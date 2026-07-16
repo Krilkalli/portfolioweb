@@ -246,9 +246,10 @@ function addEducationEntry(data) {
       <div class="form-group"><label class="form-label">Направление / Специальность</label>
         <input type="text" class="form-control edu-specialty" placeholder="Направление подготовки" value="${v(data?.specialty)}"></div>
       <div class="form-group"><label class="form-label">Год окончания</label>
-        <input type="text" class="form-control edu-year" placeholder="2024" value="${v(data?.year)}"></div>
+        <input type="text" class="form-control edu-year" placeholder="2024" inputmode="numeric" value="${v(data?.year)}"></div>
     </div>`;
   c.appendChild(e);
+  maskYear(e.querySelector('.edu-year'));
   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.edu-summary'); trackChanges(); }));
 }
 
@@ -595,7 +596,7 @@ function autoResize(el) {
 function trackChanges() {
   const changedFields = [];
   const checks = {
-    about: 'f_about', city: 'f_city', email: 'f_email',
+    name: 'f_name', about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     certification: 'f_certification',
     photo: 'f_photo',
@@ -640,7 +641,7 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 function getChangedFieldNames() {
   const changedFields = [];
   const checks = {
-    about: 'f_about', city: 'f_city', email: 'f_email',
+    name: 'f_name', about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
     photo: 'f_photo',
   };
@@ -659,6 +660,7 @@ function getChangedFieldNames() {
 
 function collectFormFields() {
   return {
+    name: document.getElementById('f_name')?.value.trim() || '',
     position: document.getElementById('f_position').value,
     city: document.getElementById('f_city')?.value.trim() || '',
     email: document.getElementById('f_email')?.value.trim() || '',
@@ -686,6 +688,7 @@ async function performSubmit(fields) {
     try {
       const empId = employee.id;
       const payload = {};
+      if (fields.name !== undefined) payload.name = fields.name;
       if (fields.position !== undefined) payload.position = fields.position;
       if (fields.about !== undefined) payload.about = fields.about;
       if (fields.competencies !== undefined) payload.competencies = fields.competencies;
@@ -766,6 +769,7 @@ async function performSubmit(fields) {
 document.getElementById('profileForm').addEventListener('submit', (e) => {
   e.preventDefault();
   if (isViewMode) return;
+  if (!validateAllDateFields()) { toast('Проверьте корректность полей с годом/периодом', 'error'); return; }
   const changed = getChangedFieldNames();
   if (!changed.length) { toast('Изменений не обнаружено', 'warning'); return; }
   pendingSubmitFields = collectFormFields();
@@ -866,6 +870,45 @@ function maskPeriod(el) {
       }
       this.value = result;
     }, 10);
+  });
+
+  el.addEventListener('blur', function() {
+    if (this.value && !validatePeriod(this.value)) {
+      this.classList.add('is-invalid');
+      this.classList.remove('is-valid');
+      showFieldError(this, 'Введите корректный период в формате ММ.ГГГГ - ММ.ГГГГ');
+    } else if (this.value) {
+      this.classList.remove('is-invalid');
+      this.classList.add('is-valid');
+      removeFieldError(this);
+    } else {
+      this.classList.remove('is-invalid', 'is-valid');
+      removeFieldError(this);
+    }
+  });
+}
+
+// ─── Маска и валидация для полей с годом (только 4 цифры) ──────────────────
+function maskYear(el) {
+  if (!el) return;
+
+  el.addEventListener('input', function() {
+    this.value = this.value.replace(/\D/g, '').slice(0, 4);
+  });
+
+  el.addEventListener('blur', function() {
+    if (this.value && !validateYear(this.value)) {
+      this.classList.add('is-invalid');
+      this.classList.remove('is-valid');
+      showFieldError(this, 'Введите корректный год (1900-' + (new Date().getFullYear() + 1) + ')');
+    } else if (this.value) {
+      this.classList.remove('is-invalid');
+      this.classList.add('is-valid');
+      removeFieldError(this);
+    } else {
+      this.classList.remove('is-invalid', 'is-valid');
+      removeFieldError(this);
+    }
   });
 }
 let cropper = null;
@@ -1173,7 +1216,77 @@ window.applyAiSuggestion = function(targetId, newText) {
 };
 
 initForm();
+// ─── Валидация года ──────────────────────────────────────────────────────────
+function validateYear(value) {
+  if (!value) return true;
+  const num = Number(value);
+  return /^\d{4}$/.test(value) && num >= 1900 && num <= new Date().getFullYear() + 1;
+}
 
+// ─── Валидация периода (ММ.ГГГГ - ММ.ГГГГ) ──────────────────────────────────
+function validatePeriod(value) {
+  if (!value) return true;
+  const regex = /^(\d{2})\.(\d{4})\s*-\s*(\d{2})\.(\d{4})$/;
+  const match = value.match(regex);
+  if (!match) return false;
+  
+  const startMonth = parseInt(match[1]);
+  const startYear = parseInt(match[2]);
+  const endMonth = parseInt(match[3]);
+  const endYear = parseInt(match[4]);
+  
+  if (startMonth < 1 || startMonth > 12) return false;
+  if (endMonth < 1 || endMonth > 12) return false;
+  if (startYear < 1900 || startYear > 2100) return false;
+  if (endYear < 1900 || endYear > 2100) return false;
+  if (startYear > endYear) return false;
+  if (startYear === endYear && startMonth > endMonth) return false;
+  
+  return true;
+}
+
+// ─── Проверка всех полей с датами перед отправкой формы ─────────────────────
+function validateAllDateFields() {
+  let firstInvalid = null;
+  document.querySelectorAll('.edu-year, .course-year').forEach(el => {
+    if (el.value && !validateYear(el.value)) {
+      el.classList.add('is-invalid'); el.classList.remove('is-valid');
+      showFieldError(el, 'Введите корректный год (1900-' + (new Date().getFullYear() + 1) + ')');
+      if (!firstInvalid) firstInvalid = el;
+    }
+  });
+  document.querySelectorAll('.proj-period, .job-period').forEach(el => {
+    if (el.value && !validatePeriod(el.value)) {
+      el.classList.add('is-invalid'); el.classList.remove('is-valid');
+      showFieldError(el, 'Введите корректный период в формате ММ.ГГГГ - ММ.ГГГГ');
+      if (!firstInvalid) firstInvalid = el;
+    }
+  });
+  if (firstInvalid) {
+    firstInvalid.closest('details')?.setAttribute('open', '');
+    firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    firstInvalid.focus();
+  }
+  return !firstInvalid;
+}
+
+// ─── Показать ошибку под полем ──────────────────────────────────────────────
+function showFieldError(el, message) {
+  let error = el.parentElement.querySelector('.field-error');
+  if (!error) {
+    error = document.createElement('div');
+    error.className = 'field-error';
+    error.style.cssText = 'color:#ef4444;font-size:0.78rem;margin-top:4px;';
+    el.parentElement.appendChild(error);
+  }
+  error.textContent = '❌ ' + message;
+}
+
+// ─── Убрать ошибку под полем ────────────────────────────────────────────────
+function removeFieldError(el) {
+  const error = el.parentElement.querySelector('.field-error');
+  if (error) error.remove();
+}
 // ─── Total Job Entries (Общий стаж) ─────────────────────────────────────────
 function addTotalJobEntry(data) {
   const c = document.getElementById('totalJobContainer');
@@ -1211,10 +1324,11 @@ function addCourseEntry(data) {
   e.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px; align-items: center; position: relative;';
   e.innerHTML = `
     <input type="text" class="form-control course-name" placeholder="Наименование курса" value="${escHtml(data?.name||'')}">
-    <input type="text" class="form-control course-year" placeholder="Год" style="width: 100px;" value="${escHtml(data?.year||'')}">
-    <button type="button" class="remove-btn" onclick="this.parentElement.remove(); trackChanges();" style="position:relative; top:0; right:0;">✕</button>
+    <input type="text" class="form-control course-year" placeholder="Год" inputmode="numeric" style="width: 100px;" value="${escHtml(data?.year||'')}">
+    <button type="button" class="remove-btn course-remove-btn" onclick="this.parentElement.remove(); trackChanges();"><i class="fi fi-rr-cross-small"></i></button>
   `;
   c.appendChild(e);
+  maskYear(e.querySelector('.course-year'));
   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', trackChanges));
 }
 function getCoursesData() {

@@ -14,14 +14,18 @@ function initials(name) {
 }
 
 const FIELD_LABELS = {
+  name: 'ФИО',
   education: 'Образование',
   position: 'Должность',
   contacts: 'Контактные данные',
+  total_experience: 'Общий стаж',
   experience: 'Стаж работы',
   about: 'Обо мне',
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
   certification: 'Сертификация 1С',
+  certificates: 'Сертификация 1С',
+  courses: 'Обучающие курсы',
   email: 'Email',
   city: 'Город',
   phone: 'Телефон',
@@ -345,16 +349,8 @@ window.reviewWithAI = async function(employeeId, btn) {
       if (errors.length === 0) {
         textContent = 'Анкета заполнена отлично! Замечаний нет.';
       } else {
-        const FIELD_NAMES = {
-          name: 'ФИО', position: 'Должность', email: 'E-mail',
-          total_experience: 'Общий стаж', experience: 'Опыт работы',
-          about: 'Обо мне', competencies: 'Компетенции',
-          project_experience: 'Проектный опыт', education: 'Образование',
-          certificates: 'Сертификаты', courses: 'Курсы'
-        };
-        
         textContent = errors.map(err => {
-          const fieldNameRu = FIELD_NAMES[err.field] || err.field;
+          const fieldNameRu = FIELD_LABELS[err.field] || err.field;
           let html = `<strong>${escHtml(fieldNameRu)}</strong>: ${escHtml(err.error)}`;
           if (err.suggestion) {
             html += `<br><em style="color:var(--text-muted); font-size:0.9em;">Предложение: ${escHtml(err.suggestion)}</em>`;

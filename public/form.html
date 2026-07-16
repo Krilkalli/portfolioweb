@@ -90,6 +90,14 @@
       font-size: 1rem; display: flex; align-items: center; justify-content: center;
     }
     .edu-entry .remove-btn:hover, .job-entry .remove-btn:hover, .proj-entry .remove-btn:hover { background: rgba(239,68,68,0.25); }
+    .course-remove-btn {
+      background: rgba(239,68,68,0.15);
+      color: var(--danger); border: none; border-radius: 6px;
+      width: 28px; height: 28px; cursor: pointer; flex-shrink: 0;
+      font-size: 1rem; display: flex; align-items: center; justify-content: center;
+      transition: background var(--transition);
+    }
+    .course-remove-btn:hover { background: rgba(239,68,68,0.25); }
     .edu-entry .form-group, .job-entry .form-group, .proj-entry .form-group { margin-bottom: 10px; }
     .edu-entry .form-group:last-child, .job-entry .form-group:last-child, .proj-entry .form-group:last-child { margin-bottom: 0; }
     .edu-entry .form-label, .job-entry .form-label, .proj-entry .form-label { font-size: 0.78rem; }
