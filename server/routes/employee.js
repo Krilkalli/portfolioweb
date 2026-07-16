@@ -12,21 +12,15 @@ const querystring = require('querystring');
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname);
-    cb(null, uuidv4() + ext);
-  }
-});
+const sharp   = require('sharp');
+
+const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
 const { enhanceText, enhanceJSON } = require('../ai');
 
 const EDITABLE_FIELDS = [
-  'education','position','contacts','experience',
+  'name','education','position','contacts','experience',
   'about','competencies','project_experience','certification','photo',
 ];
 router.get('/positions', async (req, res, next) => {
@@ -142,7 +136,15 @@ router.post('/:token/photo', upload.single('photo'), async (req, res, next) => {
     const emp = await helpers.getEmployeeByToken(req.params.token);
     if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
-    res.json({ ok: true, photo: req.file.filename });
+    
+    const newFilename = uuidv4() + '.jpeg';
+    const filepath = path.join(uploadsDir, newFilename);
+    
+    await sharp(req.file.buffer)
+      .jpeg({ quality: 85 })
+      .toFile(filepath);
+
+    res.json({ ok: true, photo: newFilename });
   } catch (err) { next(err); }
 });
 

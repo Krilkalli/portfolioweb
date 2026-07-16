@@ -10,3 +10,5 @@ data/*.db
 # Зависимости Node.js
 node_modules/
 
+# Загруженные файлы (фото)
+uploads/

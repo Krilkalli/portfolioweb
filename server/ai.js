@@ -136,37 +136,37 @@ class OpenAIProvider extends AIProvider {
   async reviewText(text, prompt) { return this._request(prompt, text); }
 }
 
-function getAIProvider() {
-  const provider = helpers.getSetting('ai_provider') || 'yandexgpt';
+async function getAIProvider() {
+  const provider = await helpers.getSetting('ai_provider') || 'yandexgpt';
   if (provider === 'yandexgpt') {
     return new YandexGPTProvider(
-      helpers.getSetting('ai_folder_id'),
-      helpers.getSetting('ai_api_key')
+      await helpers.getSetting('ai_folder_id'),
+      await helpers.getSetting('ai_api_key')
     );
   } else if (provider === 'openai') {
     return new OpenAIProvider(
-      helpers.getSetting('ai_api_key'),
-      helpers.getSetting('ai_base_url'),
-      helpers.getSetting('ai_model_name')
+      await helpers.getSetting('ai_api_key'),
+      await helpers.getSetting('ai_base_url'),
+      await helpers.getSetting('ai_model_name')
     );
   }
   throw new Error(`AI Provider ${provider} is not supported yet.`);
 }
 
 async function enhanceText(text) {
-  const provider = getAIProvider();
-  const prompt = helpers.getSetting('ai_prompt_fill') || 'Исправь грамматику и стиль текста. Верни только исправленный текст.';
+  const provider = await getAIProvider();
+  const prompt = await helpers.getSetting('ai_prompt_fill') || 'Исправь грамматику и стиль текста. Верни только исправленный текст.';
   return await provider.enhanceText(text, prompt);
 }
 
 async function reviewText(text) {
-  const provider = getAIProvider();
-  let prompt = helpers.getSetting('ai_prompt_review') || 'Проанализируй текст и верни список замечаний. Если замечаний нет, напиши "Замечаний нет".';
+  const provider = await getAIProvider();
+  let prompt = await helpers.getSetting('ai_prompt_review') || 'Проанализируй текст и верни список замечаний. Если замечаний нет, напиши "Замечаний нет".';
   return await provider.reviewText(text, prompt);
 }
 
 async function reviewJSONData(data) {
-  const provider = getAIProvider();
+  const provider = await getAIProvider();
   
   const rules = `
 Правила заполнения полей:
@@ -225,8 +225,8 @@ ${rules}
 }
 
 async function enhanceJSON(data) {
-  const provider = getAIProvider();
-  let prompt = helpers.getSetting('ai_prompt_fill') || 'Исправь грамматику и стиль текста. Верни только исправленный текст.';
+  const provider = await getAIProvider();
+  let prompt = await helpers.getSetting('ai_prompt_fill') || 'Исправь грамматику и стиль текста. Верни только исправленный текст.';
   
   prompt += '\n\nВНИМАНИЕ: Тебе передан JSON объект со всеми полями анкеты. Исправь грамматику, стилистику и орфографию во всех текстовых значениях. Обязательно верни СТРОГО валидный JSON с ТОЧНО такой же структурой и ключами, как в оригинале. Никакого текста или markdown, только сырой JSON.';
   

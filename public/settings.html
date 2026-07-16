@@ -57,6 +57,7 @@
   .stat-box strong { font-size:1.1rem;color:var(--text); }
   .stat-box span { font-size:0.78rem;color:var(--text-muted); }
   </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
 <body class="page-wrapper">
 
@@ -67,7 +68,7 @@
     <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
-    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌙</button>
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
     <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -81,7 +82,7 @@
     <!-- SMTP Card -->
     <div class="card" data-role="admin">
       <div class="card-header">
-        <span class="card-title">📧 SMTP / Email — настройка почтовых уведомлений</span>
+        <span class="card-title"><i class="fi fi-rr-envelope"></i> SMTP / Email — настройка почтовых уведомлений</span>
       </div>
       <div class="smtp-hint">
         Система использует SMTP для отправки уведомлений сотрудникам и менеджеру.
@@ -116,7 +117,7 @@
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="submit" class="btn btn-primary" id="saveSmtpBtn">Сохранить настройки</button>
-          <button type="button" class="btn btn-ghost" id="testEmailBtn">🔌 Проверить соединение</button>
+          <button type="button" class="btn btn-ghost" id="testEmailBtn"><i class="fi fi-rr-plug"></i> Проверить соединение</button>
         </div>
         <div id="smtpResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
@@ -125,7 +126,7 @@
     <!-- AI Settings Card -->
     <div class="card" data-role="admin">
       <div class="card-header">
-        <span class="card-title">✨ ИИ-Ассистент (Нейросети)</span>
+        <span class="card-title"><i class="fi fi-rr-magic-wand"></i> ИИ-Ассистент (Нейросети)</span>
       </div>
       <div class="smtp-hint">
         Настройка искусственного интеллекта для помощи сотрудникам при заполнении профиля и менеджерам при проверке.
@@ -173,7 +174,7 @@
     <!-- Scrum-only email section -->
     <div class="card" data-role="scrum" style="display:none;">
       <div class="card-header">
-        <span class="card-title">📧 Email менеджера</span>
+        <span class="card-title"><i class="fi fi-rr-envelope"></i> Email менеджера</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">На этот адрес приходят уведомления о новых изменениях.</p>
       <form id="scrumEmailForm">
@@ -189,7 +190,7 @@
     <!-- Positions Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">👔 Управление должностями</span>
+        <span class="card-title"><i class="fi fi-rr-briefcase"></i> Управление должностями</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список должностей, доступных для выбора сотрудниками в форме.</p>
@@ -204,7 +205,7 @@
     <!-- Position Aliases Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">🏷️ Аналоги должностей для выгрузки</span>
+        <span class="card-title"><i class="fi fi-rr-tags"></i> Аналоги должностей для выгрузки</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -232,7 +233,7 @@
     <!-- Competencies per Position Card -->
     <div class="card collapsible" data-role="admin,scrum">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📋 Компетенции по должностям</span>
+        <span class="card-title"><i class="fi fi-rr-clipboard"></i> Компетенции по должностям</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -256,7 +257,7 @@
     <!-- Password Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">🔑 Смена пароля</span>
+        <span class="card-title"><i class="fi fi-rr-key"></i> Смена пароля</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Изменение пароля для вашей учётной записи (<span id="currentManagerLogin"></span>).</p>
@@ -273,7 +274,7 @@
           <label class="form-label" for="confirm_password">Повторите пароль</label>
           <input id="confirm_password" type="password" class="form-control" placeholder="Повторите пароль">
         </div>
-        <button type="submit" class="btn btn-primary" id="savePasswordBtn">🔑 Сменить пароль</button>
+        <button type="submit" class="btn btn-primary" id="savePasswordBtn"><i class="fi fi-rr-key"></i> Сменить пароль</button>
         <div id="passwordResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
@@ -281,7 +282,7 @@
     <!-- Managers Card -->
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">👥 Управление менеджерами</span>
+        <span class="card-title"><i class="fi fi-rr-users"></i> Управление менеджерами</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
@@ -296,7 +297,7 @@
           <option value="leader">Руководитель</option>
           <option value="admin">Главный администратор</option>
         </select>
-        <button class="btn btn-primary" id="addManagerBtn">➕ Добавить менеджера</button>
+        <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить менеджера</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>
       </div>
     </div>
@@ -304,7 +305,7 @@
     Import Card
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📥 Импорт сотрудников из Excel</span>
+        <span class="card-title"><i class="fi fi-rr-download"></i> Импорт сотрудников из Excel</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -312,7 +313,7 @@
         Все существующие сотрудники будут удалены.
       </p>
       <label class="btn btn-primary" for="importFile" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
-        📥 Выбрать файл и импортировать
+        <i class="fi fi-rr-download"></i> Выбрать файл и импортировать
         <input type="file" id="importFile" accept=".xlsx,.xls" style="display:none;">
       </label>
       <div id="importResult" style="margin-top:12px;font-size:0.85rem;"></div>
@@ -321,7 +322,7 @@
     <!-- Template Card -->
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📄 Шаблон резюме</span>
+        <span class="card-title"><i class="fi fi-rr-document"></i> Шаблон резюме</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
@@ -332,7 +333,7 @@
         <div class="form-group">
           <input type="file" id="templateFile" accept=".docx" class="form-control" style="padding:8px;">
         </div>
-        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">📤 Загрузить шаблон</button>
+        <button type="submit" class="btn btn-primary" id="uploadTemplateBtn"><i class="fi fi-rr-upload"></i> Загрузить шаблон</button>
         <div id="templateResult" style="margin-top:10px;font-size:0.85rem;"></div>
       </form>
     </div>
@@ -340,7 +341,7 @@
     <!-- Feedback Card -->
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">📊 Обратная связь сотрудников</span>
+        <span class="card-title"><i class="fi fi-rr-stats"></i> Обратная связь сотрудников</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Отзывы, оставленные сотрудниками через анкеты обратной связи. Собираются в таблицу вместо отправки на почту.</p>
@@ -366,7 +367,7 @@
     <!-- Info Card -->
     <div class="card collapsible">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
-        <span class="card-title">ℹ️ О системе</span>
+        <span class="card-title"><i class="fi fi-rr-info"></i> О системе</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.875rem;color:var(--text-secondary);line-height:1.7;">

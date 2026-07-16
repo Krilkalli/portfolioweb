@@ -2,8 +2,8 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
-  t.innerHTML = `<span>${icons[type] || 'ℹ️'}</span> ${msg}`;
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
+  t.innerHTML = `<span>${icons[type] || '<i class="fi fi-rr-info"></i>'}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.animation = 'none'; t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
 }
@@ -22,7 +22,7 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   }
 }
 
@@ -30,7 +30,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── Data ───────────────────────────────────────────────────────────────────
@@ -162,8 +162,8 @@ function renderTable(list) {
         <div style="display:flex;align-items:center;gap:10px;">
           ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${e.photo}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>`}
           <div>
-            <div class="employee-name"><a href="${e.link.replace('&as', '&as=manager')}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
-            <div style="font-size:0.75rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.email || ''}">${e.email || '—'}</div>
+            <div class="employee-name"><a href="${e.link.replace('&as', '&as=manager')}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);" title="${e.email || ''}">${e.email ? (e.email.length > 12 ? e.email.substring(0, 12) + '...' : e.email) : '—'}</div>
           </div>
         </div>
       </td>
@@ -177,7 +177,7 @@ function renderTable(list) {
         ${e.status === 'archived'
           ? '<span class="badge badge-muted">Архив</span>'
             : e.pendingCount > 0
-              ? `<a href="/review.html" class="badge badge-warning" style="text-decoration:none;cursor:pointer;">⚡ ${e.pendingCount} изм.</a>`
+              ? `<a href="/review.html" class="badge badge-warning" style="text-decoration:none;cursor:pointer;"><i class="fi fi-rr-bolt"></i> ${e.pendingCount} изм.</a>`
             : `<span class="badge badge-muted">Актуально</span>`}
       </td>
       <td style="text-align:left;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
@@ -185,17 +185,17 @@ function renderTable(list) {
         ${e.status !== 'archived'
           ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
               <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
-              <button class="btn btn-ghost btn-icon" style="width:26px;height:26px;font-size:0.7rem;flex-shrink:0;" onclick="copyToClipboard('${e.link}')" title="Скопировать ссылку">📋</button>
+              <button class="btn btn-ghost btn-icon" style="width:26px;height:26px;font-size:0.7rem;flex-shrink:0;" onclick="copyToClipboard('${e.link}')" title="Скопировать ссылку"><i class="fi fi-rr-clipboard"></i></button>
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
       <td class="col-resume" style="text-align:center;">
         ${e.status !== 'archived'
           ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
-              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;">📄 Резюме</button>
+              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;"><i class="fi fi-rr-document"></i> Резюме</button>
               <div class="resume-dropdown">
-                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank">📄 Word (DOCX)</a>
-                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank">📑 PDF</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank"><i class="fi fi-rr-document"></i> Word (DOCX)</a>
+                <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank"><i class="fi fi-rr-file-pdf"></i> PDF</a>
               </div>
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
@@ -206,8 +206,8 @@ function renderTable(list) {
             ? `<button class="btn btn-primary btn-sm" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">↩ Восстановить</button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
                <div class="action-dropdown">
-                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')">🔄 Новая ссылка</button>
-                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')">📦 Архив</button>
+                 <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>
+                 <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-box"></i> Архив</button>
                </div>`}
         </div>
       </td>
@@ -311,7 +311,7 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
   if (!payload.name) {
     toast('Укажите ФИО сотрудника', 'error');
     btn.disabled = false;
-    btn.innerHTML = '➕ Добавить и скопировать ссылку';
+    btn.innerHTML = '<i class="fi fi-rr-plus"></i> Добавить и скопировать ссылку';
     return;
   }
 
@@ -328,7 +328,7 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
       navigator.clipboard.writeText(d.employee.link).catch(() => {});
       document.getElementById('addResult').innerHTML = `
         <div style="background:rgba(34,197,94,0.1);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:12px;font-size:0.85rem;">
-          ✅ Сотрудник добавлен. Ссылка скопирована в буфер обмена.<br>
+          <i class="fi fi-rr-check-circle"></i> Сотрудник добавлен. Ссылка скопирована в буфер обмена.<br>
           <a href="${d.employee.link}" target="_blank" style="font-size:0.8rem;">${d.employee.link}</a>
         </div>`;
       await loadEmployees();
@@ -338,7 +338,7 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
     }
   } catch { toast('Ошибка соединения', 'error'); }
   btn.disabled = false;
-  btn.innerHTML = '➕ Добавить и скопировать ссылку';
+  btn.innerHTML = '<i class="fi fi-rr-plus"></i> Добавить и скопировать ссылку';
 });
 
 // ─── Search & Filter ──────────────────────────────────────────────────────────
@@ -590,16 +590,16 @@ document.getElementById('exportExcelBtn').addEventListener('click', async () => 
 //     e.target.value = '';
 //     if (r.ok) {
 //       const modeText = d.mode === 'replace' ? 'Полная замена' : 'Добавление';
-//       result.innerHTML = `<span style="color:var(--success)">✅ ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
+//       result.innerHTML = `<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> ${modeText} завершён: добавлено ${d.imported}, пропущено ${d.skipped}</span>`;
 //       toast(`Импорт завершён: добавлено ${d.imported}, пропущено ${d.skipped} дубликатов`, 'success');
 //       await loadEmployees();
 //       await loadStats();
 //     } else {
-//       result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка импорта'}</span>`;
+//       result.innerHTML = `<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> ${d.error || 'Ошибка импорта'}</span>`;
 //       toast(d.error || 'Ошибка импорта', 'error');
 //     }
 //   } catch {
-//     result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+//     result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> Ошибка при импорте файла</span>';
 //     toast('Ошибка при импорте файла', 'error');
 //   }
 //   setTimeout(() => { result.innerHTML = ''; }, 6000);
@@ -619,7 +619,7 @@ document.getElementById('massMailBtn').addEventListener('click', () => {
   document.getElementById('massMailResult').innerHTML = '';
   
   // Показываем количество выбранных
-  document.getElementById('selectedRecipientsInfo').textContent = `👥 Выбрано: ${selectedIds.size} сотрудников`;
+  document.getElementById('selectedRecipientsInfo').textContent = `<i class="fi fi-rr-users"></i> Выбрано: ${selectedIds.size} сотрудников`;
 });
 
 // Закрыть модальное окно
@@ -672,19 +672,19 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
     const d = await r.json();
     
     if (r.ok) {
-      result.innerHTML = `<span style="color:var(--success)">✅ Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
+      result.innerHTML = `<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Отправлено: ${d.sent}, ошибок: ${d.failed}</span>`;
       toast(`Рассылка завершена: ${d.sent} успешно, ${d.failed} с ошибками`, d.failed === 0 ? 'success' : 'warning');
     } else {
-      result.innerHTML = `<span style="color:var(--danger)">❌ ${d.error || 'Ошибка рассылки'}</span>`;
+      result.innerHTML = `<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> ${d.error || 'Ошибка рассылки'}</span>`;
       toast(d.error || 'Ошибка рассылки', 'error');
     }
   } catch (err) {
-    result.innerHTML = `<span style="color:var(--danger)">❌ Ошибка соединения</span>`;
+    result.innerHTML = `<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> Ошибка соединения</span>`;
     toast('Ошибка соединения', 'error');
   }
   
   btn.disabled = false;
-  btn.innerHTML = '📧 Отправить выбранным';
+  btn.innerHTML = '<i class="fi fi-rr-envelope"></i> Отправить выбранным';
 });
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {

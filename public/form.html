@@ -7,6 +7,7 @@
   <meta name="description" content="Форма обновления профиля сотрудника IS1C">
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
   <style>
     .form-page {
       min-height: 100vh;
@@ -236,8 +237,8 @@
     <span style="color:var(--text-muted);font-size:0.85rem;" id="headerSubtitle">— Обновление профиля</span>
   </div>
   <div style="display:flex;align-items:center;gap:8px;">
-    <button id="editModeBtn" class="btn btn-primary btn-sm hidden">✏️ Редактировать</button>
-    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему">🌗</button>
+    <button id="editModeBtn" class="btn btn-primary btn-sm hidden"><i class="fi fi-rr-pencil"></i> Редактировать</button>
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
   </div>
 </header>
 
@@ -247,7 +248,7 @@
 </div>
 
 <div id="errorState" class="error-screen hidden">
-  <div style="font-size:3rem;margin-bottom:16px;">🔗</div>
+  <div style="font-size:3rem;margin-bottom:16px;"><i class="fi fi-rr-link-broken"></i></div>
   <h2 style="color:var(--text-secondary);margin-bottom:8px;">Ссылка недействительна</h2>
   <p>Обратитесь к менеджеру для получения актуальной ссылки.</p>
   <div id="backToDashError" style="margin-top:20px;display:none;">
@@ -257,7 +258,7 @@
 
   <div id="successState" class="form-wrap hidden">
   <div class="success-screen">
-    <div class="success-icon">✅</div>
+    <div class="success-icon"><i class="fi fi-rr-check-circle"></i></div>
     <h2 style="font-size:1.4rem;margin-bottom:8px;">Данные отправлены на проверку!</h2>
     <p id="successSubtitle" style="color:var(--text-secondary);max-width:400px;margin:0 auto 8px;">
       Менеджер рассмотрит изменения и подтвердит их.
@@ -282,14 +283,14 @@
   <!-- ===== ФОТО СОТРУДНИКА ===== -->
   <div class="form-group field-full edit-only" style="margin-bottom: 24px;">
     <div class="section-card">
-      <div class="section-card-title">📸 Фото сотрудника</div>
+      <div class="section-card-title"><i class="fi fi-rr-camera"></i> Фото сотрудника</div>
       <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
         <div id="photoPreview" style="width: 100px; height: 100px; border-radius: 50%; background: var(--bg-card); border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center; overflow: hidden; flex-shrink: 0;">
           <span style="color: var(--text-muted); font-size: 0.8rem;">Нет фото</span>
         </div>
         <div style="flex: 1; min-width: 200px;">
           <label class="btn btn-primary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
-            📁 Выбрать фото
+            <i class="fi fi-rr-folder-open"></i> Выбрать фото
             <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
           </label>
           <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Рекомендуемый формат: квадратное фото (JPG, PNG до 5 МБ)</p>
@@ -300,7 +301,7 @@
   </div>
 
   <div id="pendingWarning" class="pending-warning edit-only hidden">
-    ⚠️ У вас уже есть изменения, ожидающие проверки. Отправка новой формы заменит предыдущие.
+    <i class="fi fi-rr-triangle-warning"></i> У вас уже есть изменения, ожидающие проверки. Отправка новой формы заменит предыдущие.
   </div>
   <div id="changesSummary" class="changes-summary edit-only">
     Изменены поля: <span id="changedFieldsList"></span>
@@ -309,10 +310,19 @@
   <form id="profileForm">
     <div class="fields-grid">
 
+      <!-- ===== ФИО ===== -->
+      <div class="form-group field-full">
+        <div class="section-card">
+          <div class="section-card-title"><i class="fi fi-rr-user"></i> ФИО</div>
+          <input type="text" id="f_name" class="form-control edit-only" placeholder="Фамилия Имя Отчество">
+          <div id="viewName" class="view-only" style="font-weight: 600;"></div>
+        </div>
+      </div>
+
       <!-- ===== ОБРАЗОВАНИЕ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">🎓 Образование</div>
+          <div class="section-card-title"><i class="fi fi-rr-graduation-cap"></i> Образование</div>
           <div id="educationContainer" class="edit-only"></div>
           <div id="viewEducation" class="view-only"></div>
           <button type="button" class="add-btn edit-only" id="addEducationBtn">+ Добавить учебное заведение</button>
@@ -322,7 +332,7 @@
       <!-- ===== ДОЛЖНОСТЬ ===== -->
       <div class="form-group">
         <div class="section-card" style="min-height: 148px;">
-          <div class="section-card-title">👔 Должность</div>
+          <div class="section-card-title"><i class="fi fi-rr-briefcase"></i> Должность</div>
           <select id="f_position" name="position" class="form-control edit-only"></select>
           <div id="viewPosition" class="view-only"></div>
           <div style="flex:1;"></div>
@@ -332,7 +342,7 @@
       <!-- ===== КОНТАКТНЫЕ ДАННЫЕ ===== -->
       <div class="form-group">
         <div class="section-card">
-          <div class="section-card-title">📞 Контактные данные</div>
+          <div class="section-card-title"><i class="fi fi-rr-phone-call"></i> Контактные данные</div>
           <div class="form-group edit-only" style="margin-bottom:10px;">
             <label class="form-label">Город</label>
             <input id="f_city" type="text" class="form-control" placeholder="Москва">
@@ -348,11 +358,13 @@
       <!-- ===== СТАЖ РАБОТЫ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">⏳ Стаж работы</div>
+          <div class="section-card-title"><i class="fi fi-rr-hourglass-end"></i> Стаж работы</div>
 
           <div class="experience-block">
             <div class="experience-block-title">Общий стаж работы</div>
-            <input id="f_total_experience" type="text" class="form-control edit-only" placeholder="Например: 12 лет">
+            <input id="f_total_experience" type="text" class="form-control edit-only" placeholder="Например: 12 лет" style="margin-bottom: 12px;">
+            <div id="totalJobContainer" class="edit-only"></div>
+            <button type="button" class="add-btn edit-only" id="addTotalJobBtn" style="margin-bottom: 12px;">+ Добавить место работы</button>
             <div id="viewTotalExperience" class="view-only"></div>
           </div>
 
@@ -369,12 +381,13 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">
-            👤 Обо мне
+            <i class="fi fi-rr-user"></i> Обо мне
+            <button type="button" class="btn btn-ghost btn-sm edit-only" id="aiReviewAboutBtn" style="margin-left:auto;color:var(--accent);border-color:var(--accent);font-size:0.8rem;padding:4px 10px;"><i class="fi fi-rr-magic-wand"></i> Проверить</button>
           </div>
           <div class="ai-suggestion-box" id="ai_suggestion_f_about" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
           <div id="viewAbout" class="view-only"></div>
-<div class="example-hint" onclick="toggleTemplate('about')">👁 Показать пример</div>
+          <div class="example-hint" onclick="toggleTemplate('about')"><i class="fi fi-rr-eye"></i> Показать пример</div>
           <div class="template-panel" id="template_about">
             <strong>Пример заполнения:</strong><br>
             Работаю с 1С в франчайзинге более 6 лет. Технический лидер с опытом управления командой (до 7 человек), выполняю роли архитектора, разработчика, аналитика в зависимости от сложности и объема проекта. Опыт охватывает все этапы жизненного цикла проектов — от обследования и моделирования бизнес-процессов до разработки сложных интеграций между конфигурациями и внешними системами.
@@ -386,12 +399,12 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title">
-            📋 Компетенции
+            <i class="fi fi-rr-clipboard"></i> Компетенции
           </div>
           <div class="ai-suggestion-box" id="ai_suggestion_f_competencies" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_competencies" class="form-control edit-only" rows="5" placeholder="Технические навыки, продукты 1С, методологии"></textarea>
           <div id="viewCompetencies" class="view-only"></div>
-          <div class="example-hint" onclick="toggleTemplate('competencies')">👁 Показать чек-лист компетенций</div>
+          <div class="example-hint" onclick="toggleTemplate('competencies')"><i class="fi fi-rr-eye"></i> Показать чек-лист компетенций</div>
           <div class="template-panel" id="template_competencies">
             <p style="margin-bottom:8px;color:var(--text-muted);font-size:0.78rem;">Чек-лист помогает в заполнении. Отметьте подходящие пункты — они добавятся в поле выше.</p>
             <div id="competencyChecklist"></div>
@@ -402,12 +415,12 @@
       <!-- ===== ПРОЕКТНЫЙ ОПЫТ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">📁 Проектный опыт</div>
+          <div class="section-card-title"><i class="fi fi-rr-folder"></i> Проектный опыт</div>
           <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту сотрудника</p>
           <div id="projectExperienceContainer" class="edit-only"></div>
           <div id="viewProjects" class="view-only"></div>
           <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
-          <div class="example-hint" onclick="toggleTemplate('project_experience')">👁 Показать пример</div>
+          <div class="example-hint" onclick="toggleTemplate('project_experience')"><i class="fi fi-rr-eye"></i> Показать пример</div>
           <div class="template-panel" id="template_project_experience">
             <strong>Пример:</strong><br>
             <strong>Период:</strong> 01.2024 - 06.2024<br>
@@ -425,27 +438,24 @@
       <!-- ===== СЕРТИФИКАЦИЯ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title">📜 Сертификация 1С и обучение</div>
+          <div class="section-card-title"><i class="fi fi-rr-diploma"></i> Сертификация 1С и обучение</div>
           <div class="form-group edit-only" style="margin-bottom:10px;">
             <label class="form-label">Сертификаты 1С</label>
             <textarea id="f_certification" class="form-control" rows="4" placeholder="1С:Профессионал. ERP Управление предприятием 2"></textarea>
           </div>
           <div class="form-group edit-only" style="margin-bottom:10px;">
-            <label class="form-label">Наименование курса</label>
-            <input id="f_course_name" type="text" class="form-control" placeholder="Наименование курса">
+            <label class="form-label" style="display:block;margin-bottom:8px;">Обучающие курсы</label>
+            <div id="coursesContainer"></div>
+            <button type="button" class="add-btn" id="addCourseBtn">+ Добавить курс</button>
           </div>
-          <div class="form-group edit-only" style="margin-bottom:0;">
-            <label class="form-label">Год прохождения</label>
-            <input id="f_course_year" type="text" class="form-control" placeholder="2024">
-          </div>
-<div id="viewCertification" class="view-only"></div>
+          <div id="viewCertification" class="view-only"></div>
         </div>
       </div>
 
     </div>
 
     <div class="feedback-section edit-only" id="feedbackSection">
-      <div class="section-card-title" style="border:none;padding:0;margin-bottom:12px;">💬 Обратная связь</div>
+      <div class="section-card-title" style="border:none;padding:0;margin-bottom:12px;"><i class="fi fi-rr-comment"></i> Обратная связь</div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:8px;">Оцените удобство заполнения профиля (необязательно)</p>
       <div class="star-rating" id="starRating">
         <button type="button" data-star="1">★</button>
@@ -458,10 +468,12 @@
     </div>
 
     <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
-      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">📤 Отправить на проверку</button>
-      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);">✨ Проверить Текст</button>
+      <button type="submit" class="btn btn-primary btn-lg" id="submitBtn"><i class="fi fi-rr-upload"></i> Отправить на проверку</button>
+      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);"><i class="fi fi-rr-magic-wand"></i> Проверить весь текст</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
-      <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);margin-left:auto;white-space:nowrap;"></span>
+    </div>
+    <div style="margin-top: 16px;">
+      <span id="lastUpdatedDate" style="font-size:0.8rem;color:var(--text-muted);"></span>
     </div>
   </form>
 </div>
@@ -477,7 +489,7 @@
     <div id="confirmFeedbackNote" style="font-size:0.82rem;color:var(--text-muted);margin-bottom:16px;display:none;"></div>
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button type="button" class="btn btn-ghost" id="cancelConfirmBtn">Отмена</button>
-      <button type="button" class="btn btn-primary" id="confirmSubmitBtn">✉️ Отправить</button>
+      <button type="button" class="btn btn-primary" id="confirmSubmitBtn"><i class="fi fi-rr-envelope"></i> Отправить</button>
     </div>
   </div>
 </div>
@@ -495,13 +507,13 @@
     </div>
     <div class="modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border);">
       <button type="button" class="btn btn-ghost" id="cancelCropBtn">Отмена</button>
-      <button type="button" class="btn btn-primary" id="applyCropBtn">✅ Применить</button>
+      <button type="button" class="btn btn-primary" id="applyCropBtn"><i class="fi fi-rr-check-circle"></i> Применить</button>
     </div>
   </div>
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
-<script src="/js/form.js?v=4"></script>
+<script src="/js/form.js?v=5"></script>
 </body>
 </html>

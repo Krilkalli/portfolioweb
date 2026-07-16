@@ -3,7 +3,7 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
   t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
@@ -95,7 +95,7 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   }
 }
 
@@ -103,7 +103,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── State ──────────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ async function loadPending() {
 
     pendingGroups = d.groups;
     document.getElementById('headerBadge').innerHTML =
-      `<span class="badge badge-warning" style="font-size:0.9rem;padding:6px 14px;">⚡ ${d.count} сотрудников</span>`;
+      `<span class="badge badge-warning" style="font-size:0.9rem;padding:6px 14px;"><i class="fi fi-rr-bolt"></i> ${d.count} сотрудников</span>`;
 
     list.innerHTML = '';
     for (const group of d.groups) {
@@ -164,9 +164,9 @@ function renderEmployeeCard(group) {
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
       <div class="actions">
-        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id}, this)">✨ Анализ ИИ</button>
-        <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})">✅ Подтвердить всё</button>
-        <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')">❌ Отклонить всё</button>
+        <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id}, this)"><i class="fi fi-rr-magic-wand"></i> Анализ ИИ</button>
+        <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})"><i class="fi fi-rr-check-circle"></i> Подтвердить всё</button>
+        <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')"><i class="fi fi-rr-cross-circle"></i> Отклонить всё</button>
       </div>
     </div>
     <div class="diff-wrap">
@@ -194,8 +194,8 @@ function renderDiffField(change) {
       <div class="diff-field-label">
         <span>${label}</span>
         <div style="display:flex;gap:6px;">
-          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})">✅</button>
-          <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})">❌</button>
+          <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})"><i class="fi fi-rr-check-circle"></i></button>
+          <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})"><i class="fi fi-rr-cross-circle"></i></button>
         </div>
       </div>
       <div class="diff-cols">
@@ -300,7 +300,7 @@ window.reviewWithAI = async function(employeeId, btn) {
 
   btn = btn || document.activeElement;
   const originalText = btn.textContent;
-  btn.textContent = '⏳ Анализ...';
+  btn.innerHTML = '<i class="fi fi-rr-hourglass"></i> Анализ...';
   btn.disabled = true;
 
   try {
@@ -365,7 +365,7 @@ window.reviewWithAI = async function(employeeId, btn) {
 
       resultDiv.innerHTML = `
         <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-          <span style="font-size:1.2rem;">✨</span>
+          <span style="font-size:1.2rem;"><i class="fi fi-rr-magic-wand"></i></span>
           <h4 style="margin:0; color:var(--accent); font-weight:600;">Анализ от ИИ</h4>
         </div>
         <div style="font-size:0.95rem; line-height:1.5; color:var(--text-primary);">${textContent}</div>

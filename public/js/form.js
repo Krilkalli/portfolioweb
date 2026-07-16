@@ -2,7 +2,7 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
   t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
@@ -21,11 +21,15 @@ const FIELD_NAMES = {
   about: 'Обо мне',
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
-  certification: 'Сертификация',
+  certification: 'Сертификаты 1С и обучение',
   course_name: 'Наименование курса',
   course_year: 'Год прохождения курса',
   photo: 'Фото',
+  email: 'Email',
+  city: 'Город',
+  name: 'ФИО'
 };
+
 
 let originalValues = {};
 let token = null;
@@ -44,14 +48,16 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
+  } else {
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-moon"></i>';
   }
 }
 document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── Templates ──────────────────────────────────────────────────────────────
@@ -276,26 +282,6 @@ function getEducationData() {
   })).filter(e => e.institution || e.degree || e.specialty || e.year);
 }
 
-// // ─── Job Entries (Experience) ──────────────────────────────────────────────
-// function addJobEntry(data) {
-//   const c = document.getElementById('jobContainer');
-//   const e = document.createElement('details');
-//   e.className = 'job-entry accordion-entry';
-//   e.open = !data?.company;
-//   e.innerHTML = `
-//     <summary class="job-summary">${escHtml(jobTitle(data))}</summary>
-//     <div class="accordion-body">
-//       <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'job-entry')">✕</button>
-//       <div class="form-group"><label class="form-label">Компания</label>
-//         <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
-//       <div class="form-group"><label class="form-label">Должность</label>
-//         <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
-//       <div class="form-group"><label class="form-label">Период работы</label>
-//         <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}"></div>
-//     </div>`;
-//   c.appendChild(e);
-//   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { updateAccordionTitle(e, '.job-summary'); trackChanges(); }));
-// }
 function addJobEntry(data) {
   const c = document.getElementById('jobContainer');
   const e = document.createElement('details');
@@ -315,7 +301,6 @@ function addJobEntry(data) {
     </div>`;
   c.appendChild(e);
   
-  // === НОВЫЙ КОД: маска для периода ===
   const periodInput = e.querySelector('.job-period');
   if (periodInput) {
     maskPeriod(periodInput);
@@ -329,8 +314,6 @@ function addJobEntry(data) {
 function loadJobData(exp) {
   document.getElementById('jobContainer').innerHTML = '';
   const totalEl = document.getElementById('f_total_experience');
-  // Если "Стаж работы" пришёл из Excel-импорта как обычный текст (не JSON-объект
-  // {total, jobs}) — переносим его в поле "Общий стаж", чтобы данные не терялись.
   if (typeof exp === 'string' && exp.trim()) {
     addJobEntry({ company: '', position: '', period: '' });
     if (totalEl) totalEl.value = exp.trim();
@@ -382,7 +365,6 @@ function addProjectEntry(data) {
     </div>`;
   c.appendChild(e);
   
-  // === НОВЫЙ КОД: маска для периода ===
   const periodInput = e.querySelector('.proj-period');
   if (periodInput) {
     maskPeriod(periodInput);
@@ -497,6 +479,12 @@ function showForm(emp) {
     };
   }
 
+  const nameEl = document.getElementById('f_name');
+  if (nameEl) {
+    nameEl.value = emp.name || '';
+    originalValues.name = nameEl.value;
+    nameEl.oninput = trackChanges;
+  }
   const cityEl = document.getElementById('f_city');
   const emailEl = document.getElementById('f_email');
   if (cityEl) { cityEl.value = emp.city || ''; originalValues.city = cityEl.value; cityEl.oninput = trackChanges; }
@@ -529,33 +517,21 @@ function showForm(emp) {
   const certText = emp.certification || '';
   const certParts = certText.split(/\n\s*\n/);
   const certEl = document.getElementById('f_certification');
-  const courseNameEl = document.getElementById('f_course_name');
-  const courseYearEl = document.getElementById('f_course_year');
   if (certEl) {
     certEl.value = emp.certification_1c || (certParts.length > 0 ? certParts[0].replace(/^Сертификация 1С:?\s*/i, '').trim() : '') || '';
     originalValues.certification = certEl.value;
-    certEl.oninput = trackChanges;
+    certEl.oninput = () => { trackChanges(); };
   }
-  if (courseNameEl) {
-    // Try to split courses by " — " to get name and year
-    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
-    const parts = coursesText.split(' — ');
-    courseNameEl.value = parts[0]?.trim() || '';
-    originalValues.course_name = courseNameEl.value;
-    courseNameEl.oninput = trackChanges;
-  }
-  if (courseYearEl) {
-    const coursesText = emp.courses || (certParts.length > 1 ? certParts[1] : '') || '';
-    const parts = coursesText.split(' — ');
-    courseYearEl.value = parts[1]?.trim() || '';
-    originalValues.course_year = courseYearEl.value;
-    courseYearEl.oninput = trackChanges;
-  }
+  // Load courses into dynamic container
+  const coursesText = emp.courses || (certParts.length > 1 ? certParts[1].replace(/^Обучающие курсы:\s*/i, '').trim() : '') || '';
+  loadCoursesData(coursesText);
+  originalValues._coursesParsed = getCoursesData();
+  originalValues._certSerialized = serializeCertification();
 
   const dateEl = document.getElementById('lastUpdatedDate');
   if (dateEl && emp.updated_at) {
     const d = new Date(emp.updated_at);
-    dateEl.textContent = '📅 Дата актуализации: ' + d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    dateEl.innerHTML = '<i class="fi fi-rr-calendar"></i> Дата актуализации: ' + d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
   trackChanges();
@@ -574,8 +550,7 @@ function renderViewContent() {
   document.getElementById('viewCompetencies').innerHTML = viewValue(document.getElementById('f_competencies')?.value);
   document.getElementById('viewCertification').innerHTML =
     viewField('Сертификаты 1С', document.getElementById('f_certification')?.value) +
-    viewField('Наименование курса', document.getElementById('f_course_name')?.value) +
-    viewField('Год прохождения', document.getElementById('f_course_year')?.value);
+    viewField('Обучающие курсы', getCoursesData().join('\n'));
   document.getElementById('viewEducation').innerHTML = renderAccordionView(getEducationData(),
     d => d.institution || 'Образование',
     d => viewField('Квалификация', d.degree) + viewField('Направление', d.specialty) + viewField('Год окончания', d.year),
@@ -622,13 +597,13 @@ function trackChanges() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
+    certification: 'f_certification',
     photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
     const el = document.getElementById(id);
     if (!el) continue;
-    if (el.value.trim() !== (originalValues[field] || '').trim()) {
+    if (el.value.trim().replace(/\s+/g, ' ') !== (originalValues[field] || '').trim().replace(/\s+/g, ' ')) {
       el.classList.add('changed'); changedFields.push(FIELD_NAMES[field] || field);
     } else el.classList.remove('changed');
   }
@@ -639,6 +614,7 @@ function trackChanges() {
 
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
   if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
+  if (serializeCertification() !== (originalValues._certSerialized || '')) changedFields.push(FIELD_NAMES.certification);
   if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
 
   const badge = document.getElementById('changedFieldsBadge');
@@ -666,7 +642,6 @@ function getChangedFieldNames() {
   const checks = {
     about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification', course_name: 'f_course_name', course_year: 'f_course_year',
     photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
@@ -677,6 +652,7 @@ function getChangedFieldNames() {
   if (posEl && posEl.value !== (originalValues.position || '')) changedFields.push(FIELD_NAMES.position);
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
   if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
+  if (serializeCertification() !== (originalValues._certSerialized || '')) changedFields.push(FIELD_NAMES.certification);
   if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
   return changedFields;
 }
@@ -689,8 +665,7 @@ function collectFormFields() {
     about: document.getElementById('f_about')?.value.trim() || '',
     competencies: document.getElementById('f_competencies')?.value.trim() || '',
     certification: document.getElementById('f_certification')?.value.trim() || '',
-    course_name: document.getElementById('f_course_name')?.value.trim() || '',
-    course_year: document.getElementById('f_course_year')?.value.trim() || '',
+    courses: getCoursesData().join('\n'),
     photo: document.getElementById('f_photo')?.value.trim() || '',
     total_experience: document.getElementById('f_total_experience')?.value.trim() || '',
     education: getEducationData(),
@@ -757,7 +732,7 @@ async function performSubmit(fields) {
 
   // Обычный сотрудник — отправка на проверку
   fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
-  fields.courses = [fields.course_name, fields.course_year].filter(Boolean).join(' — ');
+  // fields.courses is already set by collectFormFields via getCoursesData()
   try {
     const r = await fetch(`/api/form/${token}/submit`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -779,12 +754,12 @@ async function performSubmit(fields) {
     } else {
       toast(d.error || 'Ошибка при отправке', 'error');
       btn.disabled = false;
-      btn.innerHTML = '✉️ Отправить на проверку';
+      btn.innerHTML = '<i class="fi fi-rr-envelope"></i> Отправить на проверку';
     }
   } catch {
     toast('Ошибка соединения с сервером', 'error');
     btn.disabled = false;
-    btn.innerHTML = '✉️ Отправить на проверку';
+    btn.innerHTML = '<i class="fi fi-rr-envelope"></i> Отправить на проверку';
   }
 }
 
@@ -845,6 +820,9 @@ document.getElementById('addEducationBtn').addEventListener('click', () => {
 });
 document.getElementById('addJobBtn').addEventListener('click', () => {
   addJobEntry({ company: '', position: '', period: '' }); trackChanges();
+});
+document.getElementById('addTotalJobBtn').addEventListener('click', () => {
+  addTotalJobEntry({ company: '', position: '', period: '' }); trackChanges();
 });
 document.getElementById('addProjectBtn').addEventListener('click', () => {
   addProjectEntry({ period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' }); trackChanges();
@@ -964,7 +942,7 @@ document.getElementById('applyCropBtn').addEventListener('click', () => {
     }
 
     btn.disabled = false;
-    btn.innerHTML = '✅ Применить';
+    btn.innerHTML = '<i class="fi fi-rr-check-circle"></i> Применить';
     document.getElementById('photoCropModal').classList.remove('active');
     cropper.destroy();
     cropper = null;
@@ -1028,6 +1006,14 @@ async function initForm() {
     if (bd) bd.style.display = 'block';
   }
 
+  // --- Dynamic button listeners ---
+  const addCourseBtnEl = document.getElementById('addCourseBtn');
+  if (addCourseBtnEl) {
+    addCourseBtnEl.addEventListener('click', () => {
+      addCourseEntry({}); trackChanges();
+    });
+  }
+
   // --- AI Listeners ---
 
   const aiReviewBtn = document.getElementById('aiReviewBtn');
@@ -1035,7 +1021,7 @@ async function initForm() {
     aiReviewBtn.addEventListener('click', async () => {
       aiReviewBtn.disabled = true;
       const originalText = aiReviewBtn.textContent;
-      aiReviewBtn.textContent = '⏳ Анализ...';
+      aiReviewBtn.innerHTML = '<span class="spinner"></span> Анализ...';
       try {
         const fields = collectFormFields();
         const r = await fetch('/api/ai/review-fields', {
@@ -1066,8 +1052,8 @@ async function initForm() {
             errors.forEach(err => {
               const domIdMap = {
                 'education': 'educationContainer',
-                'experience': 'experienceContainer',
-                'project_experience': 'projectsContainer',
+                'experience': 'jobContainer',
+                'project_experience': 'projectExperienceContainer',
                 'total_experience': 'f_total_experience'
               };
               const targetId = domIdMap[err.field] || ('f_' + err.field);
@@ -1114,8 +1100,64 @@ async function initForm() {
         console.error('AI Review Error:', e);
         toast('Ошибка сети или сервера (см. консоль)', 'error');
       } finally {
-        aiReviewBtn.textContent = originalText;
+        aiReviewBtn.innerHTML = '<i class="fi fi-rr-magic-wand"></i> Проверить весь текст';
         aiReviewBtn.disabled = false;
+      }
+    });
+  }
+
+  // --- aiReviewAboutBtn listener ---
+  const aiReviewAboutBtn = document.getElementById('aiReviewAboutBtn');
+  if (aiReviewAboutBtn) {
+    aiReviewAboutBtn.addEventListener('click', async () => {
+      aiReviewAboutBtn.disabled = true;
+      aiReviewAboutBtn.innerHTML = '<span class="spinner"></span> Проверка...';
+      try {
+        const textToReview = document.getElementById('f_about')?.value.trim();
+        if (!textToReview) { toast('Заполните поле "Обо мне"', 'warning'); return; }
+        
+        const r = await fetch('/api/ai/review-fields', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ data: { about: textToReview } })
+        });
+        const text = await r.text();
+        let d;
+        try {
+          d = JSON.parse(text);
+        } catch(err) {
+          throw new Error("Invalid JSON: " + text.substring(0, 100));
+        }
+        if (r.ok) {
+          const arr = Array.isArray(d.result) ? d.result : [];
+          const aboutErrors = arr.filter(e => e.field === 'about');
+          if (aboutErrors.length > 0) {
+            aboutErrors.forEach(err => {
+              const boxId = 'ai_suggestion_f_about';
+              let feedback = document.getElementById(boxId);
+              if (!feedback) {
+                feedback = document.createElement('div');
+                feedback.id = boxId;
+                feedback.className = 'ai-suggestion-box';
+                const container = document.getElementById('f_about').parentElement;
+                container.insertBefore(feedback, document.getElementById('f_about').nextSibling);
+              }
+              feedback.style.display = 'block';
+              feedback.innerHTML = `<div class="suggestion-header"><strong><i class="fi fi-rr-magic-wand"></i> Замечание ИИ:</strong> ${escHtml(err.error || err.message)}</div>` +
+                (err.suggestion ? `<div class="suggestion-body"><button type="button" class="btn btn-sm btn-primary" onclick="applyAiSuggestion('f_about', this.dataset.suggestion)" data-suggestion="${escHtml(err.suggestion)}">Применить исправление</button></div>` : '');
+            });
+          } else {
+            toast('Ошибок в поле Обо мне не найдено!', 'success');
+          }
+        } else {
+           toast(d.error || 'Ошибка', 'error');
+        }
+      } catch (e) {
+        console.error(e);
+        toast('Ошибка сети', 'error');
+      } finally {
+        aiReviewAboutBtn.innerHTML = '<i class="fi fi-rr-magic-wand"></i> Проверить';
+        aiReviewAboutBtn.disabled = false;
       }
     });
   }
@@ -1131,3 +1173,79 @@ window.applyAiSuggestion = function(targetId, newText) {
 };
 
 initForm();
+
+// ─── Total Job Entries (Общий стаж) ─────────────────────────────────────────
+function addTotalJobEntry(data) {
+  const c = document.getElementById('totalJobContainer');
+  if (!c) return;
+  const e = document.createElement('details');
+  e.className = 'job-entry accordion-entry';
+  e.open = !data?.company;
+  e.innerHTML = `
+    <summary class="job-summary">${escHtml(jobTitle(data))}</summary>
+    <div class="accordion-body">
+      <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'job-entry')">✕</button>
+      <div class="form-group"><label class="form-label">Компания</label>
+        <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
+      <div class="form-group"><label class="form-label">Должность</label>
+        <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
+      <div class="form-group"><label class="form-label">Период работы</label>
+        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
+        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
+    </div>`;
+  c.appendChild(e);
+  const periodInput = e.querySelector('.job-period');
+  if (periodInput) maskPeriod(periodInput);
+  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => {
+    updateAccordionTitle(e, '.job-summary');
+    trackChanges();
+  }));
+}
+
+// ─── Courses Entries ────────────────────────────────────────────────────────
+function addCourseEntry(data) {
+  const c = document.getElementById('coursesContainer');
+  if(!c) return;
+  const e = document.createElement('div');
+  e.className = 'course-entry';
+  e.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px; align-items: center; position: relative;';
+  e.innerHTML = `
+    <input type="text" class="form-control course-name" placeholder="Наименование курса" value="${escHtml(data?.name||'')}">
+    <input type="text" class="form-control course-year" placeholder="Год" style="width: 100px;" value="${escHtml(data?.year||'')}">
+    <button type="button" class="remove-btn" onclick="this.parentElement.remove(); trackChanges();" style="position:relative; top:0; right:0;">✕</button>
+  `;
+  c.appendChild(e);
+  e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', trackChanges));
+}
+function getCoursesData() {
+  return Array.from(document.querySelectorAll('.course-entry')).map(el => {
+    const name = el.querySelector('.course-name').value.trim();
+    const year = el.querySelector('.course-year').value.trim();
+    return name ? (year ? `${name} — ${year}` : name) : '';
+  }).filter(Boolean);
+}
+function loadCoursesData(coursesText) {
+  const c = document.getElementById('coursesContainer');
+  if(!c) return;
+  c.innerHTML = '';
+  if (coursesText && coursesText.trim()) {
+    coursesText.split('\n').forEach(line => {
+      const parts = line.split(' — ');
+      addCourseEntry({ name: parts[0]?.trim(), year: parts[1]?.trim() });
+    });
+  } else {
+    addCourseEntry({});
+  }
+}
+function serializeCertification() {
+  const certs = document.getElementById('f_certification')?.value.trim() || '';
+  const courses = getCoursesData();
+  let res = certs;
+  if (courses.length > 0) {
+    if (res) res += '\n\n';
+    res += 'Обучающие курсы:\n' + courses.join('\n');
+  }
+  return res;
+}
+
+// (aiReviewAboutBtn listener moved inside initForm())

@@ -479,6 +479,38 @@ async function init() {
   setInterval(() => {
     _run('DELETE FROM sessions WHERE expired <= $1', [Date.now()]).catch(() => {});
   }, 15 * 60 * 1000);
+
+  // Очистка брошенных фото
+  const cleanupPhotos = async () => {
+    try {
+      const uploadsDir = path.join(__dirname, '..', 'uploads');
+      if (!fs.existsSync(uploadsDir)) return;
+      const files = fs.readdirSync(uploadsDir);
+      if (files.length === 0) return;
+      const empRows = await _all("SELECT photo FROM employees WHERE photo != ''");
+      const pendRows = await _all("SELECT old_value, new_value FROM pending_changes WHERE field_name = 'photo'");
+      const used = new Set();
+      empRows.forEach(r => used.add(r.photo));
+      pendRows.forEach(r => {
+        if (r.old_value) used.add(r.old_value);
+        if (r.new_value) used.add(r.new_value);
+      });
+      const now = Date.now();
+      for (const file of files) {
+        if (file === '.gitkeep') continue;
+        if (!used.has(file)) {
+          const filePath = path.join(uploadsDir, file);
+          const stat = fs.statSync(filePath);
+          if (now - stat.mtimeMs > 60 * 60 * 1000) {
+            fs.unlinkSync(filePath);
+            console.log(`✅ Удалено неиспользуемое фото: ${file}`);
+          }
+        }
+      }
+    } catch (e) { console.error('Ошибка при очистке фото:', e); }
+  };
+  cleanupPhotos();
+  setInterval(cleanupPhotos, 60 * 60 * 1000);
 }
 
 // ─── Публичные helpers ────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ function toast(msg, type = 'info') {
   const c = document.getElementById('toastContainer');
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
-  const icons = { success: '✅', error: '❌', info: 'ℹ️', warning: '⚠️' };
+  const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
   t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
@@ -15,7 +15,7 @@ function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   if (saved === 'light') {
     document.body.classList.add('light-theme');
-    document.getElementById('themeToggle').textContent = '☀️';
+    document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   }
 }
 
@@ -23,7 +23,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
   document.body.classList.toggle('light-theme');
   const isLight = document.body.classList.contains('light-theme');
   localStorage.setItem('theme', isLight ? 'light' : 'dark');
-  document.getElementById('themeToggle').textContent = isLight ? '☀️' : '🌙';
+  document.getElementById('themeToggle').innerHTML = isLight ? '<i class="fi fi-rr-sun"></i>' : '<i class="fi fi-rr-moon"></i>';
 });
 
 // ─── Positions ──────────────────────────────────────────────────────────────
@@ -237,16 +237,16 @@ document.getElementById('saveAliasesBtn')?.addEventListener('click', async () =>
       positionAliases = aliases;
       useAliases = useAliasesVal;
       document.getElementById('aliasesResult').style.color = 'var(--success)';
-      document.getElementById('aliasesResult').textContent = '✅ Аналоги сохранены';
+      document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-check-circle"></i> Аналоги сохранены';
       toast('Аналоги должностей сохранены', 'success');
     } else {
       const d = await r.json();
       document.getElementById('aliasesResult').style.color = 'var(--danger)';
-      document.getElementById('aliasesResult').textContent = '❌ ' + (d.error || 'Ошибка');
+      document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка');
     }
   } catch {
     document.getElementById('aliasesResult').style.color = 'var(--danger)';
-    document.getElementById('aliasesResult').textContent = '❌ Ошибка соединения';
+    document.getElementById('aliasesResult').innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения';
   }
   setTimeout(() => { document.getElementById('aliasesResult').textContent = ''; }, 5000);
 });
@@ -365,7 +365,7 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
     if (r.ok) {
       toast('Настройки сохранены', 'success');
       result.style.color = 'var(--success)';
-      result.textContent = '✅ Настройки успешно сохранены';
+      result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Настройки успешно сохранены';
       document.getElementById('smtp_pass').value = '';
     } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
   } catch { toast('Ошибка сети', 'error'); }
@@ -404,7 +404,7 @@ document.getElementById('aiForm').addEventListener('submit', async (e) => {
     if (r.ok) {
       toast('Настройки ИИ сохранены', 'success');
       result.style.color = 'var(--success)';
-      result.textContent = '✅ Настройки успешно сохранены';
+      result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Настройки успешно сохранены';
       document.getElementById('ai_api_key').value = '';
     } else { const d = await r.json(); toast(d.error || 'Ошибка сохранения', 'error'); }
   } catch { toast('Ошибка сети', 'error'); }
@@ -425,10 +425,10 @@ document.getElementById('testEmailBtn').addEventListener('click', async () => {
   try {
     const r = await fetch('/api/settings/test-email', { method: 'POST' });
     const d = await r.json();
-    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = `✅ ${d.message}`; toast('Соединение успешно!', 'success'); }
-    else { result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; toast('Ошибка соединения', 'error'); }
-  } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка запроса'; }
-  finally { btn.disabled = false; btn.textContent = '🔌 Проверить соединение'; }
+    if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = `<i class="fi fi-rr-check-circle"></i> ${d.message}`; toast('Соединение успешно!', 'success'); }
+    else { result.style.color = 'var(--danger)'; result.innerHTML = `<i class="fi fi-rr-cross-circle"></i> ${d.error}`; toast('Ошибка соединения', 'error'); }
+  } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка запроса'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-plug"></i> Проверить соединение'; }
 });
 
 // ─── Change Password ────────────────────────────────────────────────────────
@@ -440,9 +440,9 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   const newPass = document.getElementById('new_password').value;
   const confirm = document.getElementById('confirm_password').value;
 
-  if (!currentPass) { result.style.color = 'var(--danger)'; result.textContent = '❌ Введите текущий пароль'; return; }
-  if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароль должен быть не менее 8 символов'; return; }
-  if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.textContent = '❌ Пароли не совпадают'; return; }
+  if (!currentPass) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Введите текущий пароль'; return; }
+  if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароль должен быть не менее 8 символов'; return; }
+  if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароли не совпадают'; return; }
 
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Сохранение...';
@@ -453,10 +453,10 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
     });
-    if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
-    else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = `❌ ${d.error}`; }
-  } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
-  finally { btn.disabled = false; btn.textContent = '🔑 Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
+    if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
+    else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = `<i class="fi fi-rr-cross-circle"></i> ${d.error}`; }
+  } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-key"></i> Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
 });
 
 // ─── Managers Management ────────────────────────────────────────────────────
@@ -568,8 +568,8 @@ async function loadTemplateInfo() {
     const r = await fetch('/api/template/info');
     const d = await r.json();
     const el = document.getElementById('templateInfo');
-    if (d.custom) el.innerHTML = '<span style="color:var(--success)">✅ Пользовательский шаблон загружен</span>';
-    else el.innerHTML = '<span style="color:var(--text-muted)">📄 Используется базовый шаблон</span>';
+    if (d.custom) el.innerHTML = '<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Пользовательский шаблон загружен</span>';
+    else el.innerHTML = '<span style="color:var(--text-muted)"><i class="fi fi-rr-document"></i> Используется базовый шаблон</span>';
   } catch {}
 }
 
@@ -586,10 +586,10 @@ document.getElementById('templateUploadForm').addEventListener('submit', async (
   try {
     const r = await fetch('/api/template/upload', { method: 'POST', body: fd });
     const d = await r.json();
-    if (r.ok) { result.textContent = '✅ Шаблон загружен'; result.style.color = 'var(--success)'; toast('Шаблон загружен', 'success'); loadTemplateInfo(); }
-    else { result.textContent = '❌ ' + (d.error || 'Ошибка'); result.style.color = 'var(--danger)'; }
-  } catch { result.textContent = '❌ Ошибка соединения'; result.style.color = 'var(--danger)'; }
-  finally { btn.disabled = false; btn.textContent = '📤 Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
+    if (r.ok) { result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Шаблон загружен'; result.style.color = 'var(--success)'; toast('Шаблон загружен', 'success'); loadTemplateInfo(); }
+    else { result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка'); result.style.color = 'var(--danger)'; }
+  } catch { result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; result.style.color = 'var(--danger)'; }
+  finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-upload"></i> Загрузить шаблон'; setTimeout(() => { result.textContent = ''; }, 5000); }
 });
 
 // ─── Import Excel ────────────────────────────────────────────────────────────
@@ -613,14 +613,14 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
     const d = await r.json();
     e.target.value = '';
     if (r.ok) {
-      result.innerHTML = '<span style="color:var(--success)">✅ Импорт завершён</span>';
+      result.innerHTML = '<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Импорт завершён</span>';
       toast(`Импорт завершён: добавлено ${d.imported} сотрудников (удалено: ${d.removed})`, 'success');
     } else {
-      result.innerHTML = '<span style="color:var(--danger)">❌ ' + (d.error || 'Ошибка импорта') + '</span>';
+      result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка импорта') + '</span>';
       toast(d.error || 'Ошибка импорта', 'error');
     }
   } catch {
-    result.innerHTML = '<span style="color:var(--danger)">❌ Ошибка при импорте файла</span>';
+    result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> Ошибка при импорте файла</span>';
     toast('Ошибка при импорте файла', 'error');
   }
   setTimeout(() => { result.innerHTML = ''; }, 5000);
@@ -685,9 +685,9 @@ if (scrumEmailForm) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ manager_email: document.getElementById('scrum_manager_email').value.trim() }),
       });
-      if (r.ok) { result.style.color = 'var(--success)'; result.textContent = '✅ Сохранено'; toast('Email сохранён', 'success'); }
-      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.textContent = '❌ ' + (d.error || 'Ошибка'); }
-    } catch { result.style.color = 'var(--danger)'; result.textContent = '❌ Ошибка соединения'; }
+      if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Сохранено'; toast('Email сохранён', 'success'); }
+      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка'); }
+    } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
     finally { btn.disabled = false; btn.textContent = 'Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
   });
 }
