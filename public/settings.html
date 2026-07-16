@@ -53,6 +53,9 @@
       margin-bottom: 16px;
       line-height: 1.5;
     }
+  .stat-box { background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:10px 16px;text-align:center;min-width:80px;flex:1; }
+  .stat-box strong { font-size:1.1rem;color:var(--text); }
+  .stat-box span { font-size:0.78rem;color:var(--text-muted); }
   </style>
 </head>
 <body class="page-wrapper">
@@ -284,6 +287,32 @@
         <button type="submit" class="btn btn-primary" id="uploadTemplateBtn">📤 Загрузить шаблон</button>
         <div id="templateResult" style="margin-top:10px;font-size:0.85rem;"></div>
       </form>
+    </div>
+
+    <!-- Feedback Card -->
+    <div class="card collapsible" data-role="admin">
+      <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
+        <span class="card-title">📊 Обратная связь сотрудников</span>
+        <span class="collapse-icon">−</span>
+      </div>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Отзывы, оставленные сотрудниками через анкеты обратной связи. Собираются в таблицу вместо отправки на почту.</p>
+
+      <div id="feedbackStats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;"></div>
+
+      <div style="overflow-x:auto;">
+        <table id="feedbackTable" style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);">
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Сотрудник</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Оценка</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Комментарий</th>
+              <th style="text-align:left;padding:8px 6px;color:var(--text-muted);font-weight:500;">Дата</th>
+            </tr>
+          </thead>
+          <tbody id="feedbackRows"></tbody>
+        </table>
+      </div>
+      <div id="feedbackEmpty" style="display:none;padding:20px;text-align:center;color:var(--text-muted);font-size:0.85rem;">Пока нет отзывов от сотрудников.</div>
     </div>
 
     <!-- Info Card -->

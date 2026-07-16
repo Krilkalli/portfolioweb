@@ -251,6 +251,54 @@ document.getElementById('saveAliasesBtn')?.addEventListener('click', async () =>
   setTimeout(() => { document.getElementById('aliasesResult').textContent = ''; }, 5000);
 });
 
+// ─── Feedback ─────────────────────────────────────────────────────────────────
+async function loadFeedback() {
+  try {
+    const r = await fetch('/api/feedback');
+    if (!r.ok) return;
+    const d = await r.json();
+    renderFeedback(d.feedback || []);
+  } catch {}
+}
+
+function renderFeedback(list) {
+  const tbody = document.getElementById('feedbackRows');
+  const empty = document.getElementById('feedbackEmpty');
+  const statsDiv = document.getElementById('feedbackStats');
+  if (!tbody) return;
+
+  if (list.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = 'block';
+    statsDiv.innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const ratingCounts = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  let total = 0, sum = 0;
+
+  tbody.innerHTML = list.map(f => {
+    const r = Number(f.rating);
+    if (r >= 1 && r <= 5) { ratingCounts[r]++; total++; sum += r; }
+    const stars = r >= 1 && r <= 5 ? '★'.repeat(r) + '☆'.repeat(5 - r) : '—';
+    const date = f.submitted_at ? new Date(f.submitted_at).toLocaleString('ru-RU') : '';
+    return `<tr style="border-bottom:1px solid var(--border);">
+      <td style="padding:8px 6px;">${escHtml(f.employee_name)}</td>
+      <td style="padding:8px 6px;white-space:nowrap;">${stars}</td>
+      <td style="padding:8px 6px;max-width:300px;word-break:break-word;">${escHtml(f.comment || '—')}</td>
+      <td style="padding:8px 6px;white-space:nowrap;font-size:0.8rem;color:var(--text-muted);">${date}</td>
+    </tr>`;
+  }).join('');
+
+  const avg = total > 0 ? (sum / total).toFixed(1) : '—';
+  statsDiv.innerHTML = `
+    <div class="stat-box"><strong>${list.length}</strong><br><span>Всего отзывов</span></div>
+    <div class="stat-box"><strong>${avg}</strong><br><span>Средняя оценка</span></div>
+    ${[5,4,3,2,1].map(i => `<div class="stat-box"><strong>${'★'.repeat(i)}${'☆'.repeat(5-i)}</strong><br><span>${ratingCounts[i]}</span></div>`).join('')}
+  `;
+}
+
 // ─── Settings Load ──────────────────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -524,7 +572,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
   initTheme();
   applyRoleUI(currentManager?.role);
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
 })();
 
 function applyRoleUI(role) {
@@ -543,7 +591,7 @@ function applyRoleUI(role) {
   if (role === 'scrum') {
     document.querySelectorAll('.collapsible').forEach(c => {
       const title = c.querySelector('.card-title')?.textContent || '';
-      if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
+      if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Обратная') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
         c.style.display = 'none';
       }
     });

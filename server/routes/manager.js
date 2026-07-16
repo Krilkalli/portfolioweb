@@ -528,6 +528,13 @@ router.post('/feedback/notify-manager', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/feedback', requireAuth, async (req, res, next) => {
+  try {
+    const rows = await helpers.getAllFeedback();
+    res.json({ feedback: rows });
+  } catch (err) { next(err); }
+});
+
 router.get('/template/info', requireAuth, (req, res) => {
   const custom = fs.existsSync(path.join(templatesDir, 'custom_template.docx'));
   res.json({ custom, placeholders: ['name','position','contacts','about','competencies','experience','project_experience','education','certification'] });

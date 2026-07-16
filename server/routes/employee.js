@@ -5,7 +5,7 @@ const path    = require('path');
 const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
-const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyManagerFeedback } = require('../mailer');
+const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
 
@@ -202,8 +202,6 @@ router.post('/:token/feedback', async (req, res, next) => {
       if (r < 1 || r > 5) return res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
     }
     await helpers.saveFeedback(emp.id, rating ? Number(rating) : null, comment || '');
-    const feedback = { rating: rating ? Number(rating) : null, comment: comment || '' };
-    notifyManagerFeedback(emp, feedback).catch(() => {});
     res.json({ ok: true });
   } catch (err) { next(err); }
 });

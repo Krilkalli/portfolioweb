@@ -865,6 +865,11 @@ const helpers = {
       [Number(employeeId), rating || null, comment || '', new Date().toISOString()]);
   },
 
+  getAllFeedback() {
+    return _all(`    SELECT f.id, f.employee_id, e.name AS employee_name, e.position, f.rating, f.comment, f.submitted_at
+      FROM employee_feedback f JOIN employees e ON f.employee_id = e.id ORDER BY f.submitted_at DESC`);
+  },
+
   // ── Менеджеры ────────────────────────────────────────────────────────────────
   getManagerByLogin(login) {
     return _get('SELECT * FROM managers WHERE email = $1', [String(login).trim().toLowerCase()]);
