@@ -748,11 +748,19 @@ const helpers = {
     return _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']).then(r => r || []);
   },
 
+  getReviewedChangesForEmployee(employeeId) {
+    return _all("SELECT * FROM pending_changes WHERE employee_id = $1 AND status IN ('approved','rejected') AND reviewed_at != ''", [Number(employeeId)]);
+  },
+
+  countPendingForEmployee(employeeId) {
+    return _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]).then(r => r ? r.cnt : 0);
+  },
+
   async submitChanges(employeeId, changesArray) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]);
+      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status IN ('pending','approved','rejected')", [Number(employeeId)]);
       const now = new Date().toISOString();
       for (const ch of changesArray) {
         await client.query(

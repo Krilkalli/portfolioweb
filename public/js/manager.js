@@ -162,7 +162,7 @@ function renderTable(list) {
         <div style="display:flex;align-items:center;gap:10px;">
           ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${e.photo}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>`}
           <div>
-            <div class="employee-name"><a href="${e.link}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
+            <div class="employee-name"><a href="${e.link.replace('&as', '&as=manager')}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <span style="font-size:0.7rem;color:var(--text-muted)">📦</span>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.email || ''}">${e.email || '—'}</div>
           </div>
         </div>
