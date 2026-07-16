@@ -20,6 +20,30 @@ services:
       timeout: 5s
       retries: 5
 
+  # Тестовый Active Directory (Samba AD DC) — заменяет VirtualBox-ВМ для демо
+  samba-ad:
+    image: nowsci/samba-domain
+    container_name: samba-ad
+    restart: unless-stopped
+    privileged: true
+    cap_add:
+      - SYS_ADMIN
+      - DAC_READ_SEARCH
+      - DAC_OVERRIDE
+    environment:
+      DOMAIN: TEST.LOCAL
+      DOMAINPASS: "YourStr0ngP@ss!"
+      DNS_FORWARDER: 8.8.8.8
+      INSECURE: "true"
+    ports:
+      - "389:389"
+      - "636:636"
+    volumes:
+      - samba_data:/var/lib/samba
+      - samba_config:/etc/samba/external
+    networks:
+      - portfolio-network
+
   # Ваш Node.js сервер
   app:
     build: .
@@ -32,13 +56,24 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      # Подключение к PostgreSQL (внутри Docker сети)
-      - DATABASE_URL=postgresql://portfolio:portfolio_password@postgres:5432/portfolio
-      # Или для локального подключения с хоста:
-      # - DATABASE_URL=postgresql://portfolio:portfolio_password@localhost:5432/portfolio
+      # Подключение к PostgreSQL — по имени сервиса "postgres" внутри Docker-сети,
+      # а не "localhost". Именно эти переменные читает config.js.
+      - PG_HOST=postgres
+      - PG_PORT=5432
+      - PG_DATABASE=portfolio
+      - PG_USER=portfolio
+      - PG_PASSWORD=portfolio_password
+      # Active Directory — теперь тоже внутри Docker-сети, имя сервиса "samba-ad"
+      - AD_ENABLED=true
+      - AD_URL=ldaps://samba-ad:636
+      - AD_DOMAIN=test.local
+      - AD_ADMIN_GROUP=HR_Managers
+      - AD_DEFAULT_ROLE=scrum
     depends_on:
       postgres:
         condition: service_healthy
+      samba-ad:
+        condition: service_started
     shm_size: "1gb"
     tmpfs:
       - /tmp
@@ -48,6 +83,8 @@ services:
 
 volumes:
   postgres_data:
+  samba_data:
+  samba_config:
 
 networks:
   portfolio-network:
