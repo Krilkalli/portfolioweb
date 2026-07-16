@@ -78,3 +78,11 @@ docker exec -it samba-ad samba-tool group addmembers HR_Managers petrova
 Есть ли у них тестовый/staging AD-контур, чтобы не тестировать сразу на боевой базе сотрудников.
 
 Если хотите, можем прямо сейчас набросать короткую "шпаргалку" для себя — файл с инструкцией "как добавить пользователя", "как поменять настройки при переходе на реальный AD" — на будущее, чтобы не искать всё заново перед пятницей.
+
+# Посмотреть информацию о пользователе
+docker exec -it samba-ad samba-tool user show petrova
+
+# Посмотреть всех пользователей
+docker exec -it samba-ad samba-tool user list
+# Проверить, что пользователь может аутентифицироваться
+docker exec -it samba-ad samba-tool domain auth --username=petrova --password=P@ssw0rd456
