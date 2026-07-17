@@ -60,7 +60,12 @@ async function loadEmployees() {
     const r = await fetch('/api/employees');
     if (r.status === 401) { location.href = '/login.html'; return; }
     employees = await r.json();
+    // Снимаем выделение с сотрудников, которые оказались в архиве
+    // (например, если сотрудника архивировали, пока чекбокс был отмечен)
+    const archivedIds = new Set(employees.filter(e => e.status === 'archived').map(e => e.id));
+    selectedIds.forEach(id => { if (archivedIds.has(id)) selectedIds.delete(id); });
     applyFilter();
+    updateSelectionUI();
   } catch (e) {
     document.getElementById('employeesTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:40px">Ошибка загрузки данных</td></tr>`;
   }
