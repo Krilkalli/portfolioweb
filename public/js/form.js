@@ -598,7 +598,6 @@ function trackChanges() {
   const checks = {
     name: 'f_name', about: 'f_about', city: 'f_city', email: 'f_email',
     total_experience: 'f_total_experience', competencies: 'f_competencies',
-    certification: 'f_certification',
     photo: 'f_photo',
   };
   for (const [field, id] of Object.entries(checks)) {
@@ -615,7 +614,10 @@ function trackChanges() {
 
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
   if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
-  if (serializeCertification() !== (originalValues._certSerialized || '')) changedFields.push(FIELD_NAMES.certification);
+  const certChanged = serializeCertification() !== (originalValues._certSerialized || '');
+  const certEl = document.getElementById('f_certification');
+  if (certEl) certEl.classList.toggle('changed', certChanged);
+  if (certChanged) changedFields.push(FIELD_NAMES.certification);
   if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
 
   const badge = document.getElementById('changedFieldsBadge');
@@ -1344,8 +1346,13 @@ function loadCoursesData(coursesText) {
   c.innerHTML = '';
   if (coursesText && coursesText.trim()) {
     coursesText.split('\n').forEach(line => {
-      const parts = line.split(' — ');
-      addCourseEntry({ name: parts[0]?.trim(), year: parts[1]?.trim() });
+      if (!line.trim()) return;
+      const m = line.match(/^(.*?)\s+—\s+(\d{4})\s*$/);
+      if (m) {
+        addCourseEntry({ name: m[1].trim(), year: m[2].trim() });
+      } else {
+        addCourseEntry({ name: line.trim(), year: '' });
+      }
     });
   } else {
     addCourseEntry({});

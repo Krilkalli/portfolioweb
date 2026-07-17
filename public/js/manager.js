@@ -203,7 +203,8 @@ function renderTable(list) {
       <td class="col-actions" style="text-align:center;">
         <div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
-            ? `<button class="btn btn-primary btn-icon" style="width:32px;height:32px;" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Восстановить"><i class="fi fi-rr-undo"></i></button>`
+            ? `<button class="btn btn-primary btn-icon" style="width:32px;height:32px;" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Восстановить"><i class="fi fi-rr-undo"></i></button>
+               <button class="btn btn-icon" style="width:32px;height:32px;background:rgba(239,68,68,0.15);color:var(--danger);margin-left:6px;" onclick="deleteEmployeePermanently(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Удалить безвозвратно"><i class="fi fi-rr-trash"></i></button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
                <div class="action-dropdown">
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>
@@ -274,6 +275,27 @@ async function restoreEmployee(id, name) {
       await loadEmployees();
       await loadStats();
     } else { toast('Ошибка восстановления', 'error'); }
+  } catch { toast('Ошибка соединения', 'error'); }
+}
+
+async function deleteEmployeePermanently(id, name) {
+  if (!confirm(`Удалить сотрудника «${name}» БЕЗВОЗВРАТНО?\n\nВсе данные (профиль, образование, стаж, проекты) будут удалены навсегда. Это действие невозможно отменить.`)) return;
+  const typed = prompt(`Для подтверждения введите имя сотрудника точно как показано:\n«${name}»`);
+  if (typed === null) return;
+  if (typed.trim() !== name.trim()) {
+    toast('Имя введено неверно — удаление отменено', 'warning');
+    return;
+  }
+  try {
+    const r = await fetch(`/api/employees/${id}/permanent`, { method: 'DELETE' });
+    if (r.ok) {
+      toast(`Сотрудник «${name}» удалён безвозвратно`, 'info');
+      await loadEmployees();
+      await loadStats();
+    } else {
+      const d = await r.json().catch(() => ({}));
+      toast(d.error || 'Ошибка при удалении', 'error');
+    }
   } catch { toast('Ошибка соединения', 'error'); }
 }
 
