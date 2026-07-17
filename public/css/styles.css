@@ -110,6 +110,12 @@ body.light-theme .navbar {
   box-shadow: 0 0 8px var(--accent);
   animation: pulse 2s ease-in-out infinite;
 }
+
+/* --- Logo theme switching (dark/light) --- */
+.logo-dark { display: none; }
+.logo-light { display: inline-block; }
+body.light-theme .logo-dark { display: inline-block; }
+body.light-theme .logo-light { display: none; }
 .navbar-actions { display: flex; align-items: center; gap: 8px; }
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */

@@ -103,6 +103,20 @@ router.post('/employees/:id/restore', requireCanEdit, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
+// Безвозвратное удаление — только для админа и только из архива.
+router.delete('/employees/:id/permanent', requireAdmin, async (req, res, next) => {
+  try {
+    const result = await helpers.deleteEmployeePermanently(Number(req.params.id));
+    if (result === null) return res.status(404).json({ error: 'Сотрудник не найден' });
+    if (result === 'not_archived') return res.status(400).json({ error: 'Удалить безвозвратно можно только сотрудника из архива' });
+    if (result.photo) {
+      const photoPath = path.join(__dirname, '..', '..', 'uploads', result.photo);
+      fs.unlink(photoPath, () => {}); // best-effort, не блокируем ответ при ошибке
+    }
+    res.json({ ok: true, status: 'deleted' });
+  } catch (err) { next(err); }
+});
+
 router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) => {
   try {
     const emp = await helpers.regenerateToken(Number(req.params.id));

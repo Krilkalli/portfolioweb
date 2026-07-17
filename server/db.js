@@ -555,7 +555,7 @@ const helpers = {
         const params = [now, existing.rows[0].id];
         let idx = 3;
         for (const [k, v] of Object.entries(p)) {
-          if (k === 'token' || k === 'created_at') continue;
+          if (k === 'token' || k === 'created_at' || k === 'updated_at') continue;
           setClauses.push(`${k} = $${idx}`);
           params.push(v);
           idx++;
@@ -657,6 +657,17 @@ const helpers = {
     if (!emp) return false;
     await _run("UPDATE employees SET status='active', updated_at=$1 WHERE id=$2", [new Date().toISOString(), Number(id)]);
     return true;
+  },
+
+  // Безвозвратное удаление сотрудника. Разрешено только для уже архивированных
+  // записей — защита от случайного удаления активного сотрудника мимо архива.
+  // pending_changes и employee_feedback удаляются автоматически (ON DELETE CASCADE).
+  async deleteEmployeePermanently(id) {
+    const emp = await _get('SELECT * FROM employees WHERE id = $1', [Number(id)]);
+    if (!emp) return null;
+    if (emp.status !== 'archived') return 'not_archived';
+    await _run('DELETE FROM employees WHERE id = $1', [Number(id)]);
+    return emp;
   },
 
   async deleteAllEmployees() {
