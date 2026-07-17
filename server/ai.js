@@ -250,11 +250,18 @@ async function enhanceJSON(data) {
     console.error('Failed to parse AI enhanced JSON:', jsonStr);
     throw new Error('ИИ вернул неверный формат JSON');
   }
+async function summarizeFeedback(feedbacks) {
+  const provider = await getAIProvider();
+  const prompt = await helpers.getSetting('ai_prompt_summarize') || 'Ты опытный HR-аналитик. Проанализируй список отзывов сотрудников о компании и составь краткое резюме: выдели основные плюсы, минусы и общие настроения.';
+  
+  const textToAnalyze = feedbacks.map((f, i) => `Отзыв ${i + 1} (Оценка: ${f.rating}/5):\n${f.comment}`).join('\n\n');
+  return await provider.reviewText(textToAnalyze, prompt);
 }
 
 module.exports = {
   enhanceText,
   reviewText,
   reviewJSONData,
-  enhanceJSON
+  enhanceJSON,
+  summarizeFeedback
 };

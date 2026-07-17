@@ -299,6 +299,35 @@ function renderFeedback(list) {
   `;
 }
 
+async function summarizeFeedbackAI() {
+  const btn = document.getElementById('btnSummarizeFeedback');
+  const box = document.getElementById('feedbackSummaryBox');
+  const originalHtml = btn.innerHTML;
+  
+  btn.innerHTML = '<span class="spinner"></span> ИИ анализирует...';
+  btn.disabled = true;
+  box.style.display = 'none';
+  
+  try {
+    const res = await fetch('/api/feedback/summarize', { method: 'POST' });
+    const data = await res.json();
+    
+    if (res.ok) {
+      box.style.display = 'block';
+      box.innerHTML = '<strong>Резюме от ИИ:</strong><br><br>' + data.summary.replace(/\n/g, '<br>');
+      toast('Анализ успешно завершен', 'success');
+    } else {
+      throw new Error(data.error || 'Ошибка суммаризации');
+    }
+  } catch (err) {
+    console.error(err);
+    toast(err.message, 'error');
+  } finally {
+    btn.innerHTML = originalHtml;
+    btn.disabled = false;
+  }
+}
+
 // ─── Settings Load ──────────────────────────────────────────────────────────
 async function loadSettings() {
   try {
@@ -320,6 +349,9 @@ async function loadSettings() {
       document.getElementById('ai_model_name').value = s.ai_model_name || 'gpt-3.5-turbo';
       document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.';
       document.getElementById('ai_prompt_review').value = s.ai_prompt_review || 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".';
+      if (document.getElementById('ai_prompt_summarize')) {
+        document.getElementById('ai_prompt_summarize').value = s.ai_prompt_summarize || 'Ты опытный HR-аналитик. Проанализируй список отзывов сотрудников о компании и составь краткое резюме: выдели основные плюсы, минусы и общие настроения.';
+      }
       if (window.toggleAiFields) window.toggleAiFields();
     }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
@@ -392,6 +424,9 @@ document.getElementById('aiForm').addEventListener('submit', async (e) => {
     ai_prompt_fill:   document.getElementById('ai_prompt_fill').value.trim(),
     ai_prompt_review: document.getElementById('ai_prompt_review').value.trim(),
   };
+  if (document.getElementById('ai_prompt_summarize')) {
+    payload.ai_prompt_summarize = document.getElementById('ai_prompt_summarize').value.trim();
+  }
   const key = document.getElementById('ai_api_key').value;
   if (key) payload.ai_api_key = key;
 

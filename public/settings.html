@@ -163,6 +163,10 @@
           <label class="form-label" for="ai_prompt_review">Промпт для проверки (ревью) <span class="text-muted" style="font-weight:400;">— Автоматический запрос при поиске ошибок</span></label>
           <textarea id="ai_prompt_review" name="ai_prompt_review" class="form-control" rows="3"></textarea>
         </div>
+        <div class="form-group">
+          <label class="form-label" for="ai_prompt_summarize">Промпт для суммаризации отзывов <span class="text-muted" style="font-weight:400;">— Запрос для анализа собранных отзывов сотрудников</span></label>
+          <textarea id="ai_prompt_summarize" name="ai_prompt_summarize" class="form-control" rows="3"></textarea>
+        </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <button type="submit" class="btn btn-primary" id="saveAiBtn">Сохранить настройки ИИ</button>
@@ -346,6 +350,13 @@
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Отзывы, оставленные сотрудниками через анкеты обратной связи. Собираются в таблицу вместо отправки на почту.</p>
+      
+      <div style="margin-bottom: 16px;">
+        <button class="btn btn-primary" onclick="summarizeFeedbackAI()" id="btnSummarizeFeedback">
+          <i class="fi fi-rr-magic-wand"></i> Суммаризировать отзывы (ИИ)
+        </button>
+        <div id="feedbackSummaryBox" style="display:none; margin-top:12px; padding:16px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:0.9rem; line-height:1.5;"></div>
+      </div>
 
       <div id="feedbackStats" style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;"></div>
 
