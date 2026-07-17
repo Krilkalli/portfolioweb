@@ -64,7 +64,7 @@
 <nav class="navbar">
   <div class="navbar-brand">
     <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" style="height: 50px; width: auto;">
-    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 60px; width: auto;">
+    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 32px; width: auto; display: none;">
     <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
@@ -302,16 +302,17 @@
       </div>
     </div>
 
-    <!-- Import Card -->
+    Import Card
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title"><i class="fi fi-rr-download"></i> Импорт сотрудников из Excel</span>
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
-        Импорт добавит новых сотрудников из файла к текущему списку. Существующие сотрудники
-        (по совпадению ФИО или email) будут <strong style="color:var(--accent)">обновлены</strong>,
-        остальные — сохранены без изменений.
+        Импорт <strong style="color:var(--success)">добавляет</strong> новых сотрудников из файла.
+        Сотрудники сопоставляются по <strong>email</strong>: если сотрудник с таким email уже есть в базе,
+        его данные будут обновлены данными из файла (данные из файла считаются приоритетными).
+        Существующие сотрудники не удаляются.
       </p>
       <label class="btn btn-primary" for="importFile" style="cursor:pointer;display:inline-flex;align-items:center;gap:8px;">
         <i class="fi fi-rr-download"></i> Выбрать файл и импортировать

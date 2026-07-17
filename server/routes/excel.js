@@ -145,7 +145,7 @@ function resolveColumns(headerRow) {
 router.post('/import', requireAuth, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
-    const mode = req.body.mode || 'replace';
+    const mode = req.body.mode || 'add';
     if (mode === 'replace' && req.session.managerRole !== 'admin') {
       if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
       return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
@@ -162,20 +162,16 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
       return res.status(400).json({ error: 'Не найдена колонка "ФИО" — проверьте формат файла' });
     }
 
-    function normalizeContacts(raw) {
-      return String(raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    }
-
-    let removed = 0, imported = 0, skipped = 0;
+    let removed = 0, imported = 0, updated = 0, skipped = 0;
 
     if (mode === 'replace') {
       removed = await helpers.deleteAllEmployees();
     }
 
-    let existingEmployees = [];
-    if (mode === 'add') {
-      existingEmployees = await helpers.getAllEmployees();
-    }
+    // В пределах одного файла тоже не должно быть двух строк с одинаковым email —
+    // если файл содержит дубли, более поздняя строка "выигрывает" (перекрывает раннюю).
+    const seenInFile = new Map(); // email(lower) -> index in `parsed`
+    const parsed = [];
 
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
@@ -198,23 +194,27 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
       };
       data.contacts = [city, email].filter(Boolean).join('\n');
 
-      if (mode === 'add') {
-        const normName = String(name).toLowerCase().replace(/\s+/g, ' ').trim();
-        const normContacts = normalizeContacts(data.contacts);
-        const isDuplicate = existingEmployees.some(e => {
-          const eName = String(e.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-          const eContacts = normalizeContacts(e.contacts || '');
-          return eName === normName && eContacts === normContacts;
-        });
-        if (isDuplicate) { skipped++; continue; }
+      const emailKey = email ? email.trim().toLowerCase() : '';
+      if (emailKey && seenInFile.has(emailKey)) {
+        parsed[seenInFile.get(emailKey)] = data; // более поздняя строка перекрывает предыдущую с тем же email
+      } else {
+        if (emailKey) seenInFile.set(emailKey, parsed.length);
+        parsed.push(data);
       }
+    }
 
-      await helpers.createEmployee(data);
-      imported++;
+    for (const data of parsed) {
+      if (mode === 'add') {
+        const { action } = await helpers.upsertEmployeeByEmail(data);
+        if (action === 'updated') updated++; else imported++;
+      } else {
+        await helpers.createEmployee(data);
+        imported++;
+      }
     }
 
     fs.unlinkSync(req.file.path);
-    res.json({ ok: true, imported, removed, skipped, total: rows.length - 1, mode });
+    res.json({ ok: true, imported, updated, removed, skipped, total: rows.length - 1, mode });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: `Ошибка импорта: ${err.message}` });

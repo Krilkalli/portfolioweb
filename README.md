@@ -88,3 +88,4 @@ docker exec -it samba-ad samba-tool user list
 docker exec -it samba-ad samba-tool domain auth --username=petrova --password=P@ssw0rd456
 
 Ребилд для внесения изменений: docker compose up -d --build
+удаление базы Excel: docker exec -it portfolio-postgres psql -U portfolio -d portfolio -c "DELETE FROM employees; ALTER SEQUENCE employees_id_seq RESTART WITH 1;"

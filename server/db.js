@@ -731,6 +731,66 @@ const helpers = {
     }
   },
 
+  // Импорт "добавить/обновить": сопоставление СТРОГО по email.
+  // Если сотрудник с таким email уже есть — обновляем его данными из файла
+  // (значения из файла приоритетны и перекрывают старые; пустые поля файла
+  // не затирают то, что уже было заполнено). Если email в файле пустой —
+  // сопоставление по email невозможно, запись создаётся как новая.
+  async upsertEmployeeByEmail(data) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const email = String(data.email || '').trim();
+      let existing = { rows: [] };
+      if (email) {
+        existing = await client.query(
+          "SELECT * FROM employees WHERE lower(email) = lower($1) AND email != '' LIMIT 1",
+          [email]
+        );
+      }
+      const now = new Date().toISOString();
+      let result;
+      if (existing.rows[0]) {
+        const allowed = ['name','education','position','contacts','experience','about','competencies','project_experience','certification','email','city'];
+        const p = { ...prepEmployee(existing.rows[0]), id: existing.rows[0].id, created_at: existing.rows[0].created_at };
+        for (const k of allowed) {
+          const incoming = data[k];
+          const isEmpty = incoming === undefined || incoming === null ||
+            (typeof incoming === 'string' && incoming.trim() === '') ||
+            (Array.isArray(incoming) && incoming.length === 0);
+          if (!isEmpty) {
+            p[k] = typeof incoming === 'object' ? JSON.stringify(incoming) : String(incoming);
+          }
+        }
+        if (data.name) p.name_lower = normalizeName(data.name);
+        p.updated_at = now;
+        const cols = Object.keys(p).filter(k => k !== 'id' && k !== 'created_at');
+        const setClauses = cols.map((k, i) => `${k} = $${i + 1}`);
+        const vals = cols.map(k => p[k]);
+        vals.push(p.id);
+        await client.query(`UPDATE employees SET ${setClauses.join(', ')} WHERE id = $${vals.length}`, vals);
+        result = { action: 'updated', id: p.id };
+      } else {
+        const p = { ...prepEmployee(data), created_at: now, updated_at: now };
+        const cols = Object.keys(p);
+        const vals = Object.values(p);
+        const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+        const inserted = await client.query(
+          `INSERT INTO employees (${cols.join(', ')}) VALUES (${placeholders}) RETURNING id`,
+          vals
+        );
+        result = { action: 'inserted', id: inserted.rows[0].id };
+      }
+      await client.query('COMMIT');
+      return result;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
   // ── Должности ────────────────────────────────────────────────────────────────
   async getPositions() {
     const s = await loadSettings();
