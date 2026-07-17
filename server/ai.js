@@ -79,8 +79,8 @@ class OpenAIProvider extends AIProvider {
   constructor(apiKey, baseURL, model) {
     super();
     this.apiKey = apiKey;
-    this.baseURL = baseURL || 'https://api.openai.com/v1';
-    this.model = model || 'gpt-3.5-turbo';
+    this.baseURL = baseURL || 'https://ai.wormsoft.ru/api/gpt';
+    this.model = model || 'openai/gpt-5.4-mini';
   }
 
   async _request(systemPrompt, userText) {
