@@ -4,9 +4,22 @@ function toast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
   const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
-  t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span>${icons[type]}</span> `;
+  const textSpan = document.createElement('span');
+  textSpan.textContent = msg;
+  t.appendChild(textSpan);
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function initials(name) {
@@ -159,10 +172,10 @@ function renderEmployeeCard(group) {
   card.innerHTML = `
     <div class="review-card-header">
       <div class="employee-info">
-        ${group.employee_photo ? `<div class="avatar" style="background-image:url('/uploads/${group.employee_photo}');background-size:cover;background-position:center;color:transparent;">${initials(group.employee_name)}</div>` : `<div class="avatar">${initials(group.employee_name)}</div>`}
+        ${group.employee_photo ? `<div class="avatar" style="background-image:url('/uploads/${escHtml(group.employee_photo)}');background-size:cover;background-position:center;color:transparent;">${escHtml(initials(group.employee_name))}</div>` : `<div class="avatar">${escHtml(initials(group.employee_name))}</div>`}
         <div>
-          <div style="font-weight:600;">${group.employee_name}</div>
-          <div style="font-size:0.8rem;color:var(--text-muted);">${group.employee_position}</div>
+          <div style="font-weight:600;">${escHtml(group.employee_name)}</div>
+          <div style="font-size:0.8rem;color:var(--text-muted);">${escHtml(group.employee_position)}</div>
           <div style="font-size:0.75rem;color:var(--text-muted);margin-top:2px;">Отправлено: ${submittedAt}</div>
         </div>
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>

@@ -339,7 +339,7 @@ async function init() {
   if (changed) await saveSettings(settings);
 
   // Миграция: переименовать 'Аналитик' → 'Консультант' в компетенциях
-  const oldComps = helpers.getPositionCompetencies();
+  const oldComps = await helpers.getPositionCompetencies();
   if (oldComps['Аналитик'] !== undefined && oldComps['Консультант'] === undefined) {
     oldComps['Консультант'] = oldComps['Аналитик'];
     delete oldComps['Аналитик'];
@@ -348,7 +348,7 @@ async function init() {
   }
 
   // Seed компетенций по умолчанию
-  const comps = helpers.getPositionCompetencies();
+  const comps = await helpers.getPositionCompetencies();
   const DEFAULT_COMPS = {
     'Разработчик': [
       'Знание объектов метаданных, управляемых форм, языка запросов, СКД',
@@ -900,10 +900,9 @@ const helpers = {
   },
 
   async rejectAllForEmployee(employeeId, reason = '', reviewerName = '') {
-    await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE employee_id = $4 AND status = 'pending'",
+    const res = await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE employee_id = $4 AND status = 'pending'",
       [new Date().toISOString(), reviewerName, reason, Number(employeeId)]);
-    const changes = await _all('SELECT * FROM pending_changes WHERE employee_id = $1 AND status = $2', [Number(employeeId), 'pending']);
-    return changes.length;
+    return res ? res.rowCount : 0;
   },
 
   async getStats() {

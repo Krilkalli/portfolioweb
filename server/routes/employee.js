@@ -123,7 +123,7 @@ router.post('/:token/feedback', async (req, res, next) => {
     const { rating, comment } = req.body;
     if (rating != null) {
       const r = Number(rating);
-      if (r < 1 || r > 5) return res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
+      if (isNaN(r) || r < 1 || r > 5) return res.status(400).json({ error: 'Оценка должна быть от 1 до 5' });
     }
     await helpers.saveFeedback(emp.id, rating ? Number(rating) : null, comment || '');
     res.json({ ok: true });

@@ -133,27 +133,35 @@
       </div>
       <form id="aiForm">
         <div class="form-group">
-          <label class="form-label" for="ai_provider">Провайдер ИИ</label>
-          <select id="ai_provider" name="ai_provider" class="form-control" onchange="toggleAiFields()">
-            <option value="yandexgpt">YandexGPT</option>
-            <option value="openai">OpenAI-совместимый API (Любой другой)</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label class="form-label" for="ai_api_key">API Ключ (Secret Key) <span class="text-muted" style="font-weight:400;">- для всех</span></label>
+          <label class="form-label" for="ai_api_key">API Ключ (Secret Key)</label>
           <input id="ai_api_key" name="ai_api_key" type="password" class="form-control" placeholder="Оставьте пустым, чтобы не менять">
         </div>
-        <div class="form-group ai-yandex-only">
-          <label class="form-label" for="ai_folder_id">ID каталога (Folder ID) <span class="text-muted" style="font-weight:400;">- для YandexGPT</span></label>
-          <input id="ai_folder_id" name="ai_folder_id" type="text" class="form-control" placeholder="Пример: b1g76p4n2vjdpk61g8q6">
+        <div class="form-group">
+          <label class="form-label" for="ai_base_url">Базовый URL</label>
+          <input id="ai_base_url" name="ai_base_url" type="text" class="form-control" placeholder="Например: https://ai.wormsoft.ru/api/gpt">
         </div>
-        <div class="form-group ai-openai-only" style="display:none;">
-          <label class="form-label" for="ai_base_url">Базовый URL <span class="text-muted" style="font-weight:400;">- для OpenAI API</span></label>
-          <input id="ai_base_url" name="ai_base_url" type="text" class="form-control" placeholder="Пример: https://api.openai.com/v1">
-        </div>
-        <div class="form-group ai-openai-only" style="display:none;">
-          <label class="form-label" for="ai_model_name">Название модели <span class="text-muted" style="font-weight:400;">- для OpenAI API</span></label>
-          <input id="ai_model_name" name="ai_model_name" type="text" class="form-control" placeholder="Пример: gpt-3.5-turbo, llama3">
+        <div class="form-group">
+          <label class="form-label" for="ai_model_name">Название модели</label>
+          <select id="ai_model_name" name="ai_model_name" class="form-control">
+            <option value="google/gemma4:26b">google/gemma4:26b</option>
+            <option value="google/gemma4:31b">google/gemma4:31b</option>
+            <option value="openai/gpt-5.2">openai/gpt-5.2</option>
+            <option value="openai/gpt-5.2-codex">openai/gpt-5.2-codex</option>
+            <option value="openai/gpt-5.3-codex">openai/gpt-5.3-codex</option>
+            <option value="openai/gpt-5.4">openai/gpt-5.4</option>
+            <option value="openai/gpt-5.4-mini">openai/gpt-5.4-mini</option>
+            <option value="openai/gpt-5.5">openai/gpt-5.5</option>
+            <option value="qwen/qwen3.5-35b">qwen/qwen3.5-35b</option>
+            <option value="qwen/qwen3.5-plus">qwen/qwen3.5-plus</option>
+            <option value="qwen/qwen3.6-plus">qwen/qwen3.6-plus</option>
+            <option value="wormsoft/agent/high">wormsoft/agent/high</option>
+            <option value="wormsoft/agent/low">wormsoft/agent/low</option>
+            <option value="wormsoft/agent/medium">wormsoft/agent/medium</option>
+            <option value="wormsoft/code/high">wormsoft/code/high</option>
+            <option value="wormsoft/code/low">wormsoft/code/low</option>
+            <option value="wormsoft/code/medium">wormsoft/code/medium</option>
+            <option value="zai/glm-5.1">zai/glm-5.1</option>
+          </select>
         </div>
         <div class="form-group">
           <label class="form-label" for="ai_prompt_fill">Промпт для помощи сотруднику <span class="text-muted" style="font-weight:400;">— Автоматический запрос при улучшении текста</span></label>

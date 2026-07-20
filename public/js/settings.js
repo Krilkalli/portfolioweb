@@ -5,9 +5,22 @@ function toast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
   const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
-  t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span>${icons[type]}</span> `;
+  const textSpan = document.createElement('span');
+  textSpan.textContent = msg;
+  t.appendChild(textSpan);
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 // ─── Theme ──────────────────────────────────────────────────────────────────
@@ -132,8 +145,8 @@ function renderPositions() {
   }
   list.innerHTML = positions.map(p => `
     <div class="position-item">
-      <span>${p}</span>
-      <button class="remove-pos" onclick="removePosition('${p.replace(/'/g, "\\'")}')">✕</button>
+      <span>${escHtml(p)}</span>
+      <button class="remove-pos" onclick="removePosition('${escHtml(p).replace(/'/g, "\\'")}')">✕</button>
     </div>
   `).join('');
 }
@@ -314,7 +327,11 @@ async function summarizeFeedbackAI() {
     
     if (res.ok) {
       box.style.display = 'block';
-      box.innerHTML = '<strong>Резюме от ИИ:</strong><br><br>' + data.summary.replace(/\n/g, '<br>');
+      box.innerHTML = '<strong>Резюме от ИИ:</strong><br><br>';
+      const sumSpan = document.createElement('span');
+      sumSpan.textContent = data.summary;
+      sumSpan.innerHTML = sumSpan.innerHTML.replace(/\n/g, '<br>');
+      box.appendChild(sumSpan);
       toast('Анализ успешно завершен', 'success');
     } else {
       throw new Error(data.error || 'Ошибка суммаризации');
@@ -342,33 +359,19 @@ async function loadSettings() {
     document.getElementById('manager_email').value = s.manager_email || '';
 
     // AI Settings
-    if (document.getElementById('ai_provider')) {
-      document.getElementById('ai_provider').value = s.ai_provider || 'yandexgpt';
-      document.getElementById('ai_folder_id').value = s.ai_folder_id || '';
-      document.getElementById('ai_base_url').value = s.ai_base_url || 'https://api.openai.com/v1';
-      document.getElementById('ai_model_name').value = s.ai_model_name || 'gpt-3.5-turbo';
+    if (document.getElementById('ai_base_url')) {
+      document.getElementById('ai_base_url').value = s.ai_base_url || 'https://ai.wormsoft.ru/api/gpt';
+      document.getElementById('ai_model_name').value = s.ai_model_name || 'openai/gpt-5.4-mini';
       document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.';
       document.getElementById('ai_prompt_review').value = s.ai_prompt_review || 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".';
       if (document.getElementById('ai_prompt_summarize')) {
         document.getElementById('ai_prompt_summarize').value = s.ai_prompt_summarize || 'Ты опытный HR-аналитик. Проанализируй список отзывов сотрудников о компании и составь краткое резюме: выдели основные плюсы, минусы и общие настроения.';
       }
-      if (window.toggleAiFields) window.toggleAiFields();
     }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
 }
 
-window.toggleAiFields = function() {
-  const provider = document.getElementById('ai_provider').value;
-  const yandexFields = document.querySelectorAll('.ai-yandex-only');
-  const openaiFields = document.querySelectorAll('.ai-openai-only');
-  if (provider === 'yandexgpt') {
-    yandexFields.forEach(el => el.style.display = 'block');
-    openaiFields.forEach(el => el.style.display = 'none');
-  } else {
-    yandexFields.forEach(el => el.style.display = 'none');
-    openaiFields.forEach(el => el.style.display = 'block');
-  }
-};
+
 
 // ─── Save SMTP ──────────────────────────────────────────────────────────────
 document.getElementById('smtpForm').addEventListener('submit', async (e) => {
@@ -417,8 +420,6 @@ document.getElementById('aiForm').addEventListener('submit', async (e) => {
   btn.innerHTML = '<span class="spinner"></span> Сохранение...';
 
   const payload = {
-    ai_provider:      document.getElementById('ai_provider').value,
-    ai_folder_id:     document.getElementById('ai_folder_id').value.trim(),
     ai_base_url:      document.getElementById('ai_base_url').value.trim(),
     ai_model_name:    document.getElementById('ai_model_name').value.trim(),
     ai_prompt_fill:   document.getElementById('ai_prompt_fill').value.trim(),
@@ -676,9 +677,9 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {
-    const allowed = el.getAttribute('data-role');
-    if (role === 'admin') return; // admin sees everything
-    if (allowed === role) { el.style.display = ''; return; }
+    const allowed = el.getAttribute('data-role').split(',').map(r => r.trim());
+    if (role === 'admin') { el.style.display = ''; return; } // admin sees everything
+    if (allowed.includes(role)) { el.style.display = ''; return; }
     // scrum: sees cards marked data-role="scrum"; leader: sees nothing marked
     el.style.display = 'none';
   });

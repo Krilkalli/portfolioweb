@@ -42,14 +42,14 @@ function requireAdmin(req, res, next) {
 
 function requireCanReview(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  const role = req.session.managerRole || 'admin';
+  const role = req.session.managerRole || 'leader';
   if (role !== 'admin' && role !== 'scrum') return res.status(403).json({ error: 'Недостаточно прав для проверки изменений' });
   next();
 }
 
 function requireCanEdit(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  const role = req.session.managerRole || 'admin';
+  const role = req.session.managerRole || 'leader';
   if (role === 'leader') return res.status(403).json({ error: 'Руководитель не может редактировать данные' });
   next();
 }
@@ -188,7 +188,7 @@ router.get('/positions', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/positions', requireAuth, async (req, res, next) => {
+router.post('/positions', requireCanEdit, async (req, res, next) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Название должности обязательно' });
@@ -197,7 +197,7 @@ router.post('/positions', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/positions/:name', requireAuth, async (req, res, next) => {
+router.delete('/positions/:name', requireCanEdit, async (req, res, next) => {
   try {
     const positions = await helpers.removePosition(decodeURIComponent(req.params.name));
     res.json({ ok: true, positions });
@@ -410,7 +410,7 @@ router.put('/settings', requireAuth, async (req, res, next) => {
 
 });
 
-router.post('/settings/test-email', requireAuth, async (req, res, next) => {
+router.post('/settings/test-email', requireAdmin, async (req, res, next) => {
   try {
     await testConnection();
     res.json({ ok: true, message: 'Соединение успешно' });

@@ -3,7 +3,10 @@ function toast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
   const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
-  t.innerHTML = `<span>${icons[type]}</span> ${msg}`;
+  t.innerHTML = `<span>${icons[type]}</span> `;
+  const textSpan = document.createElement('span');
+  textSpan.textContent = msg;
+  t.appendChild(textSpan);
   c.appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 4000);
 }

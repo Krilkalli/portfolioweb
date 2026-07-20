@@ -3,9 +3,22 @@ function toast(msg, type = 'info') {
   const t = document.createElement('div');
   t.className = `toast toast-${type}`;
   const icons = { success: '<i class="fi fi-rr-check-circle"></i>', error: '<i class="fi fi-rr-cross-circle"></i>', info: '<i class="fi fi-rr-info"></i>', warning: '<i class="fi fi-rr-triangle-warning"></i>' };
-  t.innerHTML = `<span>${icons[type] || '<i class="fi fi-rr-info"></i>'}</span> ${msg}`;
+  t.innerHTML = `<span>${icons[type] || '<i class="fi fi-rr-info"></i>'}</span> `;
+  const textSpan = document.createElement('span');
+  textSpan.textContent = msg;
+  t.appendChild(textSpan);
   c.appendChild(t);
   setTimeout(() => { t.style.animation = 'none'; t.style.opacity = '0'; t.style.transition = '0.3s'; setTimeout(() => t.remove(), 300); }, 3500);
+}
+
+function escHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
 }
 
 function initials(name) {
@@ -160,18 +173,18 @@ function renderTable(list) {
       </td>
       <td style="text-align:left;">
         <div style="display:flex;align-items:center;gap:10px;">
-          ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${e.photo}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${initials(e.name)}</div>`}
+          ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${escHtml(e.photo)}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>`}
           <div>
-            <div class="employee-name"><a href="${e.link.replace('&as', '&as=manager')}&mode=view" target="_blank" rel="noopener">${e.name}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
-            <div style="font-size:0.75rem;color:var(--text-muted);" title="${e.email || ''}">${e.email ? (e.email.length > 12 ? e.email.substring(0, 12) + '...' : e.email) : '—'}</div>
+            <div class="employee-name"><a href="${escHtml(e.link).replace('&as', '&as=manager')}&mode=view" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
           </div>
         </div>
       </td>
       <td style="text-align:left;">
-        <span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${e.position || ''}">${e.position || '—'}</span>
+        <span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.position || '')}">${escHtml(e.position || '—')}</span>
       </td>
       <td style="text-align:left;">
-        <span style="font-size:0.82rem;color:var(--text-secondary)">${e.city || '—'}</span>
+        <span style="font-size:0.82rem;color:var(--text-secondary)">${escHtml(e.city || '—')}</span>
       </td>
       <td style="text-align:left;">
         ${e.status === 'archived'
@@ -730,6 +743,6 @@ function applyRoleUI(role) {
   if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
 
   initTheme();
-  applyRoleUI(auth.manager?.role || 'admin');
+  applyRoleUI(auth.manager?.role || 'leader');
   await Promise.all([loadStats(), loadEmployees(), loadPositions(), loadFilterData()]);
 })();

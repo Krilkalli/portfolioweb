@@ -6,74 +6,6 @@ class AIProvider {
   async reviewText(text, prompt) { throw new Error('Not implemented'); }
 }
 
-class YandexGPTProvider extends AIProvider {
-  constructor(folderId, apiKey) {
-    super();
-    this.folderId = folderId;
-    this.apiKey = apiKey;
-  }
-
-  async _request(systemPrompt, userText) {
-    if (!this.folderId || !this.apiKey) {
-      throw new Error('YandexGPT не настроен (отсутствует Folder ID или API Key)');
-    }
-
-    const data = JSON.stringify({
-      modelUri: `gpt://${this.folderId}/yandexgpt/latest`,
-      completionOptions: {
-        stream: false,
-        temperature: 0.3,
-        maxTokens: "8000"
-      },
-      messages: [
-        { role: "system", text: systemPrompt },
-        { role: "user", text: userText }
-      ]
-    });
-
-    const options = {
-      hostname: 'llm.api.cloud.yandex.net',
-      path: '/foundationModels/v1/completion',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Api-Key ${this.apiKey}`,
-        'Content-Length': Buffer.byteLength(data)
-      }
-    };
-
-    return new Promise((resolve, reject) => {
-      const req = https.request(options, (res) => {
-        let responseBody = '';
-        res.on('data', (chunk) => responseBody += chunk);
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              const result = JSON.parse(responseBody);
-              const text = result.result.alternatives[0].message.text;
-              resolve(text);
-            } catch (e) {
-              reject(new Error('Ошибка парсинга ответа YandexGPT'));
-            }
-          } else {
-            reject(new Error(`YandexGPT API Error: ${res.statusCode} ${responseBody}`));
-          }
-        });
-      });
-      req.on('error', reject);
-      req.write(data);
-      req.end();
-    });
-  }
-
-  async enhanceText(text, prompt) {
-    return this._request(prompt, text);
-  }
-
-  async reviewText(text, prompt) {
-    return this._request(prompt, text);
-  }
-}
 
 class OpenAIProvider extends AIProvider {
   constructor(apiKey, baseURL, model) {
@@ -137,20 +69,11 @@ class OpenAIProvider extends AIProvider {
 }
 
 async function getAIProvider() {
-  const provider = await helpers.getSetting('ai_provider') || 'yandexgpt';
-  if (provider === 'yandexgpt') {
-    return new YandexGPTProvider(
-      await helpers.getSetting('ai_folder_id'),
-      await helpers.getSetting('ai_api_key')
-    );
-  } else if (provider === 'openai') {
-    return new OpenAIProvider(
-      await helpers.getSetting('ai_api_key'),
-      await helpers.getSetting('ai_base_url'),
-      await helpers.getSetting('ai_model_name')
-    );
-  }
-  throw new Error(`AI Provider ${provider} is not supported yet.`);
+  return new OpenAIProvider(
+    await helpers.getSetting('ai_api_key'),
+    await helpers.getSetting('ai_base_url'),
+    await helpers.getSetting('ai_model_name')
+  );
 }
 
 async function enhanceText(text) {
