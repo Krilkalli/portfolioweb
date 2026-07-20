@@ -166,16 +166,7 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
       return String(raw || '').toLowerCase().replace(/\s+/g, ' ').trim();
     }
 
-    let removed = 0, imported = 0, skipped = 0;
-
-    if (mode === 'replace') {
-      removed = await helpers.deleteAllEmployees();
-    }
-
-    let existingEmployees = [];
-    if (mode === 'add') {
-      existingEmployees = await helpers.getAllEmployees();
-    }
+    let removed = 0, imported = 0, updated = 0, skipped = 0;
 
     for (let r = 1; r < rows.length; r++) {
       const row = rows[r];
@@ -198,23 +189,13 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
       };
       data.contacts = [city, email].filter(Boolean).join('\n');
 
-      if (mode === 'add') {
-        const normName = String(name).toLowerCase().replace(/\s+/g, ' ').trim();
-        const normContacts = normalizeContacts(data.contacts);
-        const isDuplicate = existingEmployees.some(e => {
-          const eName = String(e.name || '').toLowerCase().replace(/\s+/g, ' ').trim();
-          const eContacts = normalizeContacts(e.contacts || '');
-          return eName === normName && eContacts === normContacts;
-        });
-        if (isDuplicate) { skipped++; continue; }
-      }
-
-      await helpers.createEmployee(data);
-      imported++;
+      const resAct = await helpers.upsertEmployee(data);
+      if (resAct === 'updated') updated++;
+      else imported++;
     }
 
     fs.unlinkSync(req.file.path);
-    res.json({ ok: true, imported, removed, skipped, total: rows.length - 1, mode });
+    res.json({ ok: true, imported, updated, removed, skipped, total: rows.length - 1, mode });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
     res.status(500).json({ error: `Ошибка импорта: ${err.message}` });

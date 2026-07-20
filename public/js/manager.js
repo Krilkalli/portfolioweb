@@ -258,6 +258,8 @@ async function archiveEmployee(id, name) {
     const r = await fetch(`/api/employees/${id}`, { method: 'DELETE' });
     if (r.ok) {
       toast(`Сотрудник «${name}» архивирован`, 'info');
+      selectedIds.delete(id);
+      updateSelectionUI();
       await loadEmployees();
       await loadStats();
     } else {

@@ -632,7 +632,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   const file = e.target.files[0];
   if (!file) return;
 
-  if (!confirm('Импорт добавит новых сотрудников из файла к текущему списку.\nСуществующие сотрудники (по совпадению ФИО и контактов) будут пропущены, остальные — сохранены без изменений.\n\nПродолжить?')) {
+  if (!confirm('Импорт обновит существующих сотрудников (сравнивая по email) и добавит новых.\nПродолжить?')) {
     e.target.value = '';
     return;
   }
@@ -650,7 +650,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
     e.target.value = '';
     if (r.ok) {
       result.innerHTML = '<span style="color:var(--success)"><i class="fi fi-rr-check-circle"></i> Импорт завершён</span>';
-      toast(`Импорт завершён: добавлено ${d.imported}, пропущено дубликатов ${d.skipped}`, 'success');
+      toast(`Импорт завершён: добавлено ${d.imported}, обновлено ${d.updated}`, 'success');
     } else {
       result.innerHTML = '<span style="color:var(--danger)"><i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка импорта') + '</span>';
       toast(d.error || 'Ошибка импорта', 'error');
