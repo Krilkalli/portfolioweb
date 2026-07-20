@@ -22,75 +22,162 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-function extractField(line, label) {
-  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-  const re = new RegExp('^\\s*' + escaped + '\\s*:\\s*(.*)$', 'i');
-  const m = line.match(re);
-  return m ? m[1].trim() : null;
+function parseBlockArrayFlexible(raw, labelsMap) {
+  const text = String(raw || '').replace(/\r/g, '');
+  if (!text.trim()) return [];
+  
+  const labelKeys = Object.keys(labelsMap);
+  const escapedLabels = labelKeys.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp('(' + escapedLabels.join('|') + ')\\s*:\\s*', 'gi');
+  
+  const tokens = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (lastIndex < match.index) {
+      const val = text.substring(lastIndex, match.index).trim();
+      if (tokens.length > 0) tokens[tokens.length - 1].val += (tokens[tokens.length-1].val ? '\n' : '') + val;
+    }
+    tokens.push({ key: labelsMap[match[1].toLowerCase().trim()], val: '' });
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length && tokens.length > 0) {
+    tokens[tokens.length - 1].val += (tokens[tokens.length-1].val ? '\n' : '') + text.substring(lastIndex).trim();
+  }
+  
+  const entries = [];
+  let currentEntry = null;
+  
+  for (const t of tokens) {
+    if (currentEntry && currentEntry[t.key] !== undefined) currentEntry = null;
+    if (!currentEntry) {
+      currentEntry = {};
+      entries.push(currentEntry);
+    }
+    currentEntry[t.key] = t.val;
+  }
+  
+  return entries.filter(e => Object.values(e).some(val => typeof val === 'string' && val.trim() !== ''));
 }
 
 function parseEducation(raw) {
-  if (!raw || !String(raw).trim()) return [];
-  const blocks = String(raw).split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
-  return blocks.map(block => {
-    const entry = { institution: '', degree: '', specialty: '', year: '' };
-    for (const line of block.split('\n')) {
-      let v;
-      if ((v = extractField(line, 'Учебное заведение')) !== null) entry.institution = v;
-      else if ((v = extractField(line, 'Степень')) !== null) entry.degree = v;
-      else if ((v = extractField(line, 'Специальность')) !== null) entry.specialty = v;
-      else if ((v = extractField(line, 'Год окончания')) !== null) entry.year = v;
-    }
-    return entry;
-  }).filter(e => e.institution || e.degree || e.specialty || e.year);
+  const map = {
+    'учебное заведение': 'institution',
+    'степень': 'degree',
+    'специальность': 'specialty',
+    'год окончания': 'year',
+    'год': 'year'
+  };
+  const entries = parseBlockArrayFlexible(raw, map);
+  return entries.map(e => ({
+    institution: e.institution || '',
+    degree: e.degree || '',
+    specialty: e.specialty || '',
+    year: e.year || ''
+  }));
 }
 
 function parseContacts(raw) {
-  const lines = String(raw || '').split('\n');
+  const text = String(raw || '').replace(/\r/g, '');
   let city = '', email = '';
-  for (const line of lines) {
-    let v;
-    if ((v = extractField(line, 'Город')) !== null) city = v;
-    else if ((v = extractField(line, 'Email')) !== null) email = v;
-    else if (!email && line.includes('@')) email = line.trim();
-    else if (!city && line.trim()) city = line.trim();
+  const cMatch = text.match(/Город\s*:\s*([^\n]+)/i) || text.match(/Город\s*:\s*([^ ]+)/i);
+  if (cMatch) city = cMatch[1].trim();
+  const eMatch = text.match(/Email\s*:\s*([^\n]+)/i) || text.match(/Email\s*:\s*([^ ]+)/i);
+  if (eMatch) email = eMatch[1].trim();
+  
+  if (!email) {
+    const parts = text.split(/\s+/);
+    const em = parts.find(p => p.includes('@'));
+    if (em) email = em.trim();
   }
-  return { city, email };
+  if (!city && !text.includes(':')) {
+    const lines = text.split('\n');
+    if (lines[0] && !lines[0].includes('@')) city = lines[0].trim();
+  }
+  return { city, email, contactsText: text.trim() };
 }
 
 function parseExperience(raw) {
-  if (!raw || !String(raw).trim()) return { total: '', jobs: [] };
-  const job = { company: '', position: '', period: '' };
-  let total = '';
-  for (const line of String(raw).split('\n')) {
-    let v;
-    if ((v = extractField(line, 'Общий стаж')) !== null) total = v;
-    else if ((v = extractField(line, 'Компания')) !== null) job.company = v;
-    else if ((v = extractField(line, 'Должность')) !== null) job.position = v;
-    else if ((v = extractField(line, 'Период')) !== null) job.period = v;
+  const text = String(raw || '').replace(/\r/g, '');
+  if (!text.trim()) return { total: '', jobs: [] };
+
+  const labelsMap = {
+    'общий стаж': 'total',
+    'стаж работы в 1с': 'ignore',
+    'компания': 'company',
+    'должность': 'position',
+    'период': 'period'
+  };
+  
+  const labelKeys = Object.keys(labelsMap);
+  const escapedLabels = labelKeys.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const regex = new RegExp('(' + escapedLabels.join('|') + ')\\s*:\\s*', 'gi');
+  
+  const tokens = [];
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (lastIndex < match.index) {
+      const val = text.substring(lastIndex, match.index).trim();
+      if (tokens.length > 0) tokens[tokens.length - 1].val += (tokens[tokens.length-1].val ? '\n' : '') + val;
+    }
+    tokens.push({ key: labelsMap[match[1].toLowerCase().trim()], val: '' });
+    lastIndex = regex.lastIndex;
   }
-  const jobs = (job.company || job.position || job.period) ? [job] : [];
-  return { total, jobs };
+  if (lastIndex < text.length && tokens.length > 0) {
+    tokens[tokens.length - 1].val += (tokens[tokens.length-1].val ? '\n' : '') + text.substring(lastIndex).trim();
+  }
+  
+  let total = '';
+  const jobs = [];
+  let currentJob = null;
+  
+  for (const t of tokens) {
+    if (t.key === 'total') {
+      total = t.val;
+    } else if (t.key === 'ignore') {
+      continue;
+    } else {
+      if (currentJob && currentJob[t.key] !== undefined) currentJob = null;
+      if (!currentJob) {
+        currentJob = {};
+        jobs.push(currentJob);
+      }
+      currentJob[t.key] = t.val;
+    }
+  }
+  
+  return { total, jobs: jobs.map(j => ({
+    company: j.company || '',
+    position: j.position || '',
+    period: j.period || ''
+  })).filter(j => j.company || j.position || j.period) };
 }
 
 function parseProjects(raw) {
-  if (!raw || !String(raw).trim()) return [];
-  const blocks = String(raw).split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
-  return blocks.map(block => {
-    const p = { period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' };
-    for (const line of block.split('\n')) {
-      let v;
-      if ((v = extractField(line, 'Период работы')) !== null) p.period = v;
-      else if ((v = extractField(line, 'Должность')) !== null) p.position = v;
-      else if ((v = extractField(line, 'Роль')) !== null) p.role = v;
-      else if ((v = extractField(line, 'Размер команды')) !== null) p.team_size = v;
-      else if ((v = extractField(line, 'Заказчик')) !== null) p.client = v;
-      else if ((v = extractField(line, 'Описание проекта')) !== null) p.project_description = v;
-      else if ((v = extractField(line, 'Задача, реализованная сотрудником')) !== null) p.task_description = v;
-      else if ((v = extractField(line, 'Программные продукты / Технологии')) !== null) p.technologies = v;
-    }
-    return p;
-  }).filter(p => p.period || p.position || p.role || p.client || p.project_description || p.task_description || p.technologies);
+  const map = {
+    'период работы': 'period',
+    'должность': 'position',
+    'роль': 'role',
+    'размер команды': 'team_size',
+    'заказчик': 'client',
+    'описание проекта': 'project_description',
+    'задача, реализованная сотрудником': 'task_description',
+    'задача': 'task_description',
+    'программные продукты / технологии': 'technologies',
+    'программные продукты': 'technologies'
+  };
+  const entries = parseBlockArrayFlexible(raw, map);
+  return entries.map(e => ({
+    period: e.period || '',
+    position: e.position || '',
+    role: e.role || '',
+    team_size: e.team_size || '',
+    client: e.client || '',
+    project_description: e.project_description || '',
+    task_description: e.task_description || '',
+    technologies: e.technologies || ''
+  }));
 }
 
 function parseAbout(raw) {
@@ -173,7 +260,7 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
       const name = String(row[col.name] ?? '').trim();
       if (!name) { skipped++; continue; }
 
-      const { city, email } = parseContacts(col.contacts !== undefined ? row[col.contacts] : '');
+      const { city, email, contactsText } = parseContacts(col.contacts !== undefined ? row[col.contacts] : '');
 
       const data = {
         name,
@@ -187,7 +274,7 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
         city,
         email,
       };
-      data.contacts = [city, email].filter(Boolean).join('\n');
+      data.contacts = contactsText || [city, email].filter(Boolean).join('\n');
 
       const resAct = await helpers.upsertEmployee(data);
       if (resAct === 'updated') updated++;
@@ -231,7 +318,7 @@ router.get('/export', requireAuth, async (req, res, next) => {
             if (parts.length) lines.push(parts.join('\n'));
           }
         }
-        return lines.join('\n');
+        return lines.join('\n\n');
       }
       return '';
     }

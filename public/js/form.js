@@ -249,7 +249,7 @@ function addEducationEntry(data) {
       <div class="form-group"><label class="form-label">Направление / Специальность</label>
         <input type="text" class="form-control edu-specialty" placeholder="Направление подготовки" value="${v(data?.specialty)}"></div>
       <div class="form-group"><label class="form-label">Год окончания</label>
-        <input type="text" class="form-control edu-year" placeholder="2024" inputmode="numeric" value="${v(data?.year)}"></div>
+        <input type="text" class="form-control edu-year" placeholder="2024" value="${v(data?.year)}"></div>
     </div>`;
   c.appendChild(e);
   maskYear(e.querySelector('.edu-year'));
@@ -742,7 +742,7 @@ async function performSubmit(fields) {
   fields.contacts = [fields.city, fields.email].filter(Boolean).join('\n');
   // fields.courses is already set by collectFormFields via getCoursesData()
   try {
-    const r = await fetch(`/api/form/${token}/submit`, {
+    const r = await fetch(`/api/form/${token}/submit${window.location.search}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields }),
     });
@@ -757,6 +757,14 @@ async function performSubmit(fields) {
       }
       document.getElementById('formState').classList.add('hidden');
       document.getElementById('successState').classList.remove('hidden');
+      
+      if (managerUser) {
+        const h2 = document.querySelector('#successState h2');
+        if (h2) h2.textContent = 'Изменения сохранены!';
+        const p = document.getElementById('successSubtitle');
+        if (p) p.textContent = d.message || 'Данные мгновенно применены к карточке сотрудника.';
+      }
+      
       document.getElementById('changesCountMsg').textContent =
         d.changed > 0 ? `Изменено полей: ${d.changed}` : '';
     } else {
@@ -809,7 +817,11 @@ document.getElementById('confirmSubmitModal').addEventListener('click', (e) => {
 
 document.getElementById('editModeBtn').addEventListener('click', () => {
   const url = new URL(location.href);
-  url.searchParams.delete('mode');
+  if (managerUser) {
+    url.searchParams.set('mode', 'manager');
+  } else {
+    url.searchParams.delete('mode');
+  }
   history.replaceState({}, '', url);
   setViewMode(false);
 });
@@ -842,79 +854,12 @@ function escHtml(str) {
 }
 // ─── Маска для периода: ММ.ГГГГ - ММ.ГГГГ ────────────────────────────────────
 function maskPeriod(el) {
-  if (!el) return;
-  
-  el.addEventListener('input', function(e) {
-    let digits = this.value.replace(/\D/g, '');
-    if (digits.length > 12) {
-      digits = digits.slice(0, 12);
-    }
-    let result = '';
-    for (let i = 0; i < digits.length; i++) {
-      if (i === 2 || i === 8) {
-        result += '.';
-      } else if (i === 6) {
-        result += ' - ';
-      }
-      result += digits[i];
-    }
-    this.value = result;
-  });
-  
-  el.addEventListener('paste', function(e) {
-    setTimeout(() => {
-      const digits = this.value.replace(/\D/g, '');
-      let result = '';
-      for (let i = 0; i < digits.length && i < 12; i++) {
-        if (i === 2 || i === 8) {
-          result += '.';
-        } else if (i === 6) {
-          result += ' - ';
-        }
-        result += digits[i];
-      }
-      this.value = result;
-    }, 10);
-  });
-
-  el.addEventListener('blur', function() {
-    if (this.value && !validatePeriod(this.value)) {
-      this.classList.add('is-invalid');
-      this.classList.remove('is-valid');
-      showFieldError(this, 'Введите корректный период в формате ММ.ГГГГ - ММ.ГГГГ');
-    } else if (this.value) {
-      this.classList.remove('is-invalid');
-      this.classList.add('is-valid');
-      removeFieldError(this);
-    } else {
-      this.classList.remove('is-invalid', 'is-valid');
-      removeFieldError(this);
-    }
-  });
+  // Отключено по запросу: разрешен свободный ввод текста
 }
 
 // ─── Маска и валидация для полей с годом (только 4 цифры) ──────────────────
 function maskYear(el) {
-  if (!el) return;
-
-  el.addEventListener('input', function() {
-    this.value = this.value.replace(/\D/g, '').slice(0, 4);
-  });
-
-  el.addEventListener('blur', function() {
-    if (this.value && !validateYear(this.value)) {
-      this.classList.add('is-invalid');
-      this.classList.remove('is-valid');
-      showFieldError(this, 'Введите корректный год (1900-' + (new Date().getFullYear() + 1) + ')');
-    } else if (this.value) {
-      this.classList.remove('is-invalid');
-      this.classList.add('is-valid');
-      removeFieldError(this);
-    } else {
-      this.classList.remove('is-invalid', 'is-valid');
-      removeFieldError(this);
-    }
-  });
+  // Отключено по запросу: разрешен свободный ввод текста
 }
 let cropper = null;
 
@@ -1223,31 +1168,12 @@ window.applyAiSuggestion = function(targetId, newText) {
 initForm();
 // ─── Валидация года ──────────────────────────────────────────────────────────
 function validateYear(value) {
-  if (!value) return true;
-  const num = Number(value);
-  return /^\d{4}$/.test(value) && num >= 1900 && num <= new Date().getFullYear() + 1;
+  return true; // Проверка отключена по запросу пользователя
 }
 
 // ─── Валидация периода (ММ.ГГГГ - ММ.ГГГГ) ──────────────────────────────────
 function validatePeriod(value) {
-  if (!value) return true;
-  const regex = /^(\d{2})\.(\d{4})\s*-\s*(\d{2})\.(\d{4})$/;
-  const match = value.match(regex);
-  if (!match) return false;
-  
-  const startMonth = parseInt(match[1]);
-  const startYear = parseInt(match[2]);
-  const endMonth = parseInt(match[3]);
-  const endYear = parseInt(match[4]);
-  
-  if (startMonth < 1 || startMonth > 12) return false;
-  if (endMonth < 1 || endMonth > 12) return false;
-  if (startYear < 1900 || startYear > 2100) return false;
-  if (endYear < 1900 || endYear > 2100) return false;
-  if (startYear > endYear) return false;
-  if (startYear === endYear && startMonth > endMonth) return false;
-  
-  return true;
+  return true; // Проверка отключена по запросу пользователя
 }
 
 // ─── Проверка всех полей с датами перед отправкой формы ─────────────────────
@@ -1329,11 +1255,10 @@ function addCourseEntry(data) {
   e.style.cssText = 'display: flex; gap: 8px; margin-bottom: 8px; align-items: center; position: relative;';
   e.innerHTML = `
     <input type="text" class="form-control course-name" placeholder="Наименование курса" value="${escHtml(data?.name||'')}">
-    <input type="text" class="form-control course-year" placeholder="Год" inputmode="numeric" style="width: 100px;" value="${escHtml(data?.year||'')}">
+    <input type="text" class="form-control course-year" placeholder="Год" style="width: 100px;" value="${escHtml(data?.year||'')}">
     <button type="button" class="remove-btn course-remove-btn" onclick="this.parentElement.remove(); trackChanges();"><i class="fi fi-rr-cross-small"></i></button>
   `;
   c.appendChild(e);
-  maskYear(e.querySelector('.course-year'));
   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', trackChanges));
 }
 function getCoursesData() {

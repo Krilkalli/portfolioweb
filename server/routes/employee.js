@@ -106,6 +106,19 @@ router.post('/:token/submit', async (req, res, next) => {
     if (changes.length === 0)
       return res.json({ ok: true, changed: 0, message: 'Изменений не обнаружено' });
 
+    if (req.query.mode === 'manager') {
+      const updates = {};
+      for (const c of changes) {
+        updates[c.field_name] = submitFields[c.field_name];
+      }
+      if (updates.contacts !== undefined) {
+        updates.city = fields.city || '';
+        updates.email = fields.email || '';
+      }
+      await helpers.updateEmployee(emp.id, updates);
+      return res.json({ ok: true, changed: changes.length, message: 'Изменения мгновенно применены (права менеджера)' });
+    }
+
     await helpers.submitChanges(emp.id, changes);
 
     const base = `${req.protocol}://${req.get('host')}`;
