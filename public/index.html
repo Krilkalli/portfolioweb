@@ -173,7 +173,7 @@
     <a href="/review.html" class="btn btn-warning btn-sm" id="reviewBtn">
       <i class="fi fi-rr-bolt"></i> Проверить изменения <span id="pendingBadge" class="hidden">0</span>
     </a>
-    <a href="/settings.html" class="btn btn-ghost btn-sm"><i class="fi fi-rr-settings"></i> Настройки</a>
+    <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
@@ -242,7 +242,7 @@
     </div>
     <button id="addEmployeeBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-plus"></i> Сотрудника</button>
     <!-- <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum"><i class="fi fi-rr-download"></i> Импорт Excel</button> -->
-    <button id="massMailBtn" class="btn btn-primary btn-sm" data-role="admin,scrum"><i class="fi fi-rr-envelope"></i> Рассылка</button>
+    <button id="massMailBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📧 Рассылка</button>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm"><i class="fi fi-rr-upload"></i> Экспорт Excel</a>
   </div>
 
@@ -251,8 +251,8 @@
     <div class="toolbar-left">
       <span id="selectedCount" style="font-size:0.82rem;color:var(--text-secondary);font-weight:600;"></span>
       <button class="btn btn-primary btn-sm" id="exportExcelBtn"><i class="fi fi-rr-stats"></i> Excel</button>
-      <button class="btn btn-primary btn-sm" id="exportDocxBtn"><i class="fi fi-rr-document"></i> DOCX</button>
-      <button class="btn btn-primary btn-sm" id="exportPdfBtn"><i class="fi fi-rr-file-pdf"></i> PDF</button>
+      <button class="btn btn-primary btn-sm" id="exportDocxBtn">📄 DOCX</button>
+      <button class="btn btn-primary btn-sm" id="exportPdfBtn">📑 PDF</button>
       <button class="btn btn-ghost btn-sm" id="clearSelectionBtn">✕ Снять выделение</button>
     </div>
   </div>
@@ -345,7 +345,7 @@
         <div style="font-size:0.8rem;color:var(--text-muted);font-weight:400;word-break:break-word;">Новых сотрудников. Дубликаты (по ФИО и контактам) будут пропущены.</div>
       </button>
       <button class="btn btn-danger" id="importReplaceBtn" style="text-align:left;padding:16px;" data-role="admin">
-        <div style="font-weight:600;"><i class="fi fi-rr-refresh"></i> Заменить полностью</div>
+        <div style="font-weight:600;">🔄 Заменить полностью</div>
         <div style="font-size:0.8rem;color:var(--text-muted);font-weight:400;word-break:break-word;">Все текущие сотрудники будут удалены и заменены данными из файла.</div>
       </button>
     </div>
@@ -358,13 +358,13 @@
 <div class="modal-overlay" id="massMailModal">
   <div class="modal" style="max-width:600px;">
     <div class="modal-header">
-      <span class="modal-title"><i class="fi fi-rr-envelope"></i>Рассылка</span>
+      <span class="modal-title">📧Рассылка</span>
       <button class="btn btn-ghost btn-icon" id="closeMassMailModal">✕</button>
     </div>
     <div style="padding:8px 0;">
       <!-- Информация о выбранных сотрудниках -->
       <div id="selectedRecipientsInfo" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:0.9rem;">
-        <i class="fi fi-rr-users"></i> Выбрано: 0 сотрудников
+        👥 Выбрано: 0 сотрудников
       </div>
 
       <form id="massMailForm">
@@ -387,7 +387,7 @@
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border);">
           <button type="button" class="btn btn-ghost" id="cancelMassMailBtn">Отмена</button>
-          <button type="submit" class="btn btn-primary" id="sendMassMailBtn"><i class="fi fi-rr-envelope"></i> Отправить выбранным</button>
+          <button type="submit" class="btn btn-primary" id="sendMassMailBtn">📧 Отправить выбранным</button>
         </div>
       </form>
       <div id="massMailResult" style="font-size:0.85rem;margin-top:12px;"></div>

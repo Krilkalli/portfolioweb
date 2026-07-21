@@ -11,8 +11,8 @@ function setManagerSession(req, res, manager) {
   req.session.managerId = manager.id;
   req.session.managerName = manager.name;
   req.session.managerLogin = manager.email;
-  req.session.managerRole = manager.role || 'admin';
-  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'admin' } });
+  req.session.managerRole = manager.role || 'leader';
+  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader' } });
 }
 
 router.post('/login', async (req, res, next) => {
@@ -71,7 +71,7 @@ router.get('/me', (req, res) => {
       id: req.session.managerId,
       name: req.session.managerName,
       email: req.session.managerLogin,
-      role: req.session.managerRole || 'admin',
+      role: req.session.managerRole || 'leader',
     } : null,
   });
 });
