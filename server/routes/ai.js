@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { enhanceText, reviewText } = require('../ai');
 
-// Middleware to check if user is authenticated (employee or manager)
+// Middleware to check if user is manager (employees cannot use AI)
 function requireAuth(req, res, next) {
-  if (!req.session.employeeId && !req.session.isManager) {
-    return res.status(401).json({ error: 'Не авторизован' });
+  if (!req.session.isManager) {
+    return res.status(403).json({ error: 'Использование ИИ доступно только менеджерам' });
   }
   next();
 }

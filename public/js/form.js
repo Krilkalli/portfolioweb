@@ -69,7 +69,7 @@ function toggleTemplate(field) {
   if (panel) panel.classList.toggle('visible');
 }
 function setupTemplateTriggers() {
-  const templateFields = ['about', 'competencies', 'project_experience'];
+  const templateFields = ['about', 'project_experience'];
   document.querySelectorAll('.form-control').forEach(el => {
     const field = el.id.replace('f_', '');
     if (templateFields.includes(field) && document.getElementById('template_' + field)) {
@@ -85,10 +85,7 @@ function setupTemplateTriggers() {
       });
     }
   });
-  document.querySelectorAll('.template-panel').forEach(p => {
-    p.addEventListener('mouseenter', () => p.classList.add('visible'));
-    p.addEventListener('mouseleave', () => p.classList.remove('visible'));
-  });
+
 }
 
 // ─── Competency Checklist ──────────────────────────────────────────────────
@@ -287,6 +284,17 @@ function getEducationData() {
 }
 
 function addJobEntry(data) {
+  let pStart = '';
+  let pEnd = '';
+  if (data?.period) {
+    const parts = data.period.split('-');
+    if (parts.length > 1) {
+      pStart = parts[0].trim();
+      pEnd = parts.slice(1).join('-').trim();
+    } else {
+      pStart = data.period.trim();
+    }
+  }
   const c = document.getElementById('jobContainer');
   const e = document.createElement('details');
   e.className = 'job-entry accordion-entry';
@@ -299,15 +307,38 @@ function addJobEntry(data) {
         <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
       <div class="form-group"><label class="form-label">Должность</label>
         <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
-      <div class="form-group"><label class="form-label">Период работы</label>
-        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
-        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
+      <div class="form-group" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">Начало периода</label>
+          <input type="text" class="form-control job-period-start" placeholder="ММ.ГГГГ" value="${escHtml(pStart)}">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Конец периода</label>
+          <input type="text" class="form-control job-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${pEnd === 'настоящее время' ? 'readonly' : ''}>
+          <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
+            <input type="checkbox" class="job-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''}> настоящее время
+          </label>
+        </div>
+      </div>
     </div>`;
   c.appendChild(e);
   
-  const periodInput = e.querySelector('.job-period');
-  if (periodInput) {
-    maskPeriod(periodInput);
+  const pStartInput = e.querySelector('.job-period-start');
+  const pEndInput = e.querySelector('.job-period-end');
+  const pPresent = e.querySelector('.job-period-present');
+  if (pStartInput) maskMonthYear(pStartInput);
+  if (pEndInput) maskMonthYear(pEndInput);
+  if (pPresent && pEndInput) {
+    pPresent.addEventListener('change', () => {
+      if (pPresent.checked) {
+        pEndInput.value = 'настоящее время';
+        pEndInput.readOnly = true;
+      } else {
+        if (pEndInput.value === 'настоящее время') pEndInput.value = '';
+        pEndInput.readOnly = false;
+      }
+      trackChanges();
+    });
   }
   
   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => { 
@@ -335,12 +366,23 @@ function getJobData() {
     jobs: Array.from(document.querySelectorAll('.job-entry')).map(el => ({
       company: el.querySelector('.job-company').value.trim(),
       position: el.querySelector('.job-position').value.trim(),
-      period: el.querySelector('.job-period').value.trim(),
+      period: [el.querySelector('.job-period-start').value.trim(), el.querySelector('.job-period-end').value.trim()].filter(Boolean).join(' - '),
     })).filter(j => j.company || j.position || j.period),
   };
 }
 
 function addProjectEntry(data) {
+  let pStart = '';
+  let pEnd = '';
+  if (data?.period) {
+    const parts = data.period.split('-');
+    if (parts.length > 1) {
+      pStart = parts[0].trim();
+      pEnd = parts.slice(1).join('-').trim();
+    } else {
+      pStart = data.period.trim();
+    }
+  }
   const c = document.getElementById('projectExperienceContainer');
   const e = document.createElement('details');
   e.className = 'proj-entry accordion-entry';
@@ -349,9 +391,19 @@ function addProjectEntry(data) {
     <summary class="proj-summary">${escHtml(projectTitle(data))}</summary>
     <div class="accordion-body">
       <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'proj-entry')">✕</button>
-      <div class="form-group"><label class="form-label">Период работы на проекте</label>
-        <input type="text" class="form-control proj-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
-        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
+      <div class="form-group" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">Начало периода (проект)</label>
+          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ" value="${escHtml(pStart)}">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Конец периода</label>
+          <input type="text" class="form-control proj-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${pEnd === 'настоящее время' ? 'readonly' : ''}>
+          <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
+            <input type="checkbox" class="proj-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''}> настоящее время
+          </label>
+        </div>
+      </div>
       <div class="form-group"><label class="form-label">Должность в рамках проекта</label>
         <input type="text" class="form-control proj-position" placeholder="Консультант по внедрению 1С" value="${escHtml(data?.position||'')}"></div>
       <div class="form-group"><label class="form-label">Роль в рамках проекта</label>
@@ -369,9 +421,22 @@ function addProjectEntry(data) {
     </div>`;
   c.appendChild(e);
   
-  const periodInput = e.querySelector('.proj-period');
-  if (periodInput) {
-    maskPeriod(periodInput);
+  const pStartInput = e.querySelector('.proj-period-start');
+  const pEndInput = e.querySelector('.proj-period-end');
+  const pPresent = e.querySelector('.proj-period-present');
+  if (pStartInput) maskMonthYear(pStartInput);
+  if (pEndInput) maskMonthYear(pEndInput);
+  if (pPresent && pEndInput) {
+    pPresent.addEventListener('change', () => {
+      if (pPresent.checked) {
+        pEndInput.value = 'настоящее время';
+        pEndInput.readOnly = true;
+      } else {
+        if (pEndInput.value === 'настоящее время') pEndInput.value = '';
+        pEndInput.readOnly = false;
+      }
+      trackChanges();
+    });
   }
   
   e.querySelectorAll('input, textarea').forEach(inp => inp.addEventListener('input', () => { 
@@ -388,7 +453,7 @@ function loadProjectData(arr) {
 
 function getProjectData() {
   return Array.from(document.querySelectorAll('.proj-entry')).map(el => ({
-    period: el.querySelector('.proj-period').value.trim(),
+    period: [el.querySelector('.proj-period-start').value.trim(), el.querySelector('.proj-period-end').value.trim()].filter(Boolean).join(' - '),
     position: el.querySelector('.proj-position').value.trim(),
     role: el.querySelector('.proj-role').value.trim(),
     team_size: el.querySelector('.proj-team').value.trim(),
@@ -852,6 +917,41 @@ document.getElementById('addProjectBtn').addEventListener('click', () => {
 function escHtml(str) {
   return String(str).replace(/&/g, '&').replace(/"/g, '"').replace(/</g, '<').replace(/>/g, '>');
 }
+// ─── Маска для ММ.ГГГГ ────────────────────────────────────
+function maskMonthYear(el) {
+  el.addEventListener('input', function(e) {
+    if (el.readOnly || el.value === 'настоящее время') return;
+    
+    let oldCursor = e.target.selectionStart;
+    let oldVal = e.target.value;
+    
+    let digitsBeforeCursor = 0;
+    for (let i = 0; i < oldCursor; i++) {
+      if (/\d/.test(oldVal[i])) digitsBeforeCursor++;
+    }
+
+    let digits = oldVal.replace(/\D/g, '').substring(0, 6);
+    let v = digits;
+    if (digits.length >= 2) {
+      let m = parseInt(digits.substring(0, 2), 10);
+      if (m < 1) m = 1;
+      if (m > 12) m = 12;
+      let mStr = (m < 10 ? '0' + m : m.toString());
+      v = mStr + (digits.length > 2 ? '.' + digits.substring(2) : '');
+    }
+    
+    e.target.value = v;
+    
+    let newCursor = 0;
+    let digitsFound = 0;
+    for (let i = 0; i < v.length; i++) {
+      if (digitsFound === digitsBeforeCursor) break;
+      if (/\d/.test(v[i])) digitsFound++;
+      newCursor++;
+    }
+    e.target.setSelectionRange(newCursor, newCursor);
+  });
+}
 // ─── Маска для периода: ММ.ГГГГ - ММ.ГГГГ ────────────────────────────────────
 function maskPeriod(el) {
   // Отключено по запросу: разрешен свободный ввод текста
@@ -978,6 +1078,7 @@ async function initForm() {
     const auth = await fetch('/api/auth/me').then(r => r.json());
     if (auth.authenticated && auth.manager) {
       managerUser = auth.manager;
+      document.querySelectorAll('.manager-only').forEach(el => el.classList.remove('manager-only'));
     }
   } catch {}
 
@@ -1172,8 +1273,14 @@ function validateYear(value) {
 }
 
 // ─── Валидация периода (ММ.ГГГГ - ММ.ГГГГ) ──────────────────────────────────
-function validatePeriod(value) {
-  return true; // Проверка отключена по запросу пользователя
+function validateMonthYear(value) {
+  if (value === 'настоящее время') return true;
+  if (!/^\d{2}\.\d{4}$/.test(value)) return false;
+  const m = parseInt(value.substring(0, 2), 10);
+  const y = parseInt(value.substring(3), 10);
+  if (m < 1 || m > 12) return false;
+  if (y < 1900 || y > new Date().getFullYear() + 1) return false;
+  return true;
 }
 
 // ─── Проверка всех полей с датами перед отправкой формы ─────────────────────
@@ -1186,11 +1293,15 @@ function validateAllDateFields() {
       if (!firstInvalid) firstInvalid = el;
     }
   });
-  document.querySelectorAll('.proj-period, .job-period').forEach(el => {
-    if (el.value && !validatePeriod(el.value)) {
+  document.querySelectorAll('.proj-period-start, .proj-period-end, .job-period-start, .job-period-end').forEach(el => {
+    if (el.value && !validateMonthYear(el.value)) {
       el.classList.add('is-invalid'); el.classList.remove('is-valid');
-      showFieldError(el, 'Введите корректный период в формате ММ.ГГГГ - ММ.ГГГГ');
+      showFieldError(el, 'Введите корректный период в формате ММ.ГГГГ');
       if (!firstInvalid) firstInvalid = el;
+    } else {
+      el.classList.remove('is-invalid');
+      const err = el.parentNode.querySelector('.invalid-feedback');
+      if (err) err.remove();
     }
   });
   if (firstInvalid) {
@@ -1220,6 +1331,17 @@ function removeFieldError(el) {
 }
 // ─── Total Job Entries (Общий стаж) ─────────────────────────────────────────
 function addTotalJobEntry(data) {
+  let pStart = '';
+  let pEnd = '';
+  if (data?.period) {
+    const parts = data.period.split('-');
+    if (parts.length > 1) {
+      pStart = parts[0].trim();
+      pEnd = parts.slice(1).join('-').trim();
+    } else {
+      pStart = data.period.trim();
+    }
+  }
   const c = document.getElementById('totalJobContainer');
   if (!c) return;
   const e = document.createElement('details');
@@ -1233,13 +1355,38 @@ function addTotalJobEntry(data) {
         <input type="text" class="form-control job-company" placeholder="Наименование компании" value="${escHtml(data?.company||'')}"></div>
       <div class="form-group"><label class="form-label">Должность</label>
         <input type="text" class="form-control job-position" placeholder="Должность" value="${escHtml(data?.position||'')}"></div>
-      <div class="form-group"><label class="form-label">Период работы</label>
-        <input type="text" class="form-control job-period" placeholder="ММ.ГГГГ - ММ.ГГГГ" value="${escHtml(data?.period||'')}">
-        <span style="font-size:0.7rem;color:var(--text-muted);">Пример: 01.2024 - 06.2024</span></div>
+      <div class="form-group" style="display:flex; gap:10px;">
+        <div style="flex:1;">
+          <label class="form-label">Начало периода</label>
+          <input type="text" class="form-control job-period-start" placeholder="ММ.ГГГГ" value="${escHtml(pStart)}">
+        </div>
+        <div style="flex:1;">
+          <label class="form-label">Конец периода</label>
+          <input type="text" class="form-control job-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${pEnd === 'настоящее время' ? 'readonly' : ''}>
+          <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
+            <input type="checkbox" class="job-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''}> настоящее время
+          </label>
+        </div>
+      </div>
     </div>`;
   c.appendChild(e);
-  const periodInput = e.querySelector('.job-period');
-  if (periodInput) maskPeriod(periodInput);
+  const pStartInput = e.querySelector('.job-period-start');
+  const pEndInput = e.querySelector('.job-period-end');
+  const pPresent = e.querySelector('.job-period-present');
+  if (pStartInput) maskMonthYear(pStartInput);
+  if (pEndInput) maskMonthYear(pEndInput);
+  if (pPresent && pEndInput) {
+    pPresent.addEventListener('change', () => {
+      if (pPresent.checked) {
+        pEndInput.value = 'настоящее время';
+        pEndInput.readOnly = true;
+      } else {
+        if (pEndInput.value === 'настоящее время') pEndInput.value = '';
+        pEndInput.readOnly = false;
+      }
+      trackChanges();
+    });
+  }
   e.querySelectorAll('input').forEach(inp => inp.addEventListener('input', () => {
     updateAccordionTitle(e, '.job-summary');
     trackChanges();
