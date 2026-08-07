@@ -211,6 +211,7 @@
     .view-mode .edit-only { display: none !important; }
     .view-only { display: none; }
     .view-mode .view-only { display: block; }
+    .manager-only { display: none !important; }
     .view-field { margin-bottom: 12px; }
     .view-field-label { font-size: 0.78rem; font-weight: 500; color: var(--text-muted); margin-bottom: 4px; }
     .view-field-value { font-size: 0.9rem; color: var(--text-primary); line-height: 1.6; white-space: pre-wrap; }
@@ -390,7 +391,7 @@
         <div class="section-card">
           <div class="section-card-title">
             <i class="fi fi-rr-user"></i> Обо мне
-            <button type="button" class="btn btn-ghost btn-sm edit-only" id="aiReviewAboutBtn" style="margin-left:auto;color:var(--accent);border-color:var(--accent);font-size:0.8rem;padding:4px 10px;"><i class="fi fi-rr-magic-wand"></i> Проверить</button>
+            <button type="button" class="btn btn-ghost btn-sm edit-only manager-only" id="aiReviewAboutBtn" style="margin-left:auto;color:var(--accent);border-color:var(--accent);font-size:0.8rem;padding:4px 10px;"><i class="fi fi-rr-magic-wand"></i> Проверить</button>
           </div>
           <div class="ai-suggestion-box" id="ai_suggestion_f_about" style="display:none; margin-bottom:10px; padding:10px; background:var(--bg-card); border-left:3px solid var(--accent); font-size:0.9rem;"></div>
           <textarea id="f_about" class="form-control edit-only" rows="4" placeholder="Краткое описание — кто вы и чем занимаетесь"></textarea>
@@ -424,7 +425,7 @@
       <div class="form-group field-full">
         <div class="section-card">
           <div class="section-card-title"><i class="fi fi-rr-folder"></i> Проектный опыт</div>
-          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту сотрудника</p>
+          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту, от новых к старым</p>
           <div id="projectExperienceContainer" class="edit-only"></div>
           <div id="viewProjects" class="view-only"></div>
           <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
@@ -477,7 +478,7 @@
 
     <div id="submitRow" class="edit-only" style="display:flex;align-items:center;gap:12px;padding-top:24px;border-top:1px solid var(--border);">
       <button type="submit" class="btn btn-primary btn-lg" id="submitBtn"><i class="fi fi-rr-upload"></i> Отправить на проверку</button>
-      <button type="button" class="btn btn-ghost" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);"><i class="fi fi-rr-magic-wand"></i> Проверить весь текст</button>
+      <button type="button" class="btn btn-ghost manager-only" id="aiReviewBtn" style="color:var(--accent); border-color:var(--accent);"><i class="fi fi-rr-magic-wand"></i> Проверить ИИ текст</button>
       <button type="button" class="btn btn-ghost" id="resetBtn">Сбросить изменения</button>
     </div>
     <div style="margin-top: 16px;">
