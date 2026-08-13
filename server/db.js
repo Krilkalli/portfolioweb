@@ -620,7 +620,7 @@ const helpers = {
         technologies: project?.technologies || '',
       };
 
-      const sameKey = (p) => [p?.project_name || '', p?.client || '', p?.project_description || '', p?.technologies || '', p?.period || ''].join('|').toLowerCase();
+      const sameKey = (p) => String(p?.project_name || '').trim().toLowerCase();
       const filtered = current.filter(item => sameKey(item) !== sameKey(nextEntry));
       filtered.unshift(nextEntry);
 
