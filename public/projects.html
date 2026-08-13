@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Проекты — Портфолио IS1C</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0; flex: 1; }
+    .projects-card { padding: 0; }
+    .projects-card .table-wrap { overflow: visible; }
+    #projectsTable { width: 100%; table-layout: fixed; }
+    #projectsTable thead { position: sticky; top: 0; z-index: 10; }
+    #projectsTable thead th { background: var(--bg-secondary); }
+    #projectsTable td, #projectsTable th { vertical-align: middle; }
+    .projects-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin: 24px 0; }
+    .projects-toolbar-left, .projects-toolbar-right { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+    .page-subtitle { color: var(--text-muted); font-size: 0.92rem; }
+    .project-name { font-weight: 600; }
+    .project-row td { word-break: break-word; }
+    .toolbar-compact { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 8px 0 16px; }
+    .toolbar-compact .search-wrap input { width: 320px; }
+  </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+</head>
+<body class="page-wrapper">
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="/index.html" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
+    <a href="/index.html" class="btn btn-ghost btn-sm" data-role="admin">Дашборд</a>
+    <a href="/projects.html" class="btn btn-primary btn-sm" data-role="admin">Проекты</a>
+    <a href="/settings.html" class="btn btn-ghost btn-sm" data-role="admin">⚙ Настройки</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="main-content container">
+  <div style="margin-bottom:18px;">
+    <div class="page-title">Проекты</div>
+    <div class="page-subtitle">Создание карточек проектов и назначение руководителя из списка руководителей.</div>
+  </div>
+
+  <div class="projects-toolbar">
+    <div class="projects-toolbar-left">
+      <button id="createProjectBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-plus"></i> Создать проект</button>
+      <button id="uploadExcelBtn" class="btn btn-ghost btn-sm"><i class="fi fi-rr-upload"></i> Загрузить эксель</button>
+      <input type="file" id="projectExcelInput" accept=".xlsx,.xls" hidden>
+    </div>
+    <div class="projects-toolbar-right">
+      <button id="sendProjectsBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-paper-plane"></i> Отправить</button>
+      <button id="archiveProjectsBtn" class="btn btn-danger btn-sm"><i class="fi fi-rr-box"></i> Архив</button>
+    </div>
+  </div>
+
+  <div class="toolbar-compact">
+    <div class="search-wrap">
+      <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+      </svg>
+      <input id="projectSearchInput" type="text" class="form-control" placeholder="Поиск по названию проекта или руководителю...">
+    </div>
+    <div class="form-group" style="margin:0;min-width:240px;">
+      <select id="projectLeaderFilter" class="form-control">
+        <option value="">Все руководители</option>
+      </select>
+    </div>
+    <div class="form-group" style="margin:0;min-width:220px;">
+      <select id="projectSortOrder" class="form-control">
+        <option value="newest">От новых к поздним</option>
+        <option value="oldest">От поздних к новым</option>
+      </select>
+    </div>
+    <label class="filter-label" style="margin:0;">
+      <input type="checkbox" id="showArchivedProjects"> Показать архив
+    </label>
+  </div>
+
+  <div class="card projects-card">
+    <div class="table-wrap">
+      <table class="table" id="projectsTable">
+        <thead>
+          <tr>
+            <th class="col-check" style="text-align:center;width:40px;">
+              <input type="checkbox" id="selectAllProjects">
+            </th>
+            <th style="text-align:left;">Название проекта</th>
+            <th style="text-align:left; width:160px;">Статус</th>
+            <th style="text-align:left; width:240px;">Руководитель</th>
+          </tr>
+        </thead>
+        <tbody id="projectsTbody">
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<div class="modal-overlay" id="projectModal">
+  <div class="modal" style="max-width:560px;">
+    <div class="modal-header">
+      <span class="modal-title"><i class="fi fi-rr-plus"></i> Новый проект</span>
+      <button type="button" class="btn btn-ghost btn-icon" id="closeProjectModal">✕</button>
+    </div>
+    <form id="projectForm">
+      <div class="form-group">
+        <label class="form-label">Название проекта <span class="required">*</span></label>
+        <input type="text" class="form-control" id="projectTitle" placeholder="Например: Автоматизация учета" required>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Руководитель <span class="required">*</span></label>
+        <select class="form-control" id="projectLeader" required>
+          <option value="">Загрузка...</option>
+        </select>
+      </div>
+      <div id="projectFormResult" style="margin-bottom:12px;"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;">
+        <button type="button" class="btn btn-ghost" id="cancelProjectBtn">Отмена</button>
+        <button type="submit" class="btn btn-primary" id="saveProjectBtn"><i class="fi fi-rr-plus"></i> Создать</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="/js/projects.js"></script>
+</body>
+</html>

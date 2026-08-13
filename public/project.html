@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Карточка проекта — Портфолио IS1C</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0; flex: 1; }
+    .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+    .page-subtitle { color: var(--text-muted); font-size: 0.92rem; }
+    .project-grid { display:grid; grid-template-columns: 1fr; gap: 18px; }
+    .team-row { display:grid; grid-template-columns: 1fr auto 40px; gap: 10px; align-items:center; margin-bottom: 10px; }
+    .team-row:last-child { margin-bottom: 0; }
+    .section-head { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom: 12px; }
+    .muted { color: var(--text-muted); }
+    .member-toggle { cursor:pointer; user-select:none; }
+    .member-list { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
+    .team-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
+  </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+</head>
+<body class="page-wrapper">
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="/index.html" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm"><i class="fi fi-rr-moon"></i></button>
+    <a href="/index.html" class="btn btn-ghost btn-sm">Дашборд</a>
+    <a href="/projects.html" class="btn btn-primary btn-sm">Проекты</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="main-content container">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px;">
+    <div>
+      <div class="page-title" id="pageTitle">Карточка проекта</div>
+      <div class="page-subtitle">Редактирование карточки проекта и состава команды.</div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button id="saveProjectBtnTop" class="btn btn-primary btn-sm"><i class="fi fi-rr-disk"></i> Сохранить</button>
+      <a href="/projects.html" class="btn btn-ghost btn-sm">Назад</a>
+    </div>
+  </div>
+
+  <div class="project-grid">
+    <div class="card">
+      <div class="section-head">
+        <div class="card-title">Основное</div>
+      </div>
+      <form id="projectCardForm">
+        <div class="form-group">
+          <label class="form-label">Название проекта</label>
+          <input id="title" class="form-control" type="text">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Заказчик</label>
+          <input id="customer" class="form-control" type="text" placeholder="ООО «Пример»">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Описание проекта</label>
+          <textarea id="description" class="form-control" rows="4"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Начало периода</label>
+            <input id="start_period" class="form-control" type="text" placeholder="ММ.ГГГГ">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Конец периода</label>
+            <input id="end_period" class="form-control" type="text" placeholder="ММ.ГГГГ">
+            <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
+              <input id="end_present" type="checkbox"> настоящее время
+            </label>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Размер команды</label>
+          <input id="team_size" class="form-control" type="number" min="0" step="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Программные продукты / технологии</label>
+          <input id="technologies" class="form-control" type="text" placeholder="1С:ERP 2.5, XML, JSON, REST API">
+        </div>
+      </form>
+    </div>
+
+    <div class="card">
+      <div class="section-head">
+        <div class="card-title">Команда проекта</div>
+        <button type="button" id="toggleTeamBtn" class="btn btn-ghost btn-sm member-toggle">Развернуть</button>
+      </div>
+      <div id="teamWrapper" style="display:none;">
+        <div class="muted" style="font-size:0.85rem;margin-bottom:10px;">Добавляйте участников по числу из поля выше. Можно удалять корзиной справа.</div>
+        <div id="teamMembers" class="member-list"></div>
+        <button type="button" id="addTeamMemberBtn" class="btn btn-ghost btn-sm" style="margin-top:10px;">+ Добавить сотрудника</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="result" style="margin-top:14px;"></div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="/js/project.js"></script>
+</body>
+</html>

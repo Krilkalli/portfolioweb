@@ -187,7 +187,7 @@ function confirmRemoveEntry(btn, className) {
 }
 
 function projectTitle(data) {
-  return data?.client?.trim() || data?.project_description?.trim()?.slice(0, 80) || data?.position?.trim() || 'Новый проект';
+  return data?.project_name?.trim() || data?.client?.trim() || data?.project_description?.trim()?.slice(0, 80) || data?.position?.trim() || 'Новый проект';
 }
 function jobTitle(data) {
   return data?.company?.trim() || data?.position?.trim() || 'Новое место работы';
@@ -200,6 +200,7 @@ function updateAccordionTitle(entry, selector, titleFn) {
   if (!summary) return;
   if (entry.classList.contains('proj-entry')) {
     summary.textContent = projectTitle({
+      project_name: entry.querySelector('.proj-name')?.value.trim(),
       client: entry.querySelector('.proj-client')?.value.trim(),
       project_description: entry.querySelector('.proj-descr')?.value.trim(),
       position: entry.querySelector('.proj-position')?.value.trim(),
@@ -410,6 +411,8 @@ function addProjectEntry(data) {
         <input type="text" class="form-control proj-role" placeholder="Разработчик / Архитектор / Аналитик" value="${escHtml(data?.role||'')}"></div>
       <div class="form-group"><label class="form-label">Размер команды</label>
         <input type="text" class="form-control proj-team" placeholder="5 человек" value="${escHtml(data?.team_size||'')}"></div>
+      <div class="form-group"><label class="form-label">Название проекта</label>
+        <input type="text" class="form-control proj-name" placeholder="Оптимизация моделирования" value="${escHtml(data?.project_name||'')}"></div>
       <div class="form-group"><label class="form-label">Заказчик + отрасль</label>
         <input type="text" class="form-control proj-client" placeholder="ООО «Пример» (нефтегазовая отрасль)" value="${escHtml(data?.client||'')}"></div>
       <div class="form-group"><label class="form-label">Описание проекта</label>
@@ -447,13 +450,14 @@ function addProjectEntry(data) {
 function loadProjectData(arr) {
   document.getElementById('projectExperienceContainer').innerHTML = '';
   if (Array.isArray(arr) && arr.length > 0) arr.forEach(d => addProjectEntry(d));
-  else if (typeof arr === 'string' && arr.trim()) addProjectEntry({ period: '', position: '', role: '', team_size: '', client: '', project_description: arr.trim(), task_description: '', technologies: '' });
-  else addProjectEntry({ period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' });
+  else if (typeof arr === 'string' && arr.trim()) addProjectEntry({ period: '', project_name: '', position: '', role: '', team_size: '', client: '', project_description: arr.trim(), task_description: '', technologies: '' });
+  else addProjectEntry({ period: '', project_name: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' });
 }
 
 function getProjectData() {
   return Array.from(document.querySelectorAll('.proj-entry')).map(el => ({
     period: [el.querySelector('.proj-period-start').value.trim(), el.querySelector('.proj-period-end').value.trim()].filter(Boolean).join(' - '),
+    project_name: el.querySelector('.proj-name').value.trim(),
     position: el.querySelector('.proj-position').value.trim(),
     role: el.querySelector('.proj-role').value.trim(),
     team_size: el.querySelector('.proj-team').value.trim(),
@@ -518,6 +522,9 @@ function showForm(emp) {
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
+  const myProjectsBtn = document.getElementById('myProjectsBtn');
+  if (emp.is_rp) myProjectsBtn?.classList.remove('hidden');
+  else myProjectsBtn?.classList.add('hidden');
   const avatarEl = document.getElementById('avatarEl');
   if (emp.photo) {
     let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
@@ -641,6 +648,7 @@ function setViewMode(view) {
   isViewMode = view;
   const formState = document.getElementById('formState');
   document.getElementById('editModeBtn')?.classList.toggle('hidden', !view);
+  document.getElementById('myProjectsBtn')?.classList.toggle('hidden', !employee?.is_rp);
   document.getElementById('headerSubtitle').textContent = view ? '— Просмотр профиля' : '— Обновление профиля';
   document.getElementById('spellerBtn')?.classList.toggle('hidden', view);
   formState.classList.toggle('view-mode', view);
@@ -889,6 +897,11 @@ document.getElementById('editModeBtn').addEventListener('click', () => {
   }
   history.replaceState({}, '', url);
   setViewMode(false);
+});
+
+document.getElementById('myProjectsBtn').addEventListener('click', () => {
+  if (!token) return;
+  location.href = `/myprojects.html?token=${token}${managerUser ? '&mode=manager' : ''}`;
 });
 
 document.querySelectorAll('#starRating button').forEach(btn => {

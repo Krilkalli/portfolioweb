@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Мои проекты — Портфолио IS1C</title>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0; flex: 1; }
+    .page-title { font-size: 1.4rem; font-weight: 700; margin-bottom: 6px; }
+    .page-subtitle { color: var(--text-muted); font-size: 0.92rem; }
+    .projects-list { display:grid; gap:16px; }
+    .project-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 18px; }
+    .project-head { display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap; margin-bottom: 12px; }
+    .team-row { display:grid; grid-template-columns: 1fr auto 40px; gap:10px; align-items:center; margin-bottom: 10px; }
+    .team-box { background: rgba(255,255,255,0.02); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
+  </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+</head>
+<body class="page-wrapper">
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="/index.html" style="display:flex;align-items:center;gap:10px;text-decoration:none;">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm"><i class="fi fi-rr-moon"></i></button>
+    <a href="#" id="backBtn" class="btn btn-ghost btn-sm">← Назад</a>
+    <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="main-content container">
+  <div style="margin-bottom:18px;">
+    <div class="page-title">Мои проекты</div>
+    <div class="page-subtitle">Карточки проектов, за которые вы отвечаете.</div>
+  </div>
+
+  <div id="projectsList" class="projects-list"></div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="/js/myprojects.js"></script>
+</body>
+</html>
