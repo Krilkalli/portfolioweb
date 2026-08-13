@@ -52,6 +52,7 @@
     <div class="projects-toolbar-left">
       <button id="createProjectBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-plus"></i> Создать проект</button>
       <button id="uploadExcelBtn" class="btn btn-ghost btn-sm"><i class="fi fi-rr-upload"></i> Загрузить эксель</button>
+      <a id="exportUppRegisterBtn" href="/api/projects/export-register" class="btn btn-ghost btn-sm"><i class="fi fi-rr-download"></i> Выгрузить регистр УПП</a>
       <input type="file" id="projectExcelInput" accept=".xlsx,.xls" hidden>
     </div>
     <div class="projects-toolbar-right">
@@ -59,6 +60,7 @@
       <button id="archiveProjectsBtn" class="btn btn-danger btn-sm"><i class="fi fi-rr-box"></i> Архив</button>
     </div>
   </div>
+  <div id="projectImportResult" class="card" style="display:none;padding:14px;margin-bottom:16px;"></div>
 
   <div class="toolbar-compact">
     <div class="search-wrap">

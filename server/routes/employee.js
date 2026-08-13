@@ -63,6 +63,27 @@ router.get('/:token/projects', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/:token/project-functional-blocks', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
+    res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
+  } catch (err) { next(err); }
+});
+
+router.get('/:token/project-employees', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
+    const employees = (await helpers.getAllEmployees())
+      .filter(employee => employee.status !== 'archived')
+      .map(employee => ({ id: employee.id, name: employee.name, position: employee.position }));
+    res.json({ employees });
+  } catch (err) { next(err); }
+});
+
 router.put('/:token/projects/:projectId', async (req, res, next) => {
   try {
     const emp = await helpers.getEmployeeByToken(req.params.token);
@@ -72,7 +93,9 @@ router.put('/:token/projects/:projectId', async (req, res, next) => {
     if (!project) return res.status(404).json({ error: 'Проект не найден' });
     if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
 
-    const updated = await helpers.updateProject(Number(req.params.projectId), req.body || {});
+    const allowed = ['title','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_blocks','team_members'];
+    const fields = Object.fromEntries(allowed.filter(key => req.body?.[key] !== undefined).map(key => [key, req.body[key]]));
+    const updated = await helpers.updateProject(Number(req.params.projectId), fields);
     if (updated) await helpers.syncProjectTeamMembers(updated);
     res.json({ ok: true, project: updated });
   } catch (err) { next(err); }

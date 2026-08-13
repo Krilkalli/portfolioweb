@@ -425,13 +425,17 @@
       <!-- ===== ПРОЕКТНЫЙ ОПЫТ ===== -->
       <div class="form-group field-full">
         <div class="section-card">
-          <div class="section-card-title"><i class="fi fi-rr-folder"></i> Проектный опыт</div>
-          <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту, от новых к старым</p>
-          <div id="projectExperienceContainer" class="edit-only"></div>
-          <div id="viewProjects" class="view-only"></div>
-          <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
-          <div class="example-hint" onclick="toggleTemplate('project_experience')"><i class="fi fi-rr-eye"></i> Показать пример</div>
-          <div class="template-panel" id="template_project_experience">
+          <div class="section-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+            <span><i class="fi fi-rr-folder"></i> Общий проектный опыт</span>
+            <button id="toggleProjectExperienceBtn" type="button" class="btn btn-ghost btn-sm">Свернуть</button>
+          </div>
+          <div id="projectExperienceBody">
+            <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту, от новых к старым</p>
+            <div id="projectExperienceContainer" class="edit-only"></div>
+            <div id="viewProjects" class="view-only"></div>
+            <button type="button" class="add-btn edit-only" id="addProjectBtn">+ Добавить проект</button>
+            <div class="example-hint" onclick="toggleTemplate('project_experience')"><i class="fi fi-rr-eye"></i> Показать пример</div>
+            <div class="template-panel" id="template_project_experience">
             <strong>Пример:</strong><br>
             <strong>Период:</strong> 01.2024 - 06.2024<br>
             <strong>Должность:</strong> Консультант по внедрению 1С<br>
@@ -441,6 +445,7 @@
             <strong>Описание проекта:</strong> Внедрение 1С:ERP 2.5 для автоматизации управленческого учета<br>
             <strong>Задача:</strong> Разработка интеграции с внешними системами через Datareon ESB<br>
             <strong>Технологии:</strong> 1С:ERP 2.5, Datareon ESB, HTTP-сервисы, JSON
+            </div>
           </div>
         </div>
       </div>

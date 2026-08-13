@@ -15,4 +15,5 @@ node_modules/
 .env.*.local
 # Загруженные файлы (фото)
 uploads/
+backups/
 

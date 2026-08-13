@@ -246,7 +246,17 @@ document.getElementById('projectExcelInput').addEventListener('change', async (e
     const r = await fetch('/api/projects/import', { method: 'POST', body: fd });
     const d = await r.json();
     if (r.ok) {
-      toast(`Импортировано проектов: ${d.imported}`, 'success');
+      toast(`Обработано проектов: ${d.imported}`, 'success');
+      const result = document.getElementById('projectImportResult');
+      result.style.display = 'block';
+      result.innerHTML = `
+        <strong>Импорт опыта сотрудников завершён</strong>
+        <div style="margin-top:6px;color:var(--text-muted);font-size:0.88rem;">
+          Проекты: создано ${Number(d.projectsCreated || 0)}, обновлено ${Number(d.projectsUpdated || 0)}.<br>
+          Сотрудники: создано ${Number(d.employeesCreated || 0)}, обновлено ${Number(d.employeesUpdated || 0)}.<br>
+          Пропущено жёлтых строк: ${Number(d.skippedInactiveRows || 0)} (${Number(d.inactiveEmployees || 0)} неработающих сотрудников).
+          Загруженные проекты созданы как черновики. Откройте карточки, назначьте РП и отправьте их руководителям.
+        </div>`;
       await loadProjects();
     } else {
       toast(d.error || 'Ошибка импорта', 'error');

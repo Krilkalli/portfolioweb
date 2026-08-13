@@ -12,6 +12,7 @@ const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
 const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection, sendMail } = require('../mailer');
+const { parseProjectExperienceFile } = require('../projectExperienceImport');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
@@ -27,22 +28,6 @@ async function sendReviewSummaryIfDone(employeeId, req) {
   const approvedLabels = reviewed.filter(c => c.status === 'approved').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: '' }));
   const rejectedLabels = reviewed.filter(c => c.status === 'rejected').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: c.reject_reason || '' }));
   notifyEmployeeReviewCompleted(emp, approvedLabels, rejectedLabels, base).catch(() => {});
-}
-
-function normalizeProjectHeader(value) {
-  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
-}
-
-function readProjectTitle(row) {
-  return row['Название проекта'] || row['Проект'] || row['Название'] || row['Project'] || row['title'] || row['name'] || '';
-}
-
-function readProjectLeader(row) {
-  return row['Руководитель'] || row['РП'] || row['Leader'] || row['leader'] || row['Руководитель проекта'] || '';
-}
-
-function readProjectStatus(row) {
-  return row['Статус'] || row['status'] || row['Состояние'] || '';
 }
 
 function requireAuth(req, res, next) {
@@ -416,6 +401,69 @@ router.get('/projects', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/projects/functional-blocks', requireAdmin, async (req, res, next) => {
+  try {
+    res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
+  } catch (err) { next(err); }
+});
+
+router.get('/projects/export-register', requireAdmin, async (req, res, next) => {
+  try {
+    const projects = await helpers.getAllProjects();
+    const headers = ['Ссылка','НомерСтроки','Сотрудник','Должность','ДатаВхода','ДатаВыхода','ФункциональнаяОбласть','ПрограммныйПродукт','Опыт','ОсновнойКонсультант','Проект','ДатаНачала','ДатаОкончания'];
+    const rows = [];
+    for (const project of projects) {
+      if (Array.isArray(project.source_data) && project.source_data.length) {
+        for (const row of project.source_data) {
+          rows.push({
+            Ссылка: row.sourceReference || '',
+            НомерСтроки: row.sourceRowNumber || '',
+            Сотрудник: row.employeeName || '',
+            Должность: row.position || '',
+            ДатаВхода: row.participationStart || '',
+            ДатаВыхода: row.participationEnd || '',
+            ФункциональнаяОбласть: row.functionalBlock || '',
+            ПрограммныйПродукт: row.technology || '',
+            Опыт: row.experienceType || '',
+            ОсновнойКонсультант: row.isPrimaryConsultant ? 'Да' : 'Нет',
+            Проект: project.title || '',
+            ДатаНачала: row.projectStart || project.start_period || '',
+            ДатаОкончания: row.projectEnd || project.end_period || '',
+          });
+        }
+      } else {
+        for (const member of project.team_members || []) {
+          const blocks = Array.isArray(member.functional_blocks) && member.functional_blocks.length ? member.functional_blocks : [''];
+          for (const block of blocks) rows.push({
+            Ссылка: project.source_system || 'Портфолио',
+            НомерСтроки: '',
+            Сотрудник: member.employee_name || member.name || '',
+            Должность: member.position || '',
+            ДатаВхода: member.participation_start || '',
+            ДатаВыхода: member.participation_end || '',
+            ФункциональнаяОбласть: block,
+            ПрограммныйПродукт: (member.technologies || []).join?.(', ') || project.technologies || '',
+            Опыт: (member.experience_types || []).join?.(', ') || '',
+            ОсновнойКонсультант: member.is_primary_consultant ? 'Да' : 'Нет',
+            Проект: project.title || '',
+            ДатаНачала: project.start_period || '',
+            ДатаОкончания: project.end_period || '',
+          });
+        }
+      }
+    }
+    const sheet = XLSX.utils.json_to_sheet(rows, { header: headers });
+    sheet['!cols'] = headers.map((header, index) => ({ wch: [34,12,34,34,14,14,42,32,22,22,38,14,14][index] }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, 'Регистр опыта');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const filename = `upp_project_experience_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buffer);
+  } catch (err) { next(err); }
+});
+
 router.get('/projects/:id', requireAdmin, async (req, res, next) => {
   try {
     const project = await helpers.getProjectById(Number(req.params.id));
@@ -447,37 +495,18 @@ router.put('/projects/:id', requireAdmin, async (req, res, next) => {
 router.post('/projects/import', requireAdmin, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
-
-    const workbook = XLSX.readFile(req.file.path);
-    const sheetName = workbook.SheetNames[0];
-    if (!sheetName) return res.status(400).json({ error: 'В файле не найден лист с данными' });
-
-    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
-    const leaders = await helpers.getProjectLeaders();
-    const leaderIndex = new Map();
-    leaders.forEach(m => {
-      leaderIndex.set(normalizeProjectHeader(m.name), m);
-      leaderIndex.set(normalizeProjectHeader(m.email), m);
+    const parsed = parseProjectExperienceFile(req.file.path);
+    if (!parsed.projects.length) return res.status(400).json({ error: 'После исключения жёлтых строк в файле не осталось проектов' });
+    const result = await helpers.importProjectExperience(parsed);
+    res.json({
+      ok: true,
+      ...result,
+      imported: result.projects,
+      sourceRows: parsed.totalRows,
+      activeRows: parsed.activeRows,
+      skippedInactiveRows: parsed.skippedInactiveRows,
+      inactiveEmployees: parsed.inactiveEmployees.length,
     });
-
-    const payload = rows.map(row => {
-      const title = String(readProjectTitle(row) || '').trim();
-      const leaderValue = String(readProjectLeader(row) || '').trim();
-      const status = String(readProjectStatus(row) || '').trim() || 'Черновик';
-      const leader = leaderIndex.get(normalizeProjectHeader(leaderValue));
-      return { title, status, leaderEmployeeId: leader ? leader.id : null };
-    }).filter(row => row.title);
-
-    if (payload.length === 0) {
-      return res.status(400).json({ error: 'В файле не найдено проектов' });
-    }
-
-    if (payload.some(row => !row.leaderEmployeeId)) {
-      return res.status(400).json({ error: 'Для всех проектов нужно указать руководителя, который есть в списке руководителей' });
-    }
-
-    const projects = await helpers.createProjects(payload);
-    res.json({ ok: true, imported: projects.length, projects });
   } catch (err) {
     next(err);
   } finally {
@@ -492,8 +521,12 @@ router.post('/projects/send', requireAdmin, async (req, res, next) => {
 
     const projects = await helpers.getProjectsByIds(ids);
     if (projects.length === 0) return res.status(400).json({ error: 'Проекты не найдены' });
+    const unassigned = projects.filter(project => !project.leader_employee_id);
+    if (unassigned.length) {
+      return res.status(400).json({ error: `Сначала назначьте РП: ${unassigned.slice(0, 3).map(project => project.title).join(', ')}${unassigned.length > 3 ? '…' : ''}` });
+    }
 
-    const sent = await helpers.markProjectsSent();
+    const sent = await helpers.markProjectsSent(ids);
     const base = `${req.protocol}://${req.get('host')}`;
 
     const projectsByLeader = new Map();

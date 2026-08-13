@@ -65,9 +65,6 @@ const SCHEMA_SQL = `
     created_at TEXT,
     updated_at TEXT
   );
-  CREATE INDEX IF NOT EXISTS idx_employees_token ON employees(token);
-  CREATE INDEX IF NOT EXISTS idx_employees_name_lower ON employees(name_lower);
-  CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status);
 
   CREATE TABLE IF NOT EXISTS pending_changes (
     id SERIAL PRIMARY KEY,
@@ -81,8 +78,6 @@ const SCHEMA_SQL = `
     reviewed_by TEXT DEFAULT '',
     reject_reason TEXT DEFAULT ''
   );
-  CREATE INDEX IF NOT EXISTS idx_changes_status ON pending_changes(status);
-  CREATE INDEX IF NOT EXISTS idx_changes_employee ON pending_changes(employee_id);
 
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
@@ -96,7 +91,6 @@ const SCHEMA_SQL = `
     comment TEXT DEFAULT '',
     submitted_at TEXT
   );
-  CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id);
 
   CREATE TABLE IF NOT EXISTS managers (
     id SERIAL PRIMARY KEY,
@@ -112,21 +106,25 @@ const SCHEMA_SQL = `
     title TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'Черновик',
     customer TEXT DEFAULT '',
+    code_name TEXT DEFAULT '',
+    legal_customer_name TEXT DEFAULT '',
+    industry_description TEXT DEFAULT '',
     description TEXT DEFAULT '',
     start_period TEXT DEFAULT '',
     end_period TEXT DEFAULT '',
     end_present BOOLEAN NOT NULL DEFAULT FALSE,
     team_size INTEGER DEFAULT 0,
     technologies TEXT DEFAULT '',
+    functional_blocks TEXT DEFAULT '[]',
     team_members TEXT DEFAULT '[]',
     leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL,
     leader_name TEXT DEFAULT '',
     created_at TEXT,
     updated_at TEXT,
-    sent_at TEXT DEFAULT ''
+    sent_at TEXT DEFAULT '',
+    source_system TEXT DEFAULT '',
+    source_data TEXT DEFAULT '[]'
   );
-  CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
-  CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id);
 
   CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY,
@@ -205,6 +203,17 @@ function castEmployee(r) {
 }
 
 function castEmployees(rows) { return rows.map(castEmployee); }
+
+function castProject(row) {
+  if (!row) return null;
+  const project = { ...row, id: Number(row.id) };
+  try { project.team_members = JSON.parse(project.team_members || '[]'); } catch { project.team_members = []; }
+  try { project.functional_blocks = JSON.parse(project.functional_blocks || '[]'); } catch { project.functional_blocks = []; }
+  try { project.source_data = JSON.parse(project.source_data || '[]'); } catch { project.source_data = []; }
+  return project;
+}
+
+function castProjects(rows) { return rows.map(castProject); }
 
 // ─── JSON-сериализация для записи ──────────────────────────────────────────
 function prepEmployee(emp) {
@@ -342,17 +351,34 @@ async function init() {
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Черновик'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS code_name TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS legal_customer_name TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS industry_description TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS start_period TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_period TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_present BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_size INTEGER DEFAULT 0").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS technologies TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS functional_blocks TEXT DEFAULT '[]'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_members TEXT DEFAULT '[]'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_name TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS sent_at TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_system TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_data TEXT DEFAULT '[]'").catch(() => {});
+
+  // Create indexes only after legacy tables have received all required columns.
+  await _run('CREATE INDEX IF NOT EXISTS idx_employees_token ON employees(token)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_employees_name_lower ON employees(name_lower)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_changes_status ON pending_changes(status)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_changes_employee ON pending_changes(employee_id)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader_employee ON projects(leader_employee_id)');
 
   // Настройки умолчания
   let settings = await loadSettings();
@@ -586,14 +612,13 @@ const helpers = {
   async getProjectsByIds(ids) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     return _all(`
-      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
-             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+      SELECT p.*,
              e.name AS leader_employee_name, e.email AS leader_employee_email
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       WHERE p.id = ANY($1::int[])
       ORDER BY p.created_at DESC, p.id DESC
-    `, [ids.map(Number)]);
+    `, [ids.map(Number)]).then(castProjects);
   },
 
   async syncEmployeeProjectExperience(employeeId, project) {
@@ -609,19 +634,24 @@ const helpers = {
       if (!Array.isArray(current)) current = [];
 
       const nextEntry = {
+        project_id: project?.project_id || project?.id || null,
         period: project?.period || '',
         project_name: project?.project_name || '',
-        position: '',
-        role: '',
+        position: project?.position || '',
+        role: project?.role || '',
         team_size: String(project?.team_size || ''),
         client: project?.client || project?.customer || '',
         project_description: project?.project_description || '',
-        task_description: '',
+        task_description: project?.task_description || '',
         technologies: project?.technologies || '',
+        functional_blocks: Array.isArray(project?.functional_blocks) ? project.functional_blocks : [],
       };
 
-      const sameKey = (p) => [p?.project_name || '', p?.client || '', p?.project_description || '', p?.technologies || '', p?.period || ''].join('|').toLowerCase();
-      const filtered = current.filter(item => sameKey(item) !== sameKey(nextEntry));
+      const sameKey = (p) => [p?.project_name || '', p?.client || ''].join('|').toLowerCase();
+      const filtered = current.filter(item => {
+        if (nextEntry.project_id && Number(item?.project_id) === Number(nextEntry.project_id)) return false;
+        return sameKey(item) !== sameKey(nextEntry);
+      });
       filtered.unshift(nextEntry);
 
       await client.query('UPDATE employees SET project_experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(filtered), new Date().toISOString(), Number(employeeId)]);
@@ -1080,28 +1110,22 @@ const helpers = {
 
   getAllProjects() {
     return _all(`
-      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
-             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+      SELECT p.*,
              e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       ORDER BY p.created_at DESC, p.id DESC
-    `);
+    `).then(castProjects);
   },
 
   getProjectById(id) {
     return _get(`
-      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
-             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+      SELECT p.*,
              e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       WHERE p.id = $1
-    `, [Number(id)]).then(row => {
-      if (!row) return null;
-      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
-      return row;
-    });
+    `, [Number(id)]).then(castProject);
   },
 
   async createProject({ title, leaderEmployeeId, status }) {
@@ -1128,14 +1152,28 @@ const helpers = {
       const project = await client.query('SELECT * FROM projects WHERE id = $1', [Number(id)]);
       if (!project.rows[0]) { await client.query('ROLLBACK'); return null; }
       const current = project.rows[0];
-       const allowed = ['title','status','customer','description','start_period','end_period','end_present','team_size','technologies','team_members','leader_employee_id','leader_name'];
+      const preparedFields = { ...fields };
+      if (preparedFields.leader_employee_id !== undefined) {
+        const leaderId = Number(preparedFields.leader_employee_id || 0);
+        if (!leaderId) {
+          preparedFields.leader_employee_id = null;
+          preparedFields.leader_name = '';
+        } else {
+          const leader = await client.query("SELECT id, name, is_rp, status FROM employees WHERE id = $1", [leaderId]);
+          if (!leader.rows[0] || leader.rows[0].status === 'archived') throw new Error('Выбранный руководитель не найден');
+          if (!leader.rows[0].is_rp) throw new Error('Выбранный сотрудник не отмечен как РП');
+          preparedFields.leader_employee_id = leader.rows[0].id;
+          preparedFields.leader_name = leader.rows[0].name;
+        }
+      }
+      const allowed = ['title','status','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_blocks','team_members','leader_employee_id','leader_name'];
       const updates = [];
       const params = [Number(id)];
       let idx = 2;
       for (const key of allowed) {
-        if (fields[key] === undefined) continue;
-        let value = fields[key];
-        if (key === 'team_members') value = JSON.stringify(Array.isArray(value) ? value : []);
+        if (preparedFields[key] === undefined) continue;
+        let value = preparedFields[key];
+        if (key === 'team_members' || key === 'functional_blocks') value = JSON.stringify(Array.isArray(value) ? value : []);
         if (key === 'team_size') value = Number(value || 0);
         if (key === 'end_present') value = !!value;
         updates.push(`${key} = $${idx}`);
@@ -1151,9 +1189,7 @@ const helpers = {
       await client.query(`UPDATE projects SET ${updates.join(', ')} WHERE id = $1`, params);
       const updated = await client.query('SELECT * FROM projects WHERE id = $1', [Number(id)]);
       await client.query('COMMIT');
-      const row = updated.rows[0];
-      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
-      return row;
+      return castProject(updated.rows[0]);
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -1196,21 +1232,107 @@ const helpers = {
     }
   },
 
-  async markProjectsSent() {
+  async importProjectExperience(parsed) {
+    if (!parsed || !Array.isArray(parsed.projects)) throw new Error('Некорректные данные импорта');
+    const client = await pool.connect();
+    const affectedProjectIds = [];
+    let employeesCreated = 0, employeesUpdated = 0, employeesArchived = 0;
+    let projectsCreated = 0, projectsUpdated = 0;
+    try {
+      await client.query('BEGIN');
+      const people = new Map();
+      for (const project of parsed.projects) {
+        for (const member of project.members || []) {
+          const key = normalizeName(member.name);
+          if (!people.has(key)) people.set(key, { name: member.name, position: member.position || '' });
+          else if (!people.get(key).position && member.position) people.get(key).position = member.position;
+        }
+      }
+      const employeeIds = new Map();
+      for (const [key, person] of people.entries()) {
+        const existing = await client.query('SELECT * FROM employees WHERE name_lower = $1 LIMIT 1', [key]);
+        if (existing.rows[0]) {
+          await client.query("UPDATE employees SET position = $1, status = 'active', updated_at = $2 WHERE id = $3", [existing.rows[0].position || person.position || '', new Date().toISOString(), existing.rows[0].id]);
+          employeeIds.set(key, existing.rows[0].id);
+          employeesUpdated += 1;
+        } else {
+          const prepared = prepEmployee({ name: person.name, position: person.position, status: 'active' });
+          const columns = Object.keys(prepared);
+          const result = await client.query(`INSERT INTO employees (${columns.join(', ')}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id`, Object.values(prepared));
+          employeeIds.set(key, result.rows[0].id);
+          employeesCreated += 1;
+        }
+      }
+      for (const name of parsed.inactiveEmployees || []) {
+        if (people.has(normalizeName(name))) continue;
+        const result = await client.query("UPDATE employees SET status = 'archived', updated_at = $1 WHERE name_lower = $2 AND status <> 'archived'", [new Date().toISOString(), normalizeName(name)]);
+        employeesArchived += result.rowCount;
+      }
+      for (const imported of parsed.projects) {
+        const members = (imported.members || []).map(member => ({
+          employee_id: employeeIds.get(normalizeName(member.name)) || null,
+          employee_name: member.name,
+          position: member.position || '',
+          participation_start: member.participationStart || '',
+          participation_end: member.participationEnd || '',
+          functional_blocks: member.functionalBlocks || [],
+          technologies: member.technologies || [],
+          experience_types: member.experienceTypes || [],
+          is_primary_consultant: !!member.isPrimaryConsultant,
+        })).filter(member => member.employee_id);
+        const current = await client.query('SELECT * FROM projects WHERE LOWER(TRIM(title)) = LOWER(TRIM($1)) ORDER BY id LIMIT 1', [imported.title]);
+        const now = new Date().toISOString();
+        const values = [imported.title, imported.description || '', imported.startPeriod || '', imported.endPeriod || '', members.length, (imported.technologies || []).join(', '), JSON.stringify(imported.functionalBlocks || []), JSON.stringify(members), JSON.stringify(imported.sourceRows || []), now];
+        let projectId;
+        if (current.rows[0]) {
+          projectId = current.rows[0].id;
+          await client.query(`UPDATE projects SET title=$1, description=$2, start_period=$3, end_period=$4, team_size=$5, technologies=$6, functional_blocks=$7, team_members=$8, source_system='УПП', source_data=$9, updated_at=$10 WHERE id=$11`, [...values, projectId]);
+          projectsUpdated += 1;
+        } else {
+          const result = await client.query(`INSERT INTO projects (title, status, description, start_period, end_period, team_size, technologies, functional_blocks, team_members, source_system, source_data, created_at, updated_at, sent_at) VALUES ($1, 'Черновик', $2, $3, $4, $5, $6, $7, $8, 'УПП', $9, $10, $10, '') RETURNING id`, values);
+          projectId = result.rows[0].id;
+          projectsCreated += 1;
+        }
+        affectedProjectIds.push(projectId);
+      }
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+    const affectedProjects = await helpers.getProjectsByIds(affectedProjectIds);
+    for (const project of affectedProjects) await helpers.syncProjectTeamMembers(project);
+    return { employeesCreated, employeesUpdated, employeesArchived, projectsCreated, projectsUpdated, projects: affectedProjects.length };
+  },
+
+  async getProjectFunctionalBlocks() {
+    const rows = await _all("SELECT functional_blocks FROM projects WHERE functional_blocks IS NOT NULL AND functional_blocks <> ''");
+    const values = new Set();
+    for (const row of rows) {
+      let blocks = [];
+      try { blocks = JSON.parse(row.functional_blocks || '[]'); } catch { blocks = []; }
+      for (const block of blocks) if (String(block || '').trim()) values.add(String(block).trim());
+    }
+    return [...values].sort((a, b) => a.localeCompare(b, 'ru'));
+  },
+
+  async markProjectsSent(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
     const now = new Date().toISOString();
     const res = await _run(
       `UPDATE projects
        SET status = 'Отправлено', sent_at = $1, updated_at = $1
-       WHERE status IS DISTINCT FROM 'Отправлено'`,
-      [now]
+       WHERE id = ANY($2::int[]) AND status IS DISTINCT FROM 'Отправлено'`,
+      [now, ids.map(Number)]
     );
     return res ? res.rowCount : 0;
   },
 
   async getProjectsForLeaderEmployee(employeeId) {
     const rows = await _all(`
-      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
-             p.created_at, p.updated_at, p.sent_at, e.name AS leader_employee_name
+      SELECT p.*, e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       WHERE p.leader_employee_id = $1 AND p.status = 'Отправлено'
@@ -1219,7 +1341,7 @@ const helpers = {
 
     const allIds = [];
     const parsed = rows.map(row => {
-      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
+      row = castProject(row);
       row.team_members.forEach(m => {
         const id = Number(m.employee_id || m.id || 0);
         if (id) allIds.push(id);
@@ -1234,18 +1356,44 @@ const helpers = {
       ...row,
       team_members: (row.team_members || []).map(m => {
         const id = Number(m.employee_id || m.id || 0);
-        return { employee_id: id, employee_name: memberMap.get(id) || m.employee_name || m.name || '' };
+        return { ...m, employee_id: id, employee_name: memberMap.get(id) || m.employee_name || m.name || '' };
       }),
     }));
   },
 
   async syncProjectTeamMembers(project) {
-    if (!project || !Array.isArray(project.team_members) || project.team_members.length === 0) return [];
+    if (!project || !project.id) return [];
+    const members = Array.isArray(project.team_members) ? project.team_members : [];
+    const memberIds = new Set(members.map(member => Number(member.employee_id || member.id || 0)).filter(Boolean));
+    const employees = await _all('SELECT id, project_experience FROM employees');
+    for (const employee of employees) {
+      if (memberIds.has(Number(employee.id))) continue;
+      let experience = [];
+      try { experience = JSON.parse(employee.project_experience || '[]'); } catch { experience = parseLegacyProject(employee.project_experience); }
+      if (!Array.isArray(experience)) continue;
+      const filtered = experience.filter(item => Number(item?.project_id || 0) !== Number(project.id));
+      if (filtered.length !== experience.length) await _run('UPDATE employees SET project_experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(filtered), new Date().toISOString(), employee.id]);
+    }
     const synced = [];
-    for (const member of project.team_members) {
+    for (const member of members) {
       const employeeId = Number(member.employee_id || member.id || 0);
       if (!employeeId) continue;
-      const updated = await helpers.syncEmployeeProjectExperience(employeeId, project);
+      const memberBlocks = Array.isArray(member.functional_blocks) ? member.functional_blocks : [];
+      const experienceTypes = Array.isArray(member.experience_types) ? member.experience_types : [];
+      const memberTechnologies = Array.isArray(member.technologies) ? member.technologies : [];
+      const updated = await helpers.syncEmployeeProjectExperience(employeeId, {
+        project_id: project.id,
+        period: [member.participation_start || project.start_period || '', member.participation_end || (project.end_present ? 'настоящее время' : project.end_period) || ''].filter(Boolean).join(' - '),
+        project_name: project.title,
+        position: member.position || '',
+        role: experienceTypes.join(', '),
+        team_size: project.team_size,
+        client: project.industry_description || project.customer || '',
+        project_description: project.description || '',
+        task_description: memberBlocks.length ? `Функциональные области: ${memberBlocks.join(', ')}` : '',
+        technologies: memberTechnologies.join(', ') || project.technologies || '',
+        functional_blocks: memberBlocks,
+      });
       if (updated) synced.push(updated);
     }
     return synced;

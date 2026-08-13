@@ -34,6 +34,8 @@ let currentManager = null;
 let projectId = null;
 let employees = [];
 let teamMembers = [];
+let functionalBlockOptions = [];
+let selectedFunctionalBlocks = [];
 
 function projectMemberTitle(project) {
   return (project?.title || '').trim() || 'Новый проект';
@@ -85,6 +87,29 @@ function updateTitle() {
   document.getElementById('pageTitle').textContent = document.getElementById('title').value || 'Карточка проекта';
 }
 
+function renderLeaderOptions(selectedId = '') {
+  const select = document.getElementById('leader_employee_id');
+  const leaders = employees.filter(employee => employee.is_rp && employee.status !== 'archived');
+  select.innerHTML = '<option value="">Не назначен</option>' + leaders.map(employee =>
+    `<option value="${employee.id}" ${String(selectedId || '') === String(employee.id) ? 'selected' : ''}>${escHtml(employee.name)}</option>`
+  ).join('');
+}
+
+function renderFunctionalBlocks() {
+  const checklist = document.getElementById('functionalBlocksChecklist');
+  const values = [...new Set([...functionalBlockOptions, ...selectedFunctionalBlocks])].sort((a, b) => a.localeCompare(b, 'ru'));
+  if (!values.length) {
+    checklist.innerHTML = '<div class="muted">Блоки ещё не добавлены</div>';
+    return;
+  }
+  checklist.innerHTML = values.map(block => `
+    <label class="checkbox-option">
+      <input type="checkbox" value="${escHtml(block)}" ${selectedFunctionalBlocks.includes(block) ? 'checked' : ''}>
+      <span>${escHtml(block)}</span>
+    </label>
+  `).join('');
+}
+
 function renderTeam() {
   const wrap = document.getElementById('teamMembers');
   const count = Math.max(0, Number(document.getElementById('team_size').value || 0));
@@ -116,7 +141,11 @@ function syncMembersToTeamSize() {
 
 function setFormData(project) {
   document.getElementById('title').value = project.title || '';
+  renderLeaderOptions(project.leader_employee_id || '');
+  document.getElementById('code_name').value = project.code_name || '';
+  document.getElementById('legal_customer_name').value = project.legal_customer_name || '';
   document.getElementById('customer').value = project.customer || '';
+  document.getElementById('industry_description').value = project.industry_description || '';
   document.getElementById('description').value = project.description || '';
   document.getElementById('start_period').value = project.start_period || '';
   document.getElementById('end_period').value = project.end_period || '';
@@ -124,7 +153,9 @@ function setFormData(project) {
   document.getElementById('end_period').readOnly = !!project.end_present;
   document.getElementById('team_size').value = project.team_size || 0;
   document.getElementById('technologies').value = project.technologies || '';
-  teamMembers = Array.isArray(project.team_members) ? project.team_members.map(m => ({ employee_id: m.employee_id || '' })) : [];
+  selectedFunctionalBlocks = Array.isArray(project.functional_blocks) ? [...project.functional_blocks] : [];
+  renderFunctionalBlocks();
+  teamMembers = Array.isArray(project.team_members) ? project.team_members.map(m => ({ ...m, employee_id: m.employee_id || '' })) : [];
   document.getElementById('teamWrapper').style.display = (project.team_size || teamMembers.length) ? 'block' : 'none';
   document.getElementById('toggleTeamBtn').textContent = (project.team_size || teamMembers.length) ? 'Свернуть' : 'Развернуть';
   syncMembersToTeamSize();
@@ -134,6 +165,12 @@ async function loadEmployees() {
   const r = await fetch('/api/employees');
   const d = await r.json();
   employees = (d || []).filter(e => e.status !== 'archived');
+}
+
+async function loadFunctionalBlocks() {
+  const response = await fetch('/api/projects/functional-blocks');
+  const data = await response.json();
+  functionalBlockOptions = Array.isArray(data.blocks) ? data.blocks : [];
 }
 
 async function loadProject() {
@@ -150,13 +187,18 @@ async function loadProject() {
 async function saveProject() {
   const payload = {
     title: document.getElementById('title').value.trim(),
+    leader_employee_id: document.getElementById('leader_employee_id').value || null,
+    code_name: document.getElementById('code_name').value.trim(),
+    legal_customer_name: document.getElementById('legal_customer_name').value.trim(),
     customer: document.getElementById('customer').value.trim(),
+    industry_description: document.getElementById('industry_description').value.trim(),
     description: document.getElementById('description').value.trim(),
     start_period: document.getElementById('start_period').value.trim(),
     end_period: document.getElementById('end_period').value.trim(),
     end_present: document.getElementById('end_present').checked,
     team_size: Number(document.getElementById('team_size').value || 0),
     technologies: document.getElementById('technologies').value.trim(),
+    functional_blocks: selectedFunctionalBlocks,
     team_members: teamMembers,
   };
 
@@ -192,8 +234,24 @@ document.getElementById('teamMembers').addEventListener('change', (e) => {
     const idx = Number(e.target.dataset.idx);
     if (!teamMembers[idx]) teamMembers[idx] = { employee_id: '' };
     teamMembers[idx].employee_id = e.target.value;
+    teamMembers[idx].employee_name = employees.find(employee => String(employee.id) === String(e.target.value))?.name || '';
     syncProjectExperienceToMembers().catch(() => {});
   }
+});
+
+document.getElementById('functionalBlocksChecklist').addEventListener('change', (event) => {
+  if (event.target.type !== 'checkbox') return;
+  selectedFunctionalBlocks = [...document.querySelectorAll('#functionalBlocksChecklist input:checked')].map(input => input.value);
+});
+
+document.getElementById('addFunctionalBlockBtn').addEventListener('click', () => {
+  const input = document.getElementById('newFunctionalBlock');
+  const value = input.value.trim();
+  if (!value) return;
+  if (!functionalBlockOptions.includes(value)) functionalBlockOptions.push(value);
+  if (!selectedFunctionalBlocks.includes(value)) selectedFunctionalBlocks.push(value);
+  input.value = '';
+  renderFunctionalBlocks();
 });
 
 document.getElementById('teamMembers').addEventListener('click', (e) => {
@@ -233,6 +291,7 @@ document.getElementById('end_present').addEventListener('change', (e) => {
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await loadEmployees();
+  await loadFunctionalBlocks();
   await loadProject();
   renderTeam();
   updateTitle();

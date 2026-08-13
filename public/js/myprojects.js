@@ -33,8 +33,9 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 let token = null;
 let employee = null;
 let projects = [];
+let functionalBlockOptions = [];
 
-const EDITABLE_FIELDS = ['title','customer','description','start_period','end_period','team_size','technologies'];
+const EDITABLE_FIELDS = ['title','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','team_size','technologies'];
 
 function parseToken() {
   return new URLSearchParams(location.search).get('token');
@@ -54,6 +55,8 @@ function renderProjects() {
 
   list.innerHTML = projects.map(project => {
     const teamMembers = Array.isArray(project.team_members) ? project.team_members : [];
+    const selectedBlocks = Array.isArray(project.functional_blocks) ? project.functional_blocks : [];
+    const blockOptions = [...new Set([...functionalBlockOptions, ...selectedBlocks])].sort((a, b) => a.localeCompare(b, 'ru'));
     return `
       <div class="project-card" data-project-id="${project.id}">
         <div class="project-head">
@@ -72,10 +75,14 @@ function renderProjects() {
         <div class="team-box">
           <div class="project-view" data-view-id="${project.id}">
             <div class="view-field"><div class="view-field-label">Заказчик</div><div class="view-field-value">${escHtml(project.customer || '—')}</div></div>
+            <div class="view-field"><div class="view-field-label">Кодовое название</div><div class="view-field-value">${escHtml(project.code_name || '—')}</div></div>
+            <div class="view-field"><div class="view-field-label">Юридическое название заказчика</div><div class="view-field-value">${escHtml(project.legal_customer_name || '—')}</div></div>
+            <div class="view-field"><div class="view-field-label">Вид деятельности компании</div><div class="view-field-value">${escHtml(project.industry_description || '—')}</div></div>
             <div class="view-field"><div class="view-field-label">Описание проекта</div><div class="view-field-value">${escHtml(project.description || '—')}</div></div>
             <div class="view-field"><div class="view-field-label">Период</div><div class="view-field-value">${escHtml([project.start_period, project.end_period].filter(Boolean).join(' - ') || '—')}</div></div>
             <div class="view-field"><div class="view-field-label">Размер команды</div><div class="view-field-value">${escHtml(String(project.team_size || 0))}</div></div>
             <div class="view-field"><div class="view-field-label">Технологии</div><div class="view-field-value">${escHtml(project.technologies || '—')}</div></div>
+            <div class="view-field"><div class="view-field-label">Функциональные блоки</div><div class="view-field-value">${escHtml(selectedBlocks.join(', ') || '—')}</div></div>
             <details style="margin-top:12px;">
               <summary class="member-toggle">Команда проекта</summary>
               <div style="margin-top:12px;">
@@ -86,7 +93,12 @@ function renderProjects() {
 
           <div class="project-edit" data-edit-id="${project.id}" style="display:none;">
             <div class="form-group"><label class="form-label">Название проекта</label><input class="form-control" data-field="title" value="${escHtml(project.title || '')}"></div>
+            <div class="form-row">
+              <div class="form-group"><label class="form-label">Кодовое название проекта</label><input class="form-control" data-field="code_name" value="${escHtml(project.code_name || '')}"></div>
+              <div class="form-group"><label class="form-label">Юридическое название заказчика</label><input class="form-control" data-field="legal_customer_name" value="${escHtml(project.legal_customer_name || '')}"></div>
+            </div>
             <div class="form-group"><label class="form-label">Заказчик</label><input class="form-control" data-field="customer" value="${escHtml(project.customer || '')}"></div>
+            <div class="form-group"><label class="form-label">Описание компании / вида деятельности</label><input class="form-control" data-field="industry_description" value="${escHtml(project.industry_description || '')}" placeholder="Например: крупная нефтяная компания"></div>
             <div class="form-group"><label class="form-label">Описание проекта</label><textarea class="form-control" data-field="description" rows="4">${escHtml(project.description || '')}</textarea></div>
             <div class="form-row">
               <div class="form-group"><label class="form-label">Начало периода</label><input class="form-control" data-field="start_period" value="${escHtml(project.start_period || '')}" placeholder="ММ.ГГГГ"></div>
@@ -94,6 +106,13 @@ function renderProjects() {
             </div>
             <div class="form-group"><label class="form-label">Размер команды</label><input class="form-control" data-field="team_size" type="number" min="0" value="${escHtml(project.team_size || 0)}"></div>
             <div class="form-group"><label class="form-label">Программные продукты / технологии</label><input class="form-control" data-field="technologies" value="${escHtml(project.technologies || '')}"></div>
+            <div class="form-group">
+              <label class="form-label">Функциональные блоки</label>
+              <div class="checkbox-grid" data-blocks-id="${project.id}">
+                ${blockOptions.map(block => `<label class="checkbox-option"><input type="checkbox" value="${escHtml(block)}" ${selectedBlocks.includes(block) ? 'checked' : ''}><span>${escHtml(block)}</span></label>`).join('') || '<div class="muted">Блоки ещё не добавлены</div>'}
+              </div>
+              <div style="display:flex;gap:8px;margin-top:10px;"><input class="form-control" data-new-block-id="${project.id}" placeholder="Добавить свой блок"><button type="button" class="btn btn-ghost btn-sm" onclick="addFunctionalBlock(${project.id})">Добавить</button></div>
+            </div>
             <div class="team-box" style="margin-top:12px;">
               <div class="section-head" style="margin-bottom:10px;">
                 <div class="card-title">Команда проекта</div>
@@ -143,9 +162,15 @@ function renderMembers(id) {
 let employeesCache = [];
 
 async function loadEmployees() {
-  const r = await fetch('/api/employees');
+  const r = await fetch(`/api/form/${token}/project-employees`);
   const d = await r.json();
-  employeesCache = (d || []).filter(e => e.status !== 'archived');
+  employeesCache = d.employees || [];
+}
+
+async function loadFunctionalBlocks() {
+  const response = await fetch(`/api/form/${token}/project-functional-blocks`);
+  const data = await response.json();
+  functionalBlockOptions = data.blocks || [];
 }
 
 async function loadProjects() {
@@ -196,8 +221,27 @@ document.addEventListener('change', (e) => {
     if (!project) return;
     if (!project.team_members[idx]) project.team_members[idx] = { employee_id: '' };
     project.team_members[idx].employee_id = e.target.value;
+    project.team_members[idx].employee_name = employeesCache.find(emp => String(emp.id) === String(e.target.value))?.name || '';
+  }
+  if (e.target.closest('[data-blocks-id]')) {
+    const id = Number(e.target.closest('[data-blocks-id]').dataset.blocksId);
+    const project = projects.find(item => Number(item.id) === id);
+    if (!project) return;
+    project.functional_blocks = [...document.querySelectorAll(`[data-blocks-id="${id}"] input:checked`)].map(input => input.value);
   }
 });
+
+function addFunctionalBlock(id) {
+  const input = document.querySelector(`[data-new-block-id="${id}"]`);
+  const value = input?.value.trim();
+  const project = projects.find(item => Number(item.id) === Number(id));
+  if (!value || !project) return;
+  if (!functionalBlockOptions.includes(value)) functionalBlockOptions.push(value);
+  project.functional_blocks = Array.isArray(project.functional_blocks) ? project.functional_blocks : [];
+  if (!project.functional_blocks.includes(value)) project.functional_blocks.push(value);
+  renderProjects();
+  toggleEdit(id);
+}
 
 async function saveProject(id) {
   const edit = document.querySelector(`[data-edit-id="${id}"]`);
@@ -210,6 +254,7 @@ async function saveProject(id) {
     payload[field] = field === 'team_size' ? Number(el.value || 0) : el.value;
   });
   payload.team_members = project.team_members || [];
+  payload.functional_blocks = project.functional_blocks || [];
 
   const r = await fetch(`/api/form/${token}/projects/${id}`, {
     method: 'PUT',
@@ -236,14 +281,16 @@ document.getElementById('backBtn').addEventListener('click', (e) => {
 });
 
 (async () => {
-  const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
-  if (!auth.authenticated) { location.href = '/login.html'; return; }
   token = parseToken();
   if (!token) { location.href = '/login.html'; return; }
-  employee = await fetch(`/api/form/${token}`).then(r => r.json());
+  const employeeResponse = await fetch(`/api/form/${token}`);
+  if (!employeeResponse.ok) { location.href = '/login.html'; return; }
+  employee = await employeeResponse.json();
+  if (!employee.is_rp) { location.href = backUrl(); return; }
   document.getElementById('navbarManager').textContent = employee.name || '';
   initTheme();
   document.getElementById('backBtn').href = backUrl();
   await loadEmployees();
+  await loadFunctionalBlocks();
   await loadProjects();
 })();

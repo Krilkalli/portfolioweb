@@ -17,6 +17,8 @@
     .member-toggle { cursor:pointer; user-select:none; }
     .member-list { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
     .team-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
+    .checkbox-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:8px 14px; }
+    .checkbox-option { display:flex; align-items:flex-start; gap:8px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); cursor:pointer; }
   </style>
   <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
@@ -60,8 +62,26 @@
           <input id="title" class="form-control" type="text">
         </div>
         <div class="form-group">
+          <label class="form-label">Руководитель проекта</label>
+          <select id="leader_employee_id" class="form-control"><option value="">Не назначен</option></select>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Кодовое название проекта</label>
+            <input id="code_name" class="form-control" type="text">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Юридическое название заказчика</label>
+            <input id="legal_customer_name" class="form-control" type="text">
+          </div>
+        </div>
+        <div class="form-group">
           <label class="form-label">Заказчик</label>
           <input id="customer" class="form-control" type="text" placeholder="ООО «Пример»">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Описание компании / вида деятельности</label>
+          <input id="industry_description" class="form-control" type="text" placeholder="Например: крупная нефтяная компания">
         </div>
         <div class="form-group">
           <label class="form-label">Описание проекта</label>
@@ -87,6 +107,14 @@
         <div class="form-group">
           <label class="form-label">Программные продукты / технологии</label>
           <input id="technologies" class="form-control" type="text" placeholder="1С:ERP 2.5, XML, JSON, REST API">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Функциональные блоки</label>
+          <div id="functionalBlocksChecklist" class="checkbox-grid"></div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <input id="newFunctionalBlock" class="form-control" type="text" placeholder="Добавить свой блок">
+            <button id="addFunctionalBlockBtn" class="btn btn-ghost btn-sm" type="button">Добавить</button>
+          </div>
         </div>
       </form>
     </div>

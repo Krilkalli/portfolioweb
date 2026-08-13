@@ -395,7 +395,7 @@ function addProjectEntry(data) {
       <div class="form-group" style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label class="form-label">Начало периода (проект)</label>
-          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ" value="${escHtml(pStart)}">
+          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ или ГГГГ (до 2021)" value="${escHtml(pStart)}">
         </div>
         <div style="flex:1;">
           <label class="form-label">Конец периода</label>
@@ -525,6 +525,12 @@ function showForm(emp) {
   const myProjectsBtn = document.getElementById('myProjectsBtn');
   if (emp.is_rp) myProjectsBtn?.classList.remove('hidden');
   else myProjectsBtn?.classList.add('hidden');
+  const projectExperienceBody = document.getElementById('projectExperienceBody');
+  const projectExperienceToggle = document.getElementById('toggleProjectExperienceBtn');
+  if (emp.is_rp && projectExperienceBody && projectExperienceToggle) {
+    projectExperienceBody.style.display = 'none';
+    projectExperienceToggle.textContent = 'Развернуть';
+  }
   const avatarEl = document.getElementById('avatarEl');
   if (emp.photo) {
     let src = emp.photo.startsWith('data:') ? emp.photo : `/uploads/${emp.photo}`;
@@ -904,6 +910,13 @@ document.getElementById('myProjectsBtn').addEventListener('click', () => {
   location.href = `/myprojects.html?token=${token}${managerUser ? '&mode=manager' : ''}`;
 });
 
+document.getElementById('toggleProjectExperienceBtn').addEventListener('click', () => {
+  const body = document.getElementById('projectExperienceBody');
+  const hidden = body.style.display === 'none';
+  body.style.display = hidden ? 'block' : 'none';
+  document.getElementById('toggleProjectExperienceBtn').textContent = hidden ? 'Свернуть' : 'Развернуть';
+});
+
 document.querySelectorAll('#starRating button').forEach(btn => {
   btn.addEventListener('click', () => {
     selectedRating = Number(btn.dataset.star);
@@ -945,7 +958,8 @@ function maskMonthYear(el) {
 
     let digits = oldVal.replace(/\D/g, '').substring(0, 6);
     let v = digits;
-    if (digits.length >= 2) {
+    const possibleOldYear = /^\d{4}$/.test(digits) && Number(digits) >= 1900 && Number(digits) < 2021 && el.classList.contains('proj-period-start');
+    if (!possibleOldYear && digits.length >= 2) {
       let m = parseInt(digits.substring(0, 2), 10);
       if (m < 1) m = 1;
       if (m > 12) m = 12;
@@ -1286,8 +1300,12 @@ function validateYear(value) {
 }
 
 // ─── Валидация периода (ММ.ГГГГ - ММ.ГГГГ) ──────────────────────────────────
-function validateMonthYear(value) {
+function validateMonthYear(value, allowOldYear = false) {
   if (value === 'настоящее время') return true;
+  if (allowOldYear && /^\d{4}$/.test(value)) {
+    const year = Number(value);
+    return year >= 1900 && year < 2021;
+  }
   if (!/^\d{2}\.\d{4}$/.test(value)) return false;
   const m = parseInt(value.substring(0, 2), 10);
   const y = parseInt(value.substring(3), 10);
@@ -1307,9 +1325,9 @@ function validateAllDateFields() {
     }
   });
   document.querySelectorAll('.proj-period-start, .proj-period-end, .job-period-start, .job-period-end').forEach(el => {
-    if (el.value && !validateMonthYear(el.value)) {
+    if (el.value && !validateMonthYear(el.value, el.classList.contains('proj-period-start'))) {
       el.classList.add('is-invalid'); el.classList.remove('is-valid');
-      showFieldError(el, 'Введите корректный период в формате ММ.ГГГГ');
+      showFieldError(el, el.classList.contains('proj-period-start') ? 'Введите ММ.ГГГГ или только ГГГГ для проектов до 2021 года' : 'Введите корректный период в формате ММ.ГГГГ');
       if (!firstInvalid) firstInvalid = el;
     } else {
       el.classList.remove('is-invalid');
