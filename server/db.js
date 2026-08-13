@@ -59,6 +59,7 @@ const SCHEMA_SQL = `
     city TEXT DEFAULT '',
     phone TEXT DEFAULT '',
     photo TEXT DEFAULT '',
+    is_rp BOOLEAN NOT NULL DEFAULT FALSE,
     token TEXT,
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT,
@@ -105,6 +106,27 @@ const SCHEMA_SQL = `
     created_at TEXT,
     role TEXT DEFAULT 'admin'
   );
+
+  CREATE TABLE IF NOT EXISTS projects (
+    id SERIAL PRIMARY KEY,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'Черновик',
+    customer TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    start_period TEXT DEFAULT '',
+    end_period TEXT DEFAULT '',
+    end_present BOOLEAN NOT NULL DEFAULT FALSE,
+    team_size INTEGER DEFAULT 0,
+    technologies TEXT DEFAULT '',
+    team_members TEXT DEFAULT '[]',
+    leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL,
+    leader_name TEXT DEFAULT '',
+    created_at TEXT,
+    updated_at TEXT,
+    sent_at TEXT DEFAULT ''
+  );
+  CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status);
+  CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id);
 
   CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY,
@@ -202,6 +224,7 @@ function prepEmployee(emp) {
     city: emp.city || '',
     phone: emp.phone || '',
     photo: emp.photo || '',
+    is_rp: !!emp.is_rp,
     token: emp.token || uuidv4(),
     status: emp.status === 'archived' ? 'archived' : 'active',
     created_at: emp.created_at || now,
@@ -314,8 +337,22 @@ async function init() {
   // Миграции колонок (IF NOT EXISTS для PostgreSQL)
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'").catch(() => {});
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_rp BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
   await _run("ALTER TABLE pending_changes ADD COLUMN IF NOT EXISTS reviewed_by TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Черновик'").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS description TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS start_period TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_period TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_present BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_size INTEGER DEFAULT 0").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS technologies TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_members TEXT DEFAULT '[]'").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_name TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS sent_at TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
 
   // Настройки умолчания
   let settings = await loadSettings();
@@ -533,6 +570,70 @@ const helpers = {
     const pendingRows = await _all('SELECT DISTINCT employee_id FROM pending_changes WHERE status = $1', ['pending']);
     const pendingIds = new Set(pendingRows.map(r => r.employee_id));
     return employees.map(e => ({ ...e, pendingCount: pendingIds.has(e.id) ? 1 : 0 }));
+  },
+
+  async setEmployeesRp(ids, value = true) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const res = await _run('UPDATE employees SET is_rp = $1, updated_at = $2 WHERE id = ANY($3::int[])', [!!value, new Date().toISOString(), ids.map(Number)]);
+    return res ? res.rowCount : 0;
+  },
+
+  async getEmployeesByIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return _all('SELECT id, name FROM employees WHERE id = ANY($1::int[])', [ids.map(Number)]);
+  },
+
+  async getProjectsByIds(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return _all(`
+      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
+             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+             e.name AS leader_employee_name, e.email AS leader_employee_email
+      FROM projects p
+      LEFT JOIN employees e ON e.id = p.leader_employee_id
+      WHERE p.id = ANY($1::int[])
+      ORDER BY p.created_at DESC, p.id DESC
+    `, [ids.map(Number)]);
+  },
+
+  async syncEmployeeProjectExperience(employeeId, project) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const empRes = await client.query('SELECT id, project_experience FROM employees WHERE id = $1', [Number(employeeId)]);
+      const emp = empRes.rows[0];
+      if (!emp) { await client.query('ROLLBACK'); return null; }
+
+      let current = [];
+      try { current = JSON.parse(emp.project_experience || '[]'); } catch { current = parseLegacyProject(emp.project_experience); }
+      if (!Array.isArray(current)) current = [];
+
+      const nextEntry = {
+        period: project?.period || '',
+        project_name: project?.project_name || '',
+        position: '',
+        role: '',
+        team_size: String(project?.team_size || ''),
+        client: project?.client || project?.customer || '',
+        project_description: project?.project_description || '',
+        task_description: '',
+        technologies: project?.technologies || '',
+      };
+
+      const sameKey = (p) => [p?.project_name || '', p?.client || '', p?.project_description || '', p?.technologies || '', p?.period || ''].join('|').toLowerCase();
+      const filtered = current.filter(item => sameKey(item) !== sameKey(nextEntry));
+      filtered.unshift(nextEntry);
+
+      await client.query('UPDATE employees SET project_experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(filtered), new Date().toISOString(), Number(employeeId)]);
+      const updated = await client.query('SELECT * FROM employees WHERE id = $1', [Number(employeeId)]);
+      await client.query('COMMIT');
+      return castEmployee(updated.rows[0]);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   getEmployee(id) {
@@ -910,6 +1011,195 @@ const helpers = {
     const pendingCount = await _get("SELECT COUNT(DISTINCT employee_id)::int cnt FROM pending_changes WHERE status = 'pending'");
     const approvedCount = await _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE status = 'approved'");
     return { total: empCount.cnt, pending: pendingCount.cnt, approved: approvedCount.cnt };
+  },
+
+  // ── Projects ────────────────────────────────────────────────────────────────
+  getProjectLeaders() {
+    return _all("SELECT id, name, email FROM employees WHERE status = 'active' AND is_rp = TRUE ORDER BY name_lower");
+  },
+
+  getAllProjects() {
+    return _all(`
+      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
+             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+             e.name AS leader_employee_name
+      FROM projects p
+      LEFT JOIN employees e ON e.id = p.leader_employee_id
+      ORDER BY p.created_at DESC, p.id DESC
+    `);
+  },
+
+  getProjectById(id) {
+    return _get(`
+      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
+             p.leader_employee_id, p.leader_name, p.created_at, p.updated_at, p.sent_at,
+             e.name AS leader_employee_name
+      FROM projects p
+      LEFT JOIN employees e ON e.id = p.leader_employee_id
+      WHERE p.id = $1
+    `, [Number(id)]).then(row => {
+      if (!row) return null;
+      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
+      return row;
+    });
+  },
+
+  async createProject({ title, leaderEmployeeId, status }) {
+    const cleanTitle = String(title || '').trim();
+    if (!cleanTitle) throw new Error('Название проекта обязательно');
+
+    const leader = leaderEmployeeId ? await helpers.getEmployee(Number(leaderEmployeeId)) : null;
+    if (!leader) throw new Error('Выберите руководителя из списка');
+    if (!leader.is_rp) throw new Error('Выбранный сотрудник не отмечен как РП');
+
+    const now = new Date().toISOString();
+    return _get(
+      `INSERT INTO projects (title, status, leader_employee_id, leader_name, customer, description, start_period, end_period, team_size, technologies, team_members, created_at, updated_at, sent_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       RETURNING id, title, status, customer, description, start_period, end_period, team_size, technologies, team_members, leader_employee_id, leader_name, created_at, updated_at, sent_at`,
+      [cleanTitle, status || 'Черновик', leader.id, leader.name, '', '', '', '', 0, '', '[]', now, now, '']
+    );
+  },
+
+  async updateProject(id, fields) {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const project = await client.query('SELECT * FROM projects WHERE id = $1', [Number(id)]);
+      if (!project.rows[0]) { await client.query('ROLLBACK'); return null; }
+      const current = project.rows[0];
+       const allowed = ['title','status','customer','description','start_period','end_period','end_present','team_size','technologies','team_members','leader_employee_id','leader_name'];
+      const updates = [];
+      const params = [Number(id)];
+      let idx = 2;
+      for (const key of allowed) {
+        if (fields[key] === undefined) continue;
+        let value = fields[key];
+        if (key === 'team_members') value = JSON.stringify(Array.isArray(value) ? value : []);
+        if (key === 'team_size') value = Number(value || 0);
+        if (key === 'end_present') value = !!value;
+        updates.push(`${key} = $${idx}`);
+        params.push(value);
+        idx++;
+      }
+      updates.push(`updated_at = $${idx}`);
+      params.push(new Date().toISOString());
+      if (updates.length === 1) {
+        await client.query('COMMIT');
+        return current;
+      }
+      await client.query(`UPDATE projects SET ${updates.join(', ')} WHERE id = $1`, params);
+      const updated = await client.query('SELECT * FROM projects WHERE id = $1', [Number(id)]);
+      await client.query('COMMIT');
+      const row = updated.rows[0];
+      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
+      return row;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async createProjects(projects) {
+    if (!Array.isArray(projects) || projects.length === 0) return [];
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const inserted = [];
+      for (const project of projects) {
+        const title = String(project?.title || '').trim();
+        if (!title) continue;
+        const leaderId = project?.leaderEmployeeId ? Number(project.leaderEmployeeId) : null;
+        if (!leaderId) throw new Error(`Для проекта «${title}» не выбран руководитель`);
+        const leader = await client.query("SELECT id, name, is_rp FROM employees WHERE id = $1", [leaderId]);
+        const manager = leader.rows[0];
+        if (!manager) throw new Error(`Руководитель для проекта «${title}» не найден`);
+        if (!manager.is_rp) throw new Error(`Пользователь «${manager.name}» не отмечен как РП`);
+        const now = new Date().toISOString();
+        const result = await client.query(
+          `INSERT INTO projects (title, status, leader_employee_id, leader_name, created_at, updated_at, sent_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id, title, status, leader_employee_id, leader_name, created_at, updated_at, sent_at`,
+          [title, project.status || 'Черновик', leaderId, manager.name, now, now, '']
+        );
+        inserted.push(result.rows[0]);
+      }
+      await client.query('COMMIT');
+      return inserted;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async markProjectsSent() {
+    const now = new Date().toISOString();
+    const res = await _run(
+      `UPDATE projects
+       SET status = 'Отправлено', sent_at = $1, updated_at = $1
+       WHERE status IS DISTINCT FROM 'Отправлено'`,
+      [now]
+    );
+    return res ? res.rowCount : 0;
+  },
+
+  async getProjectsForLeaderEmployee(employeeId) {
+    const rows = await _all(`
+      SELECT p.id, p.title, p.status, p.customer, p.description, p.start_period, p.end_period, p.team_size, p.technologies, p.team_members,
+             p.created_at, p.updated_at, p.sent_at, e.name AS leader_employee_name
+      FROM projects p
+      LEFT JOIN employees e ON e.id = p.leader_employee_id
+      WHERE p.leader_employee_id = $1 AND p.status = 'Отправлено'
+      ORDER BY p.created_at DESC, p.id DESC
+    `, [Number(employeeId)]);
+
+    const allIds = [];
+    const parsed = rows.map(row => {
+      try { row.team_members = JSON.parse(row.team_members || '[]'); } catch { row.team_members = []; }
+      row.team_members.forEach(m => {
+        const id = Number(m.employee_id || m.id || 0);
+        if (id) allIds.push(id);
+      });
+      return row;
+    });
+
+    const memberRows = await helpers.getEmployeesByIds([...new Set(allIds)]);
+    const memberMap = new Map(memberRows.map(m => [Number(m.id), m.name]));
+
+    return parsed.map(row => ({
+      ...row,
+      team_members: (row.team_members || []).map(m => {
+        const id = Number(m.employee_id || m.id || 0);
+        return { employee_id: id, employee_name: memberMap.get(id) || m.employee_name || m.name || '' };
+      }),
+    }));
+  },
+
+  async syncProjectTeamMembers(project) {
+    if (!project || !Array.isArray(project.team_members) || project.team_members.length === 0) return [];
+    const synced = [];
+    for (const member of project.team_members) {
+      const employeeId = Number(member.employee_id || member.id || 0);
+      if (!employeeId) continue;
+      const updated = await helpers.syncEmployeeProjectExperience(employeeId, project);
+      if (updated) synced.push(updated);
+    }
+    return synced;
+  },
+
+  async archiveProjects(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const res = await _run(
+      `UPDATE projects
+       SET status = 'Архив', updated_at = $1
+       WHERE id = ANY($2::int[])`,
+      [new Date().toISOString(), ids.map(Number)]
+    );
+    return res ? res.rowCount : 0;
   },
 
   async saveFeedback(employeeId, rating, comment) {

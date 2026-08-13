@@ -172,10 +172,10 @@ function renderTable(list) {
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
       </td>
       <td style="text-align:left;">
-        <div style="display:flex;align-items:center;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
           ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${escHtml(e.photo)}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>`}
           <div>
-            <div class="employee-name"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div class="employee-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.is_rp ? '<span class="badge badge-accent" style="font-size:0.62rem;padding:2px 7px;">РП</span>' : ''}${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
           </div>
         </div>
@@ -376,6 +376,30 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
   } catch { toast('Ошибка соединения', 'error'); }
   btn.disabled = false;
   btn.innerHTML = '<i class="fi fi-rr-plus"></i> Добавить и скопировать ссылку';
+});
+
+document.getElementById('assignRpBtn').addEventListener('click', async () => {
+  if (selectedIds.size === 0) {
+    toast('Сначала выберите сотрудников', 'warning');
+    return;
+  }
+  if (!confirm(`Назначить РП для ${selectedIds.size} сотрудников?`)) return;
+  try {
+    const r = await fetch('/api/employees/assign-rp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      toast(`Назначено РП: ${d.updated}`, 'success');
+      await loadEmployees();
+    } else {
+      toast(d.error || 'Ошибка назначения РП', 'error');
+    }
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
 });
 
 // ─── Search & Filter ──────────────────────────────────────────────────────────

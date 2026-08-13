@@ -53,6 +53,55 @@ router.get('/:token', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.get('/:token/projects', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.json({ projects: [] });
+    const projects = await helpers.getProjectsForLeaderEmployee(emp.id);
+    res.json({ projects });
+  } catch (err) { next(err); }
+});
+
+router.put('/:token/projects/:projectId', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
+    const project = await helpers.getProjectById(Number(req.params.projectId));
+    if (!project) return res.status(404).json({ error: 'Проект не найден' });
+    if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
+
+    const updated = await helpers.updateProject(Number(req.params.projectId), req.body || {});
+    if (updated) await helpers.syncProjectTeamMembers(updated);
+    res.json({ ok: true, project: updated });
+  } catch (err) { next(err); }
+});
+
+router.post('/:token/projects/:projectId/members/:employeeId/sync-project-experience', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
+    const project = await helpers.getProjectById(Number(req.params.projectId));
+    if (!project) return res.status(404).json({ error: 'Проект не найден' });
+    if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
+    const employeeId = Number(req.params.employeeId);
+    if (!project.team_members.some(m => Number(m.employee_id || m.id || 0) === employeeId)) {
+      return res.status(403).json({ error: 'Сотрудник не состоит в команде проекта' });
+    }
+    const synced = await helpers.syncEmployeeProjectExperience(employeeId, {
+      period: [project.start_period || '', project.end_present ? 'настоящее время' : (project.end_period || '')].filter(Boolean).join(' - '),
+      project_name: project.title,
+      client: project.customer || '',
+      team_size: project.team_size,
+      project_description: project.description || '',
+      technologies: project.technologies || '',
+    });
+    res.json({ ok: true, employee: synced });
+  } catch (err) { next(err); }
+});
+
 router.post('/:token/submit', async (req, res, next) => {
   try {
     const emp = await helpers.getEmployeeByToken(req.params.token);

@@ -11,7 +11,7 @@ const { convertToPdf, hasLibreOffice } = require('../pdfconv');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection } = require('../mailer');
+const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection, sendMail } = require('../mailer');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
@@ -27,6 +27,22 @@ async function sendReviewSummaryIfDone(employeeId, req) {
   const approvedLabels = reviewed.filter(c => c.status === 'approved').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: '' }));
   const rejectedLabels = reviewed.filter(c => c.status === 'rejected').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: c.reject_reason || '' }));
   notifyEmployeeReviewCompleted(emp, approvedLabels, rejectedLabels, base).catch(() => {});
+}
+
+function normalizeProjectHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function readProjectTitle(row) {
+  return row['Название проекта'] || row['Проект'] || row['Название'] || row['Project'] || row['title'] || row['name'] || '';
+}
+
+function readProjectLeader(row) {
+  return row['Руководитель'] || row['РП'] || row['Leader'] || row['leader'] || row['Руководитель проекта'] || '';
+}
+
+function readProjectStatus(row) {
+  return row['Статус'] || row['status'] || row['Состояние'] || '';
 }
 
 function requireAuth(req, res, next) {
@@ -179,6 +195,17 @@ router.post('/employees', requireCanEdit, async (req, res, next) => {
     const emp = await helpers.createEmployee(req.body);
     const base = `${req.protocol}://${req.get('host')}`;
     res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
+  } catch (err) { next(err); }
+});
+
+router.post('/employees/assign-rp', requireAdmin, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Выберите сотрудников' });
+    }
+    const updated = await helpers.setEmployeesRp(ids, true);
+    res.json({ ok: true, updated });
   } catch (err) { next(err); }
 });
 
@@ -380,6 +407,138 @@ router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(fn)}`);
     res.send(buf);
+  } catch (err) { next(err); }
+});
+
+router.get('/projects', requireAdmin, async (req, res, next) => {
+  try {
+    res.json({ projects: await helpers.getAllProjects() });
+  } catch (err) { next(err); }
+});
+
+router.get('/projects/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const project = await helpers.getProjectById(Number(req.params.id));
+    if (!project) return res.status(404).json({ error: 'Проект не найден' });
+    res.json({ project });
+  } catch (err) { next(err); }
+});
+
+router.post('/projects', requireAdmin, async (req, res, next) => {
+  try {
+    const project = await helpers.createProject(req.body || {});
+    res.json({ ok: true, project });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.put('/projects/:id', requireAdmin, async (req, res, next) => {
+  try {
+    const project = await helpers.updateProject(Number(req.params.id), req.body || {});
+    if (!project) return res.status(404).json({ error: 'Проект не найден' });
+    await helpers.syncProjectTeamMembers(project);
+    res.json({ ok: true, project });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/projects/import', requireAdmin, upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
+
+    const workbook = XLSX.readFile(req.file.path);
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) return res.status(400).json({ error: 'В файле не найден лист с данными' });
+
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '' });
+    const leaders = await helpers.getProjectLeaders();
+    const leaderIndex = new Map();
+    leaders.forEach(m => {
+      leaderIndex.set(normalizeProjectHeader(m.name), m);
+      leaderIndex.set(normalizeProjectHeader(m.email), m);
+    });
+
+    const payload = rows.map(row => {
+      const title = String(readProjectTitle(row) || '').trim();
+      const leaderValue = String(readProjectLeader(row) || '').trim();
+      const status = String(readProjectStatus(row) || '').trim() || 'Черновик';
+      const leader = leaderIndex.get(normalizeProjectHeader(leaderValue));
+      return { title, status, leaderEmployeeId: leader ? leader.id : null };
+    }).filter(row => row.title);
+
+    if (payload.length === 0) {
+      return res.status(400).json({ error: 'В файле не найдено проектов' });
+    }
+
+    if (payload.some(row => !row.leaderEmployeeId)) {
+      return res.status(400).json({ error: 'Для всех проектов нужно указать руководителя, который есть в списке руководителей' });
+    }
+
+    const projects = await helpers.createProjects(payload);
+    res.json({ ok: true, imported: projects.length, projects });
+  } catch (err) {
+    next(err);
+  } finally {
+    if (req.file) fs.unlink(req.file.path, () => {});
+  }
+});
+
+router.post('/projects/send', requireAdmin, async (req, res, next) => {
+  try {
+    const { ids } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Выберите проекты' });
+
+    const projects = await helpers.getProjectsByIds(ids);
+    if (projects.length === 0) return res.status(400).json({ error: 'Проекты не найдены' });
+
+    const sent = await helpers.markProjectsSent();
+    const base = `${req.protocol}://${req.get('host')}`;
+
+    const projectsByLeader = new Map();
+    for (const project of projects) {
+      if (!project.leader_employee_id) continue;
+      if (!projectsByLeader.has(project.leader_employee_id)) projectsByLeader.set(project.leader_employee_id, []);
+      projectsByLeader.get(project.leader_employee_id).push(project);
+    }
+
+    let mailed = 0;
+    for (const [leaderId, list] of projectsByLeader.entries()) {
+      const leader = await helpers.getEmployee(leaderId);
+      if (!leader || !leader.email) continue;
+      const names = list.map(p => p.title).join(', ');
+      await sendMail({
+        to: leader.email,
+        subject: `📩 Просьба заполнить карточки проектов`,
+        html: `
+          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
+            <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
+              <h2 style="margin:0;">Портфолио IS1C</h2>
+            </div>
+            <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
+              <p>Здравствуйте!</p>
+              <p>Просьба заполнить карточки проектов: <strong>${names}</strong>.</p>
+              <p><a href="${base}/form.html?token=${leader.token}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Открыть мои проекты</a></p>
+            </div>
+          </div>
+        `,
+      });
+      mailed += 1;
+    }
+
+    res.json({ ok: true, sent, mailed });
+  } catch (err) { next(err); }
+});
+
+router.post('/projects/archive', requireAdmin, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Выберите проекты' });
+    }
+    const archived = await helpers.archiveProjects(ids);
+    res.json({ ok: true, archived });
   } catch (err) { next(err); }
 });
 
