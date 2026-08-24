@@ -87,13 +87,14 @@ function formatProjectExperience(raw) {
   if (!Array.isArray(data) || data.length === 0) return '';
   return data.map(p => {
     const lines = [];
+    if (p.project_name) lines.push(`Название проекта: ${p.project_name}`);
     if (p.period) lines.push(`Период: ${p.period}`);
     if (p.client) lines.push(`Заказчик: ${p.client}`);
     if (p.position) lines.push(`Должность: ${p.position}`);
     if (p.role) lines.push(`Роль: ${p.role}`);
-    if (p.team_size) lines.push(`Размер команды: ${p.team_size}`);
+    if (p.team_size) lines.push(`Количество участников команды: ${p.team_size}`);
     if (p.project_description) lines.push(`Описание: ${p.project_description}`);
-    if (p.task_description) lines.push(`Задачи: ${p.task_description}`);
+    if (p.functional_area) lines.push(`Функциональная область: ${p.functional_area}`);
     if (p.technologies) lines.push(`Технологии: ${p.technologies}`);
     return lines.join('\n');
   }).filter(Boolean).join('\n\n');

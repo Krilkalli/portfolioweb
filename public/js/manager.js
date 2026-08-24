@@ -167,11 +167,21 @@ function populatePositionSelects() {
 
 function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
+  const searchQuery = document.getElementById('searchInput').value.trim();
   if (!list.length) {
     tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
-  tbody.innerHTML = list.map(e => `
+  tbody.innerHTML = list.map(e => {
+    const experienceMatches = searchQuery && window.EmployeeSearch
+      ? window.EmployeeSearch.getExperienceMatches(e, searchQuery)
+      : [];
+    const matchHtml = experienceMatches.length ? `
+      <div class="experience-match">
+        <strong>Найдено в опыте:</strong>
+        ${experienceMatches.map(match => `${escHtml(match.label)}${match.details.length ? ` — ${escHtml(match.details.join(', '))}` : ''}`).join('<br>')}
+      </div>` : '';
+    return `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
       <td class="col-check" style="text-align:center;">
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
@@ -182,6 +192,7 @@ function renderTable(list) {
           <div>
             <div class="employee-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.is_rp ? '<span class="badge badge-accent" style="font-size:0.62rem;padding:2px 7px;">РП</span>' : ''}${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
+            ${matchHtml}
           </div>
         </div>
       </td>
@@ -231,7 +242,8 @@ function renderTable(list) {
         </div>
       </td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function copyToClipboard(text) {
@@ -407,6 +419,31 @@ document.getElementById('assignRpBtn').addEventListener('click', async () => {
   }
 });
 
+document.getElementById('removeRpBtn').addEventListener('click', async () => {
+  if (selectedIds.size === 0) {
+    toast('Сначала выберите сотрудников', 'warning');
+    return;
+  }
+  if (!confirm(`Снять роль РП у ${selectedIds.size} сотрудников? Закреплённые за ними проекты останутся без руководителя.`)) return;
+  try {
+    const r = await fetch('/api/employees/remove-rp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: Array.from(selectedIds) }),
+    });
+    const d = await r.json();
+    if (r.ok) {
+      const projectNote = d.projectsUnassigned ? ` Проектов без руководителя: ${d.projectsUnassigned}.` : '';
+      toast(`Роль РП снята: ${d.updated}.${projectNote}`, 'success');
+      await loadEmployees();
+    } else {
+      toast(d.error || 'Ошибка снятия роли РП', 'error');
+    }
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
+});
+
 // ─── Search & Filter ──────────────────────────────────────────────────────────
 let showArchived = true;
 
@@ -418,6 +455,7 @@ document.getElementById('filterArchived').addEventListener('change', (e) => {
 document.getElementById('searchInput').addEventListener('input', () => { applyFilter(); });
 document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
 document.getElementById('filterCity').addEventListener('change', () => { applyFilter(); });
+document.getElementById('filterRp').addEventListener('change', () => { applyFilter(); });
 
 // ─── Filter Popup ───────────────────────────────────────────────────────────
 document.getElementById('filterBtn').addEventListener('click', (e) => {
@@ -432,6 +470,7 @@ document.addEventListener('click', (e) => {
 document.getElementById('filterResetBtn').addEventListener('click', () => {
   document.getElementById('filterPosition').value = '';
   document.getElementById('filterCity').value = '';
+  document.getElementById('filterRp').value = '';
   selectedCerts.clear();
   document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = false);
   document.getElementById('certSearchInput').value = '';
@@ -459,25 +498,25 @@ document.getElementById('certClearAll').addEventListener('click', () => {
 });
 
 function applyFilter() {
-  const q = document.getElementById('searchInput').value.toLowerCase().trim();
+  const q = document.getElementById('searchInput').value.trim();
   const pos = document.getElementById('filterPosition').value;
   const city = document.getElementById('filterCity').value;
+  const rp = document.getElementById('filterRp').value;
   let list = employees;
   if (!showArchived) list = list.filter(e => e.status !== 'archived');
   if (pos) list = list.filter(e => e.position === pos);
   if (city) list = list.filter(e => e.city === city);
+  if (rp === 'rp') list = list.filter(e => Boolean(e.is_rp));
+  if (rp === 'not-rp') list = list.filter(e => !e.is_rp);
   if (selectedCerts.size > 0) {
     list = list.filter(e => {
       const cert = (e.certification || '').toLowerCase();
       return [...selectedCerts].some(c => cert.includes(c.toLowerCase()));
     });
   }
-  list = list.filter(emp =>
-    emp.name.toLowerCase().includes(q) ||
-    (emp.position || '').toLowerCase().includes(q) ||
-    (emp.city || '').toLowerCase().includes(q) ||
-    (emp.email || '').toLowerCase().includes(q)
-  );
+  if (q) list = list.filter(emp => window.EmployeeSearch?.matchesEmployee(emp, q));
+  const count = document.getElementById('searchResultCount');
+  if (count) count.textContent = (q || pos || city || rp || selectedCerts.size > 0 || !showArchived) ? `Найдено: ${list.length}` : '';
   renderTable(list);
 }
 

@@ -37,45 +37,14 @@ let teamMembers = [];
 let functionalBlockOptions = [];
 let selectedFunctionalBlocks = [];
 
-function projectMemberTitle(project) {
-  return (project?.title || '').trim() || 'Новый проект';
-}
+const FUNCTIONAL_BLOCKS_LABEL = 'Функциональные блоки:';
 
-function normalizeProjectExperienceEntry(project) {
-  const period = [project?.start_period || '', project?.end_present ? 'настоящее время' : (project?.end_period || '')].filter(Boolean).join(' - ');
-  return {
-    period,
-    project_name: projectMemberTitle(project),
-    position: '',
-    role: '',
-    team_size: String(project?.team_size || ''),
-    client: (project?.customer || '').trim(),
-    project_description: project?.description || '',
-    task_description: '',
-    technologies: project?.technologies || '',
-  };
-}
-
-async function syncProjectExperienceToMembers() {
-  if (!projectId || !teamMembers.length) return;
-  await Promise.all(teamMembers.map(async (member) => {
-    const employeeId = Number(member.employee_id || 0);
-    if (!employeeId) return;
-    await fetch(`/api/projects/${projectId}/members/${employeeId}/sync-project-experience`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: normalizeProjectExperienceEntry({
-        title: document.getElementById('title').value.trim(),
-        customer: document.getElementById('customer').value.trim(),
-        start_period: document.getElementById('start_period').value.trim(),
-        end_period: document.getElementById('end_period').value.trim(),
-        end_present: document.getElementById('end_present').checked,
-        team_size: Number(document.getElementById('team_size').value || 0),
-        description: document.getElementById('description').value.trim(),
-        technologies: document.getElementById('technologies').value.trim(),
-      }) }),
-    });
-  }));
+function descriptionWithFunctionalBlocks(description, blocks) {
+  const base = String(description || '').split(/\r?\n/)
+    .filter(line => !line.trim().toLowerCase().startsWith(FUNCTIONAL_BLOCKS_LABEL.toLowerCase()))
+    .join('\n').trim();
+  const values = [...new Set((blocks || []).map(value => String(value || '').trim()).filter(Boolean))];
+  return [base, values.length ? `${FUNCTIONAL_BLOCKS_LABEL} ${values.join(', ')}` : ''].filter(Boolean).join('\n');
 }
 
 function parseQuery() {
@@ -97,6 +66,10 @@ function renderLeaderOptions(selectedId = '') {
 
 function renderFunctionalBlocks() {
   const checklist = document.getElementById('functionalBlocksChecklist');
+  const count = document.getElementById('functionalBlockCount');
+  if (count) count.textContent = `(${selectedFunctionalBlocks.length})`;
+  const description = document.getElementById('description');
+  if (description) description.value = descriptionWithFunctionalBlocks(description.value, selectedFunctionalBlocks);
   const values = [...new Set([...functionalBlockOptions, ...selectedFunctionalBlocks])].sort((a, b) => a.localeCompare(b, 'ru'));
   if (!values.length) {
     checklist.innerHTML = '<div class="muted">Блоки ещё не добавлены</div>';
@@ -112,11 +85,10 @@ function renderFunctionalBlocks() {
 
 function renderTeam() {
   const wrap = document.getElementById('teamMembers');
-  const count = Math.max(0, Number(document.getElementById('team_size').value || 0));
-  const items = teamMembers.slice(0, count || teamMembers.length);
+  const items = teamMembers;
 
   if (!items.length) {
-    wrap.innerHTML = '<div class="muted" style="font-size:0.85rem;">Пока нет участников</div>';
+    wrap.innerHTML = '<div class="muted" style="font-size:0.85rem;">Нет работающих участников</div>';
     return;
   }
 
@@ -132,21 +104,14 @@ function renderTeam() {
   `).join('');
 }
 
-function syncMembersToTeamSize() {
-  const size = Math.max(0, Number(document.getElementById('team_size').value || 0));
-  while (teamMembers.length < size) teamMembers.push({ employee_id: '' });
-  while (teamMembers.length > size) teamMembers.pop();
-  renderTeam();
-}
-
 function setFormData(project) {
   document.getElementById('title').value = project.title || '';
   renderLeaderOptions(project.leader_employee_id || '');
   document.getElementById('code_name').value = project.code_name || '';
-  document.getElementById('legal_customer_name').value = project.legal_customer_name || '';
-  document.getElementById('customer').value = project.customer || '';
+  document.getElementById('legal_customer_name').value = project.legal_customer_name || project.customer || '';
   document.getElementById('industry_description').value = project.industry_description || '';
   document.getElementById('description').value = project.description || '';
+  document.getElementById('functional_area').value = project.functional_area || '';
   document.getElementById('start_period').value = project.start_period || '';
   document.getElementById('end_period').value = project.end_period || '';
   document.getElementById('end_present').checked = !!project.end_present;
@@ -158,7 +123,7 @@ function setFormData(project) {
   teamMembers = Array.isArray(project.team_members) ? project.team_members.map(m => ({ ...m, employee_id: m.employee_id || '' })) : [];
   document.getElementById('teamWrapper').style.display = (project.team_size || teamMembers.length) ? 'block' : 'none';
   document.getElementById('toggleTeamBtn').textContent = (project.team_size || teamMembers.length) ? 'Свернуть' : 'Развернуть';
-  syncMembersToTeamSize();
+  renderTeam();
 }
 
 async function loadEmployees() {
@@ -190,9 +155,9 @@ async function saveProject() {
     leader_employee_id: document.getElementById('leader_employee_id').value || null,
     code_name: document.getElementById('code_name').value.trim(),
     legal_customer_name: document.getElementById('legal_customer_name').value.trim(),
-    customer: document.getElementById('customer').value.trim(),
     industry_description: document.getElementById('industry_description').value.trim(),
-    description: document.getElementById('description').value.trim(),
+    description: descriptionWithFunctionalBlocks(document.getElementById('description').value, selectedFunctionalBlocks),
+    functional_area: document.getElementById('functional_area').value.trim(),
     start_period: document.getElementById('start_period').value.trim(),
     end_period: document.getElementById('end_period').value.trim(),
     end_present: document.getElementById('end_present').checked,
@@ -212,18 +177,17 @@ async function saveProject() {
     toast('Проект сохранён', 'success');
     document.getElementById('result').innerHTML = '<span style="color:var(--success)">Сохранено</span>';
     setFormData(d.project);
-    await syncProjectExperienceToMembers();
   } else {
     toast(d.error || 'Ошибка сохранения', 'error');
   }
 }
 
 document.getElementById('title').addEventListener('input', updateTitle);
-document.getElementById('team_size').addEventListener('change', syncMembersToTeamSize);
 
 document.getElementById('addTeamMemberBtn').addEventListener('click', () => {
   teamMembers.push({ employee_id: '' });
-  document.getElementById('team_size').value = teamMembers.length;
+  const teamSize = document.getElementById('team_size');
+  teamSize.value = Number(teamSize.value || 0) + 1;
   document.getElementById('teamWrapper').style.display = 'block';
   document.getElementById('toggleTeamBtn').textContent = 'Свернуть';
   renderTeam();
@@ -235,13 +199,13 @@ document.getElementById('teamMembers').addEventListener('change', (e) => {
     if (!teamMembers[idx]) teamMembers[idx] = { employee_id: '' };
     teamMembers[idx].employee_id = e.target.value;
     teamMembers[idx].employee_name = employees.find(employee => String(employee.id) === String(e.target.value))?.name || '';
-    syncProjectExperienceToMembers().catch(() => {});
   }
 });
 
 document.getElementById('functionalBlocksChecklist').addEventListener('change', (event) => {
   if (event.target.type !== 'checkbox') return;
   selectedFunctionalBlocks = [...document.querySelectorAll('#functionalBlocksChecklist input:checked')].map(input => input.value);
+  renderFunctionalBlocks();
 });
 
 document.getElementById('addFunctionalBlockBtn').addEventListener('click', () => {
@@ -259,9 +223,9 @@ document.getElementById('teamMembers').addEventListener('click', (e) => {
   if (!btn) return;
   const idx = Number(btn.dataset.idx);
   teamMembers.splice(idx, 1);
-  document.getElementById('team_size').value = teamMembers.length;
+  const teamSize = document.getElementById('team_size');
+  teamSize.value = Math.max(0, Number(teamSize.value || 0) - 1);
   renderTeam();
-  syncProjectExperienceToMembers().catch(() => {});
 });
 
 document.getElementById('saveProjectBtnTop').addEventListener('click', saveProject);

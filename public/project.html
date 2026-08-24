@@ -17,8 +17,11 @@
     .member-toggle { cursor:pointer; user-select:none; }
     .member-list { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 12px; }
     .team-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 14px; }
-    .checkbox-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:8px 14px; }
-    .checkbox-option { display:flex; align-items:flex-start; gap:8px; padding:9px 10px; border:1px solid var(--border); border-radius:8px; background:var(--bg-secondary); cursor:pointer; }
+    .checkbox-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:6px; }
+    .checkbox-option { display:flex; align-items:flex-start; gap:6px; padding:6px 8px; border:1px solid var(--border); border-radius:7px; background:var(--bg-secondary); cursor:pointer; font-size:0.8rem; }
+    .functional-blocks-panel { margin-top:10px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,0.02); }
+    .functional-blocks-panel > summary { cursor:pointer; padding:9px 11px; font-size:0.82rem; font-weight:600; color:var(--text-secondary); }
+    .functional-blocks-panel-body { padding:0 10px 10px; }
   </style>
   <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
@@ -59,7 +62,7 @@
       <form id="projectCardForm">
         <div class="form-group">
           <label class="form-label">Название проекта</label>
-          <input id="title" class="form-control" type="text">
+          <input id="title" class="form-control" type="text" placeholder="Например: Внедрение 1С:ERP на производственном предприятии">
         </div>
         <div class="form-group">
           <label class="form-label">Руководитель проекта</label>
@@ -67,17 +70,13 @@
         </div>
         <div class="form-row">
           <div class="form-group">
-            <label class="form-label">Кодовое название проекта</label>
-            <input id="code_name" class="form-control" type="text">
+            <label class="form-label">Название в резюме</label>
+            <input id="code_name" class="form-control" type="text" placeholder="Если не заполнено, используется название проекта">
           </div>
           <div class="form-group">
             <label class="form-label">Юридическое название заказчика</label>
-            <input id="legal_customer_name" class="form-control" type="text">
+            <input id="legal_customer_name" class="form-control" type="text" placeholder="Например: ООО «Компания»">
           </div>
-        </div>
-        <div class="form-group">
-          <label class="form-label">Заказчик</label>
-          <input id="customer" class="form-control" type="text" placeholder="ООО «Пример»">
         </div>
         <div class="form-group">
           <label class="form-label">Описание компании / вида деятельности</label>
@@ -85,7 +84,21 @@
         </div>
         <div class="form-group">
           <label class="form-label">Описание проекта</label>
-          <textarea id="description" class="form-control" rows="4"></textarea>
+          <textarea id="description" class="form-control" rows="4" placeholder="Например: автоматизация управленческого учёта и переход с устаревшей системы"></textarea>
+          <details class="functional-blocks-panel" open>
+            <summary>Функциональные блоки <span id="functionalBlockCount">(0)</span></summary>
+            <div class="functional-blocks-panel-body">
+              <div id="functionalBlocksChecklist" class="checkbox-grid"></div>
+              <div style="display:flex;gap:8px;margin-top:8px;">
+                <input id="newFunctionalBlock" class="form-control" type="text" placeholder="Добавить свой блок">
+                <button id="addFunctionalBlockBtn" class="btn btn-ghost btn-sm" type="button">Добавить</button>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Функциональная область</label>
+          <textarea id="functional_area" class="form-control" rows="2" placeholder="Заполняется автоматически из столбца «Функциональная область» выгрузки УПП"></textarea>
         </div>
         <div class="form-row">
           <div class="form-group">
@@ -101,20 +114,12 @@
           </div>
         </div>
         <div class="form-group">
-          <label class="form-label">Размер команды</label>
-          <input id="team_size" class="form-control" type="number" min="0" step="1">
+          <label class="form-label">Количество участников команды</label>
+          <input id="team_size" class="form-control" type="number" min="0" step="1" placeholder="Например: 12">
         </div>
         <div class="form-group">
           <label class="form-label">Программные продукты / технологии</label>
           <input id="technologies" class="form-control" type="text" placeholder="1С:ERP 2.5, XML, JSON, REST API">
-        </div>
-        <div class="form-group">
-          <label class="form-label">Функциональные блоки</label>
-          <div id="functionalBlocksChecklist" class="checkbox-grid"></div>
-          <div style="display:flex;gap:8px;margin-top:10px;">
-            <input id="newFunctionalBlock" class="form-control" type="text" placeholder="Добавить свой блок">
-            <button id="addFunctionalBlockBtn" class="btn btn-ghost btn-sm" type="button">Добавить</button>
-          </div>
         </div>
       </form>
     </div>
@@ -125,7 +130,7 @@
         <button type="button" id="toggleTeamBtn" class="btn btn-ghost btn-sm member-toggle">Развернуть</button>
       </div>
       <div id="teamWrapper" style="display:none;">
-        <div class="muted" style="font-size:0.85rem;margin-bottom:10px;">Добавляйте участников по числу из поля выше. Можно удалять корзиной справа.</div>
+        <div class="muted" style="font-size:0.85rem;margin-bottom:10px;">Количество участников команды — полное количество участников проекта. В списке указываются только сотрудники, которые сейчас работают.</div>
         <div id="teamMembers" class="member-list"></div>
         <button type="button" id="addTeamMemberBtn" class="btn btn-ghost btn-sm" style="margin-top:10px;">+ Добавить сотрудника</button>
       </div>

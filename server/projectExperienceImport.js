@@ -1,17 +1,44 @@
 const XLSX = require('xlsx');
 
-const REQUIRED_HEADERS = [
-  'Сотрудник',
-  'ФункциональнаяОбласть',
-  'ПрограммныйПродукт',
-  'Опыт',
-  'Проект',
-  'ДатаНачала',
-  'ДатаОкончания',
+const REQUIRED_COLUMNS = [
+  { key: 'employeeName', label: 'Сотрудник', aliases: ['Сотрудник'] },
+  { key: 'functionalBlock', label: 'Функциональная область', aliases: ['ФункциональнаяОбласть', 'Функциональная область'] },
+  { key: 'technology', label: 'Программный продукт', aliases: ['ПрограммныйПродукт', 'Программный продукт'] },
+  { key: 'projectTitle', label: 'Название', aliases: ['Название', 'Проект'] },
+  { key: 'projectStart', label: 'Дата начала', aliases: ['ДатаНачала', 'Дата начала'] },
+  { key: 'projectEnd', label: 'Дата окончания', aliases: ['ДатаОкончания', 'Дата окончания'] },
+];
+
+const OPTIONAL_COLUMNS = [
+  { key: 'sourceReference', aliases: ['Ссылка'] },
+  { key: 'sourceRowNumber', aliases: ['НомерСтроки', 'Номер строки'] },
+  { key: 'role', aliases: ['Должность'] },
+  { key: 'participationStart', aliases: ['ДатаВхода', 'Дата входа'] },
+  { key: 'participationEnd', aliases: ['ДатаВыхода', 'Дата выхода'] },
 ];
 
 function normalize(value) {
   return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function normalizeHeader(value) {
+  return normalize(value).replace(/[\s_]+/g, '');
+}
+
+function resolveColumns(headers) {
+  const byHeader = new Map(headers.map((header, index) => [normalizeHeader(header), index]));
+  const resolved = {};
+  for (const definition of [...REQUIRED_COLUMNS, ...OPTIONAL_COLUMNS]) {
+    const alias = definition.aliases.find(value => byHeader.has(normalizeHeader(value)));
+    if (alias) resolved[definition.key] = byHeader.get(normalizeHeader(alias));
+  }
+  const missing = REQUIRED_COLUMNS.filter(definition => resolved[definition.key] === undefined);
+  if (missing.length) throw new Error(`Не найдены обязательные колонки: ${missing.map(item => item.label).join(', ')}`);
+  return resolved;
+}
+
+function cellValue(values, column, key) {
+  return column[key] === undefined ? '' : String(values[column[key]] || '').trim();
 }
 
 function isYellow(cell) {
@@ -55,96 +82,91 @@ function parseProjectExperienceFile(filePath) {
   if (!matrix.length) throw new Error('Файл не содержит данных');
 
   const headers = matrix[0].map(value => String(value || '').trim());
-  const column = Object.fromEntries(headers.map((header, index) => [header, index]));
-  const missing = REQUIRED_HEADERS.filter(header => column[header] === undefined);
-  if (missing.length) throw new Error(`Не найдены обязательные колонки: ${missing.join(', ')}`);
+  const column = resolveColumns(headers);
 
   const activeRows = [];
+  const allRows = [];
   const inactiveEmployees = new Set();
   let skippedInactiveRows = 0;
 
   for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
     const values = matrix[rowIndex];
-    const employeeName = String(values[column.Сотрудник] || '').trim();
-    const projectTitle = String(values[column.Проект] || '').trim();
+    const employeeName = cellValue(values, column, 'employeeName');
+    const projectTitle = cellValue(values, column, 'projectTitle');
     if (!employeeName || !projectTitle) continue;
 
-    const employeeCell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: column.Сотрудник })];
-    if (isYellow(employeeCell)) {
+    const employeeCell = sheet[XLSX.utils.encode_cell({ r: rowIndex, c: column.employeeName })];
+    const active = !isYellow(employeeCell);
+    const row = {
+      sourceReference: cellValue(values, column, 'sourceReference'),
+      sourceRowNumber: cellValue(values, column, 'sourceRowNumber'),
+      employeeName,
+      role: cellValue(values, column, 'role'),
+      participationStart: cellValue(values, column, 'participationStart'),
+      participationEnd: cellValue(values, column, 'participationEnd'),
+      functionalBlock: cellValue(values, column, 'functionalBlock'),
+      technology: cellValue(values, column, 'technology'),
+      projectTitle,
+      projectStart: cellValue(values, column, 'projectStart'),
+      projectEnd: cellValue(values, column, 'projectEnd'),
+      active,
+    };
+    allRows.push(row);
+
+    if (!active) {
       inactiveEmployees.add(employeeName);
       skippedInactiveRows += 1;
       continue;
     }
-
-    activeRows.push({
-      sourceReference: String(values[column.Ссылка] || '').trim(),
-      sourceRowNumber: String(values[column.НомерСтроки] || '').trim(),
-      employeeName,
-      position: String(values[column.Должность] || '').trim(),
-      participationStart: String(values[column.ДатаВхода] || '').trim(),
-      participationEnd: String(values[column.ДатаВыхода] || '').trim(),
-      functionalBlock: String(values[column.ФункциональнаяОбласть] || '').trim(),
-      technology: String(values[column.ПрограммныйПродукт] || '').trim(),
-      experienceType: String(values[column.Опыт] || '').trim(),
-      isPrimaryConsultant: normalize(values[column.ОсновнойКонсультант]) === 'да',
-      projectTitle,
-      projectStart: String(values[column.ДатаНачала] || '').trim(),
-      projectEnd: String(values[column.ДатаОкончания] || '').trim(),
-    });
+    activeRows.push(row);
   }
 
   const projectsByTitle = new Map();
-  for (const row of activeRows) {
+  for (const row of allRows) {
     const key = normalize(row.projectTitle);
     if (!projectsByTitle.has(key)) projectsByTitle.set(key, { title: row.projectTitle, rows: [] });
     projectsByTitle.get(key).rows.push(row);
   }
 
-  const projects = [...projectsByTitle.values()].map(group => {
+  const projects = [...projectsByTitle.values()].filter(group => group.rows.some(row => row.active)).map(group => {
     const membersByName = new Map();
-    for (const row of group.rows) {
+    const workingRows = group.rows.filter(row => row.active);
+    for (const row of workingRows) {
       const key = normalize(row.employeeName);
       if (!membersByName.has(key)) {
         membersByName.set(key, {
           name: row.employeeName,
-          position: row.position,
+          role: row.role,
           participationStart: row.participationStart,
           participationEnd: row.participationEnd,
-          functionalBlocks: [],
+          functionalAreas: [],
           technologies: [],
-          experienceTypes: [],
-          isPrimaryConsultant: false,
         });
       }
       const member = membersByName.get(key);
-      member.position ||= row.position;
+      member.role ||= row.role;
       member.participationStart = minDate([member.participationStart, row.participationStart]);
       member.participationEnd = maxDate([member.participationEnd, row.participationEnd]);
-      member.functionalBlocks = unique([...member.functionalBlocks, row.functionalBlock]);
+      member.functionalAreas = unique([...member.functionalAreas, row.functionalBlock]);
       member.technologies = unique([...member.technologies, row.technology]);
-      member.experienceTypes = unique([...member.experienceTypes, row.experienceType]);
-      member.isPrimaryConsultant ||= row.isPrimaryConsultant;
     }
-    const functionalBlocks = unique(group.rows.map(row => row.functionalBlock));
+    const functionalAreas = unique(group.rows.map(row => row.functionalBlock));
     const technologies = unique(group.rows.map(row => row.technology));
-    const experienceTypes = unique(group.rows.map(row => row.experienceType));
+    const fullTeamSize = new Set(group.rows.map(row => normalize(row.employeeName)).filter(Boolean)).size;
     return {
       title: group.title,
       startPeriod: toMonthYear(minDate(group.rows.map(row => row.projectStart))),
       endPeriod: toMonthYear(maxDate(group.rows.map(row => row.projectEnd))),
-      functionalBlocks,
+      fullTeamSize,
+      functionalArea: functionalAreas.join(', '),
       technologies,
-      experienceTypes,
-      description: [
-        functionalBlocks.length ? `Функциональные области: ${functionalBlocks.join(', ')}` : '',
-        experienceTypes.length ? `Виды работ: ${experienceTypes.join(', ')}` : '',
-      ].filter(Boolean).join('. '),
+      description: '',
       members: [...membersByName.values()].map(member => ({
         ...member,
         participationStart: toMonthYear(member.participationStart),
         participationEnd: toMonthYear(member.participationEnd),
       })),
-      sourceRows: group.rows,
+      sourceRows: workingRows.map(({ active, ...row }) => row),
     };
   });
 

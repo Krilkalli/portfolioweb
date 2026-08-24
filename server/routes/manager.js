@@ -348,13 +348,14 @@ router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
       if (typeof p === 'string') return p;
       if (Array.isArray(p)) return p.map(x => {
         const fields = [];
+        if (x.project_name) fields.push('Название проекта: ' + x.project_name);
         if (x.period) fields.push('Период работы: ' + x.period);
         if (x.position) fields.push('Должность: ' + x.position);
         if (x.role) fields.push('Роль: ' + x.role);
-        if (x.team_size) fields.push('Размер команды: ' + x.team_size);
+        if (x.team_size) fields.push('Количество участников команды: ' + x.team_size);
         if (x.client) fields.push('Заказчик: ' + x.client);
         if (x.project_description) fields.push('Описание проекта: ' + x.project_description);
-        if (x.task_description) fields.push('Задача, реализованная сотрудником: ' + x.task_description);
+        if (x.functional_area) fields.push('Функциональная область: ' + x.functional_area);
         if (x.technologies) fields.push('Программные продукты / Технологии: ' + x.technologies);
         return fields.join('\n');
       }).join('\n\n');
@@ -401,6 +402,17 @@ router.get('/projects', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.post('/employees/remove-rp', requireAdmin, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Выберите сотрудников' });
+    }
+    const result = await helpers.removeEmployeesRp(ids);
+    res.json({ ok: true, ...result });
+  } catch (err) { next(err); }
+});
+
 router.get('/projects/functional-blocks', requireAdmin, async (req, res, next) => {
   try {
     res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
@@ -433,7 +445,9 @@ router.get('/projects/export-register', requireAdmin, async (req, res, next) => 
         }
       } else {
         for (const member of project.team_members || []) {
-          const blocks = Array.isArray(member.functional_blocks) && member.functional_blocks.length ? member.functional_blocks : [''];
+          const blocks = Array.isArray(member.functional_areas) && member.functional_areas.length
+            ? member.functional_areas
+            : (project.functional_area ? String(project.functional_area).split(/[,;\n]/).map(value => value.trim()).filter(Boolean) : ['']);
           for (const block of blocks) rows.push({
             Ссылка: project.source_system || 'Портфолио',
             НомерСтроки: '',
@@ -496,7 +510,7 @@ router.post('/projects/import', requireAdmin, upload.single('file'), async (req,
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const parsed = parseProjectExperienceFile(req.file.path);
-    if (!parsed.projects.length) return res.status(400).json({ error: 'После исключения жёлтых строк в файле не осталось проектов' });
+    if (!parsed.projects.length) return res.status(400).json({ error: 'В файле не найдено проектов для импорта' });
     const result = await helpers.importProjectExperience(parsed);
     res.json({
       ok: true,

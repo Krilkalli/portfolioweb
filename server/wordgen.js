@@ -184,13 +184,14 @@ async function generateResume(employee) {
     } else {
       for (const proj of employee.project_experience) {
         const fields = [
+          { label: 'Название проекта', key: 'project_name' },
           { label: 'Период', key: 'period' },
           { label: 'Должность', key: 'position' },
           { label: 'Роль', key: 'role' },
-          { label: 'Размер команды', key: 'team_size' },
+          { label: 'Количество участников команды', key: 'team_size' },
           { label: 'Заказчик', key: 'client' },
           { label: 'Описание проекта', key: 'project_description' },
-          { label: 'Задача сотрудника', key: 'task_description' },
+          { label: 'Функциональная область', key: 'functional_area' },
           { label: 'Технологии', key: 'technologies' },
         ];
         for (const f of fields) {

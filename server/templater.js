@@ -40,7 +40,7 @@ function formatProject(p) {
   if (!p) return '';
   if (typeof p === 'string') return p;
   if (Array.isArray(p)) return p.map(x => {
-    const f = [x.period && `Период: ${x.period}`, x.client && `Заказчик: ${x.client}`, x.role && `Роль: ${x.role}`, x.team_size && `Команда: ${x.team_size}`, x.project_description && `Описание: ${x.project_description}`, x.task_description && `Задача: ${x.task_description}`, x.technologies && `Технологии: ${x.technologies}`].filter(Boolean);
+    const f = [x.project_name && `Название проекта: ${x.project_name}`, x.period && `Период: ${x.period}`, x.client && `Заказчик: ${x.client}`, x.role && `Роль: ${x.role}`, x.team_size && `Количество участников команды: ${x.team_size}`, x.project_description && `Описание: ${x.project_description}`, x.functional_area && `Функциональная область: ${x.functional_area}`, x.technologies && `Технологии: ${x.technologies}`].filter(Boolean);
     return f.join('\n');
   }).join('\n\n');
   return String(p);

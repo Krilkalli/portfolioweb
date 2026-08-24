@@ -10,6 +10,19 @@
     .main-content { padding: 32px 0; flex: 1; }
     .employee-name { font-weight: 600; font-size: 0.9rem; }
     .employee-pos  { font-size: 0.78rem; color: var(--text-muted); }
+    .experience-match {
+      margin-top: 6px;
+      padding: 5px 7px;
+      border-radius: 6px;
+      background: rgba(34, 197, 94, 0.10);
+      color: var(--text-secondary);
+      font-size: 0.72rem;
+      line-height: 1.35;
+    }
+    .experience-match strong { color: var(--success); }
+    .search-result-count { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+    .dashboard-action { min-width: 146px; min-height: 34px; justify-content: center; }
+    #exportToolbar .btn { min-width: 112px; min-height: 34px; justify-content: center; }
     /* .link-cell теперь оформляется как ссылка в /css/styles.css */
     .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
     .toolbar-left { flex: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
@@ -206,8 +219,9 @@
         <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
         </svg>
-        <input id="searchInput" type="text" class="form-control" placeholder="Поиск по ФИО, должности, городу..." style="width:260px">
+        <input id="searchInput" type="search" class="form-control" placeholder="ФИО, должность, компетенция, проект..." aria-label="Поиск сотрудников по ФИО, должности, компетенциям и проектному опыту" style="width:340px">
       </div>
+      <span id="searchResultCount" class="search-result-count"></span>
       <div class="filter-dropdown" id="filterWrap" style="position:relative;">
         <button class="btn btn-ghost btn-sm" id="filterBtn" style="font-size:0.82rem;"><i class="fi fi-rr-search"></i> Фильтры ▾</button>
         <div class="filter-dropdown-menu" id="filterMenu" style="min-width:320px;padding:12px;">
@@ -221,6 +235,14 @@
             <label class="form-label" style="font-size:0.78rem;">Город</label>
             <select id="filterCity" class="form-control" style="font-size:0.8rem;">
               <option value="">— Все —</option>
+            </select>
+          </div>
+          <div class="form-group" style="margin-bottom:8px;">
+            <label class="form-label" style="font-size:0.78rem;">Роль в проектах</label>
+            <select id="filterRp" class="form-control" style="font-size:0.8rem;">
+              <option value="">— Все сотрудники —</option>
+              <option value="rp">Только РП</option>
+              <option value="not-rp">Только не РП</option>
             </select>
           </div>
           <div class="form-group" style="margin-bottom:8px;">
@@ -241,11 +263,12 @@
         </div>
       </div>
     </div>
-    <button id="addEmployeeBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-plus"></i> Сотрудника</button>
-    <button id="assignRpBtn" class="btn btn-ghost btn-sm" data-role="admin"><i class="fi fi-rr-user-star"></i> Назначить РП</button>
+    <button id="addEmployeeBtn" class="btn btn-primary btn-sm dashboard-action"><i class="fi fi-rr-plus"></i> Сотрудника</button>
+    <button id="assignRpBtn" class="btn btn-ghost btn-sm dashboard-action" data-role="admin"><i class="fi fi-rr-user-star"></i> Назначить РП</button>
+    <button id="removeRpBtn" class="btn btn-ghost btn-sm dashboard-action" data-role="admin"><i class="fi fi-rr-user-minus"></i> Снять РП</button>
     <!-- <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum"><i class="fi fi-rr-download"></i> Импорт Excel</button> -->
-    <button id="massMailBtn" class="btn btn-primary btn-sm" data-role="admin,scrum">📧 Рассылка</button>
-    <a href="/api/excel/export" class="btn btn-ghost btn-sm"><i class="fi fi-rr-upload"></i> Экспорт Excel</a>
+    <button id="massMailBtn" class="btn btn-primary btn-sm dashboard-action" data-role="admin,scrum"><i class="fi fi-rr-envelope"></i> Рассылка</button>
+    <a href="/api/excel/export" class="btn btn-ghost btn-sm dashboard-action"><i class="fi fi-rr-upload"></i> Экспорт Excel</a>
   </div>
 
   <!-- Toolbar -->
@@ -399,6 +422,7 @@
 <!-- Toast -->
 <div class="toast-container" id="toastContainer"></div>
 
+<script src="/js/employee-search.js"></script>
 <script src="/js/manager.js"></script>
 </body>
 </html>

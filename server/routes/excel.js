@@ -162,6 +162,7 @@ function parseProjects(raw) {
     'размер команды': 'team_size',
     'заказчик': 'client',
     'описание проекта': 'project_description',
+    'функциональная область': 'functional_area',
     'задача, реализованная сотрудником': 'task_description',
     'задача': 'task_description',
     'программные продукты / технологии': 'technologies',
@@ -176,6 +177,7 @@ function parseProjects(raw) {
     client: e.client || '',
     project_description: e.project_description || '',
     task_description: e.task_description || '',
+    functional_area: e.functional_area || '',
     technologies: e.technologies || ''
   }));
 }
@@ -327,13 +329,14 @@ router.get('/export', requireAuth, async (req, res, next) => {
       if (Array.isArray(proj)) {
         return proj.map(p => {
           const lines = [];
+          if (p.project_name) lines.push('Название проекта: ' + p.project_name);
           if (p.period) lines.push('Период работы: ' + p.period);
           if (p.position) lines.push('Должность: ' + p.position);
           if (p.role) lines.push('Роль: ' + p.role);
-          if (p.team_size) lines.push('Размер команды: ' + p.team_size);
+          if (p.team_size) lines.push('Количество участников команды: ' + p.team_size);
           if (p.client) lines.push('Заказчик: ' + p.client);
           if (p.project_description) lines.push('Описание проекта: ' + p.project_description);
-          if (p.task_description) lines.push('Задача, реализованная сотрудником: ' + p.task_description);
+          if (p.functional_area) lines.push('Функциональная область: ' + p.functional_area);
           if (p.technologies) lines.push('Программные продукты / Технологии: ' + p.technologies);
           return lines.join('\n');
         }).join('\n\n');

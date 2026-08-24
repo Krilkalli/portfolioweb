@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
+const { composeProjectDescription } = require('./projectDescription');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
 const config = require('./config');
@@ -115,6 +116,7 @@ const SCHEMA_SQL = `
     end_present BOOLEAN NOT NULL DEFAULT FALSE,
     team_size INTEGER DEFAULT 0,
     technologies TEXT DEFAULT '',
+    functional_area TEXT DEFAULT '',
     functional_blocks TEXT DEFAULT '[]',
     team_members TEXT DEFAULT '[]',
     leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL,
@@ -214,6 +216,28 @@ function castProject(row) {
 }
 
 function castProjects(rows) { return rows.map(castProject); }
+
+async function withActiveProjectMembers(projects) {
+  const single = !Array.isArray(projects);
+  const list = (single ? [projects] : projects).filter(Boolean);
+  const memberIds = [...new Set(list.flatMap(project =>
+    (project.team_members || []).map(member => Number(member.employee_id)).filter(Boolean)
+  ))];
+  if (memberIds.length === 0) return single ? (list[0] || null) : list;
+
+  const activeRows = await _all(
+    "SELECT id, name FROM employees WHERE id = ANY($1::int[]) AND status = 'active'",
+    [memberIds]
+  );
+  const activeNames = new Map(activeRows.map(employee => [Number(employee.id), employee.name]));
+  const filtered = list.map(project => ({
+    ...project,
+    team_members: (project.team_members || [])
+      .filter(member => activeNames.has(Number(member.employee_id)))
+      .map(member => ({ ...member, name: activeNames.get(Number(member.employee_id)) }))
+  }));
+  return single ? (filtered[0] || null) : filtered;
+}
 
 // ─── JSON-сериализация для записи ──────────────────────────────────────────
 function prepEmployee(emp) {
@@ -360,6 +384,7 @@ async function init() {
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS end_present BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_size INTEGER DEFAULT 0").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS technologies TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS functional_area TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS functional_blocks TEXT DEFAULT '[]'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS team_members TEXT DEFAULT '[]'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_id INTEGER REFERENCES managers(id) ON DELETE SET NULL").catch(() => {});
@@ -368,6 +393,39 @@ async function init() {
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_system TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_data TEXT DEFAULT '[]'").catch(() => {});
+
+  // В старых импортированных проектах колонка УПП «Функциональная область»
+  // ошибочно хранилась как выбранные РП функциональные блоки. Разделяем данные.
+  const areaMigration = await _get("SELECT value FROM settings WHERE key = 'migration_upp_functional_area_v1'");
+  if (!areaMigration) {
+    const importedProjects = await _all("SELECT id, functional_blocks, team_members, source_data FROM projects WHERE source_system = 'УПП'");
+    const migratedProjectIds = [];
+    for (const project of importedProjects) {
+      let sourceRows = [];
+      let blocks = [];
+      try { sourceRows = JSON.parse(project.source_data || '[]'); } catch {}
+      try { blocks = JSON.parse(project.functional_blocks || '[]'); } catch {}
+      let teamMembers = [];
+      try { teamMembers = JSON.parse(project.team_members || '[]'); } catch {}
+      const areas = [...new Set(sourceRows.map(row => String(row?.functionalBlock || '').trim()).filter(Boolean))];
+      const areaKeys = new Set(areas.map(value => value.toLowerCase()));
+      const rpBlocks = (Array.isArray(blocks) ? blocks : []).filter(value => !areaKeys.has(String(value || '').trim().toLowerCase()));
+      const migratedMembers = (Array.isArray(teamMembers) ? teamMembers : []).map(member => {
+        const functionalAreas = Array.isArray(member.functional_areas)
+          ? member.functional_areas
+          : (Array.isArray(member.functional_blocks) ? member.functional_blocks : []);
+        const { functional_blocks, ...rest } = member;
+        return { ...rest, functional_areas: functionalAreas };
+      });
+      await _run('UPDATE projects SET functional_area = $1, functional_blocks = $2, team_members = $3 WHERE id = $4', [areas.join(', '), JSON.stringify(rpBlocks), JSON.stringify(migratedMembers), project.id]);
+      migratedProjectIds.push(Number(project.id));
+    }
+    await _run("INSERT INTO settings (key, value) VALUES ('migration_upp_functional_area_v1', 'done') ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value");
+    if (migratedProjectIds.length) {
+      const migratedProjects = await helpers.getProjectsByIds(migratedProjectIds);
+      for (const project of migratedProjects) await helpers.syncProjectTeamMembers(project);
+    }
+  }
 
   // Create indexes only after legacy tables have received all required columns.
   await _run('CREATE INDEX IF NOT EXISTS idx_employees_token ON employees(token)');
@@ -604,14 +662,42 @@ const helpers = {
     return res ? res.rowCount : 0;
   },
 
+  async removeEmployeesRp(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return { updated: 0, projectsUnassigned: 0 };
+    const employeeIds = [...new Set(ids.map(Number).filter(Boolean))];
+    if (!employeeIds.length) return { updated: 0, projectsUnassigned: 0 };
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const now = new Date().toISOString();
+      const employeesResult = await client.query(
+        'UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = ANY($2::int[]) AND is_rp = TRUE',
+        [now, employeeIds]
+      );
+      const projectsResult = await client.query(
+        `UPDATE projects
+         SET leader_employee_id = NULL, leader_name = '', updated_at = $1
+         WHERE leader_employee_id = ANY($2::int[])`,
+        [now, employeeIds]
+      );
+      await client.query('COMMIT');
+      return { updated: employeesResult.rowCount, projectsUnassigned: projectsResult.rowCount };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
   async getEmployeesByIds(ids) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
-    return _all('SELECT id, name FROM employees WHERE id = ANY($1::int[])', [ids.map(Number)]);
+    return _all("SELECT id, name FROM employees WHERE id = ANY($1::int[]) AND status = 'active'", [ids.map(Number)]);
   },
 
   async getProjectsByIds(ids) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
-    return _all(`
+    const projects = await _all(`
       SELECT p.*,
              e.name AS leader_employee_name, e.email AS leader_employee_email
       FROM projects p
@@ -619,6 +705,7 @@ const helpers = {
       WHERE p.id = ANY($1::int[])
       ORDER BY p.created_at DESC, p.id DESC
     `, [ids.map(Number)]).then(castProjects);
+    return withActiveProjectMembers(projects);
   },
 
   async syncEmployeeProjectExperience(employeeId, project) {
@@ -643,6 +730,7 @@ const helpers = {
         client: project?.client || project?.customer || '',
         project_description: project?.project_description || '',
         task_description: project?.task_description || '',
+        functional_area: project?.functional_area || '',
         technologies: project?.technologies || '',
         functional_blocks: Array.isArray(project?.functional_blocks) ? project.functional_blocks : [],
       };
@@ -1108,24 +1196,26 @@ const helpers = {
     return _all("SELECT id, name, email FROM employees WHERE status = 'active' AND is_rp = TRUE ORDER BY name_lower");
   },
 
-  getAllProjects() {
-    return _all(`
+  async getAllProjects() {
+    const projects = await _all(`
       SELECT p.*,
              e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       ORDER BY p.created_at DESC, p.id DESC
     `).then(castProjects);
+    return withActiveProjectMembers(projects);
   },
 
-  getProjectById(id) {
-    return _get(`
+  async getProjectById(id) {
+    const project = await _get(`
       SELECT p.*,
              e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       WHERE p.id = $1
     `, [Number(id)]).then(castProject);
+    return withActiveProjectMembers(project);
   },
 
   async createProject({ title, leaderEmployeeId, status }) {
@@ -1153,6 +1243,34 @@ const helpers = {
       if (!project.rows[0]) { await client.query('ROLLBACK'); return null; }
       const current = project.rows[0];
       const preparedFields = { ...fields };
+      if (preparedFields.description !== undefined || preparedFields.functional_blocks !== undefined) {
+        let blocks = preparedFields.functional_blocks;
+        if (!Array.isArray(blocks)) {
+          try { blocks = JSON.parse(current.functional_blocks || '[]'); } catch { blocks = []; }
+        }
+        preparedFields.description = composeProjectDescription(
+          preparedFields.description !== undefined ? preparedFields.description : current.description,
+          blocks
+        );
+      }
+      if (preparedFields.team_members !== undefined) {
+        const submittedMembers = Array.isArray(preparedFields.team_members) ? preparedFields.team_members : [];
+        const submittedIds = [...new Set(submittedMembers.map(member => Number(member?.employee_id || member?.id || 0)).filter(Boolean))];
+        const activeRows = submittedIds.length
+          ? await client.query("SELECT id, name FROM employees WHERE id = ANY($1::int[]) AND status = 'active'", [submittedIds])
+          : { rows: [] };
+        const activeEmployees = new Map(activeRows.rows.map(employee => [Number(employee.id), employee.name]));
+        const acceptedEmployeeIds = new Set();
+        preparedFields.team_members = submittedMembers.filter(member => {
+          const employeeId = Number(member?.employee_id || member?.id || 0);
+          if (!employeeId || !activeEmployees.has(employeeId) || acceptedEmployeeIds.has(employeeId)) return false;
+          acceptedEmployeeIds.add(employeeId);
+          return true;
+        }).map(member => {
+          const employeeId = Number(member.employee_id || member.id);
+          return { ...member, employee_id: employeeId, employee_name: activeEmployees.get(employeeId) };
+        });
+      }
       if (preparedFields.leader_employee_id !== undefined) {
         const leaderId = Number(preparedFields.leader_employee_id || 0);
         if (!leaderId) {
@@ -1166,7 +1284,7 @@ const helpers = {
           preparedFields.leader_name = leader.rows[0].name;
         }
       }
-      const allowed = ['title','status','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_blocks','team_members','leader_employee_id','leader_name'];
+      const allowed = ['title','status','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_area','functional_blocks','team_members','leader_employee_id','leader_name'];
       const updates = [];
       const params = [Number(id)];
       let idx = 2;
@@ -1174,7 +1292,7 @@ const helpers = {
         if (preparedFields[key] === undefined) continue;
         let value = preparedFields[key];
         if (key === 'team_members' || key === 'functional_blocks') value = JSON.stringify(Array.isArray(value) ? value : []);
-        if (key === 'team_size') value = Number(value || 0);
+        if (key === 'team_size') value = Math.max(0, Number(value || 0));
         if (key === 'end_present') value = !!value;
         updates.push(`${key} = $${idx}`);
         params.push(value);
@@ -1244,19 +1362,18 @@ const helpers = {
       for (const project of parsed.projects) {
         for (const member of project.members || []) {
           const key = normalizeName(member.name);
-          if (!people.has(key)) people.set(key, { name: member.name, position: member.position || '' });
-          else if (!people.get(key).position && member.position) people.get(key).position = member.position;
+          if (!people.has(key)) people.set(key, { name: member.name });
         }
       }
       const employeeIds = new Map();
       for (const [key, person] of people.entries()) {
         const existing = await client.query('SELECT * FROM employees WHERE name_lower = $1 LIMIT 1', [key]);
         if (existing.rows[0]) {
-          await client.query("UPDATE employees SET position = $1, status = 'active', updated_at = $2 WHERE id = $3", [existing.rows[0].position || person.position || '', new Date().toISOString(), existing.rows[0].id]);
+          await client.query("UPDATE employees SET status = 'active', updated_at = $1 WHERE id = $2", [new Date().toISOString(), existing.rows[0].id]);
           employeeIds.set(key, existing.rows[0].id);
           employeesUpdated += 1;
         } else {
-          const prepared = prepEmployee({ name: person.name, position: person.position, status: 'active' });
+          const prepared = prepEmployee({ name: person.name, status: 'active' });
           const columns = Object.keys(prepared);
           const result = await client.query(`INSERT INTO employees (${columns.join(', ')}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id`, Object.values(prepared));
           employeeIds.set(key, result.rows[0].id);
@@ -1272,24 +1389,22 @@ const helpers = {
         const members = (imported.members || []).map(member => ({
           employee_id: employeeIds.get(normalizeName(member.name)) || null,
           employee_name: member.name,
-          position: member.position || '',
+          role: member.role || member.position || '',
           participation_start: member.participationStart || '',
           participation_end: member.participationEnd || '',
-          functional_blocks: member.functionalBlocks || [],
+          functional_areas: member.functionalAreas || [],
           technologies: member.technologies || [],
-          experience_types: member.experienceTypes || [],
-          is_primary_consultant: !!member.isPrimaryConsultant,
         })).filter(member => member.employee_id);
         const current = await client.query('SELECT * FROM projects WHERE LOWER(TRIM(title)) = LOWER(TRIM($1)) ORDER BY id LIMIT 1', [imported.title]);
         const now = new Date().toISOString();
-        const values = [imported.title, imported.description || '', imported.startPeriod || '', imported.endPeriod || '', members.length, (imported.technologies || []).join(', '), JSON.stringify(imported.functionalBlocks || []), JSON.stringify(members), JSON.stringify(imported.sourceRows || []), now];
+        const values = [imported.title, imported.description || '', imported.startPeriod || '', imported.endPeriod || '', Number(imported.fullTeamSize || members.length), (imported.technologies || []).join(', '), imported.functionalArea || '', JSON.stringify(members), JSON.stringify(imported.sourceRows || []), now];
         let projectId;
         if (current.rows[0]) {
           projectId = current.rows[0].id;
-          await client.query(`UPDATE projects SET title=$1, description=$2, start_period=$3, end_period=$4, team_size=$5, technologies=$6, functional_blocks=$7, team_members=$8, source_system='УПП', source_data=$9, updated_at=$10 WHERE id=$11`, [...values, projectId]);
+          await client.query(`UPDATE projects SET title=$1, description=CASE WHEN source_system='УПП' AND description LIKE 'Функциональные области:%' THEN $2 ELSE COALESCE(NULLIF($2, ''), description) END, start_period=$3, end_period=$4, team_size=$5, technologies=$6, functional_area=$7, team_members=$8, source_system='УПП', source_data=$9, updated_at=$10 WHERE id=$11`, [...values, projectId]);
           projectsUpdated += 1;
         } else {
-          const result = await client.query(`INSERT INTO projects (title, status, description, start_period, end_period, team_size, technologies, functional_blocks, team_members, source_system, source_data, created_at, updated_at, sent_at) VALUES ($1, 'Черновик', $2, $3, $4, $5, $6, $7, $8, 'УПП', $9, $10, $10, '') RETURNING id`, values);
+          const result = await client.query(`INSERT INTO projects (title, status, description, start_period, end_period, team_size, technologies, functional_area, team_members, source_system, source_data, created_at, updated_at, sent_at) VALUES ($1, 'Черновик', $2, $3, $4, $5, $6, $7, $8, 'УПП', $9, $10, $10, '') RETURNING id`, values);
           projectId = result.rows[0].id;
           projectsCreated += 1;
         }
@@ -1308,12 +1423,13 @@ const helpers = {
   },
 
   async getProjectFunctionalBlocks() {
-    const rows = await _all("SELECT functional_blocks FROM projects WHERE functional_blocks IS NOT NULL AND functional_blocks <> ''");
+    const rows = await _all("SELECT functional_blocks, functional_area FROM projects WHERE (functional_blocks IS NOT NULL AND functional_blocks <> '') OR (functional_area IS NOT NULL AND functional_area <> '')");
     const values = new Set();
     for (const row of rows) {
       let blocks = [];
       try { blocks = JSON.parse(row.functional_blocks || '[]'); } catch { blocks = []; }
       for (const block of blocks) if (String(block || '').trim()) values.add(String(block).trim());
+      for (const area of String(row.functional_area || '').split(/[,;\n]/)) if (area.trim()) values.add(area.trim());
     }
     return [...values].sort((a, b) => a.localeCompare(b, 'ru'));
   },
@@ -1357,13 +1473,19 @@ const helpers = {
       team_members: (row.team_members || []).map(m => {
         const id = Number(m.employee_id || m.id || 0);
         return { ...m, employee_id: id, employee_name: memberMap.get(id) || m.employee_name || m.name || '' };
-      }),
+      }).filter(member => memberMap.has(Number(member.employee_id))),
     }));
   },
 
   async syncProjectTeamMembers(project) {
     if (!project || !project.id) return [];
-    const members = Array.isArray(project.team_members) ? project.team_members : [];
+    const submittedMembers = Array.isArray(project.team_members) ? project.team_members : [];
+    const submittedIds = [...new Set(submittedMembers.map(member => Number(member.employee_id || member.id || 0)).filter(Boolean))];
+    const activeRows = submittedIds.length
+      ? await _all("SELECT id FROM employees WHERE id = ANY($1::int[]) AND status = 'active'", [submittedIds])
+      : [];
+    const activeIds = new Set(activeRows.map(employee => Number(employee.id)));
+    const members = submittedMembers.filter(member => activeIds.has(Number(member.employee_id || member.id || 0)));
     const memberIds = new Set(members.map(member => Number(member.employee_id || member.id || 0)).filter(Boolean));
     const employees = await _all('SELECT id, project_experience FROM employees');
     for (const employee of employees) {
@@ -1375,24 +1497,25 @@ const helpers = {
       if (filtered.length !== experience.length) await _run('UPDATE employees SET project_experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(filtered), new Date().toISOString(), employee.id]);
     }
     const synced = [];
+    const projectBlocks = Array.isArray(project.functional_blocks) ? project.functional_blocks : [];
     for (const member of members) {
       const employeeId = Number(member.employee_id || member.id || 0);
       if (!employeeId) continue;
-      const memberBlocks = Array.isArray(member.functional_blocks) ? member.functional_blocks : [];
-      const experienceTypes = Array.isArray(member.experience_types) ? member.experience_types : [];
-      const memberTechnologies = Array.isArray(member.technologies) ? member.technologies : [];
       const updated = await helpers.syncEmployeeProjectExperience(employeeId, {
         project_id: project.id,
-        period: [member.participation_start || project.start_period || '', member.participation_end || (project.end_present ? 'настоящее время' : project.end_period) || ''].filter(Boolean).join(' - '),
-        project_name: project.title,
-        position: member.position || '',
-        role: experienceTypes.join(', '),
+        period: [project.start_period || '', project.end_present ? 'настоящее время' : (project.end_period || '')].filter(Boolean).join(' - '),
+        project_name: project.code_name || project.title,
+        position: '',
+        role: member.role || member.position || '',
         team_size: project.team_size,
-        client: project.industry_description || project.customer || '',
-        project_description: project.description || '',
-        task_description: memberBlocks.length ? `Функциональные области: ${memberBlocks.join(', ')}` : '',
-        technologies: memberTechnologies.join(', ') || project.technologies || '',
-        functional_blocks: memberBlocks,
+        client: project.industry_description || project.legal_customer_name || project.customer || '',
+        project_description: composeProjectDescription(project.description, projectBlocks),
+        task_description: '',
+        functional_area: Array.isArray(member.functional_areas) && member.functional_areas.length
+          ? member.functional_areas.join(', ')
+          : (project.functional_area || ''),
+        technologies: project.technologies || '',
+        functional_blocks: projectBlocks,
       });
       if (updated) synced.push(updated);
     }

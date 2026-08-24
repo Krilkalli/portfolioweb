@@ -427,9 +427,9 @@
         <div class="section-card">
           <div class="section-card-title" style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
             <span><i class="fi fi-rr-folder"></i> Общий проектный опыт</span>
-            <button id="toggleProjectExperienceBtn" type="button" class="btn btn-ghost btn-sm">Свернуть</button>
+            <button id="toggleProjectExperienceBtn" type="button" class="btn btn-ghost btn-sm" aria-expanded="false">Развернуть</button>
           </div>
-          <div id="projectExperienceBody">
+          <div id="projectExperienceBody" style="display:none;">
             <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:12px;">Укажите информацию по каждому проекту, от новых к старым</p>
             <div id="projectExperienceContainer" class="edit-only"></div>
             <div id="viewProjects" class="view-only"></div>

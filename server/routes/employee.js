@@ -5,6 +5,7 @@ const path    = require('path');
 const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
+const { composeProjectDescription } = require('../projectDescription');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
@@ -23,6 +24,86 @@ const EDITABLE_FIELDS = [
   'name','education','position','contacts','experience',
   'about','competencies','project_experience','certification','photo',
 ];
+
+function formatManagedProjectPeriod(project) {
+  return [
+    project?.start_period || '',
+    project?.end_present ? 'настоящее время' : (project?.end_period || ''),
+  ].filter(Boolean).join(' - ');
+}
+
+async function enforceManagedProjectFields(currentValue, submittedValue, employeeId = null) {
+  const current = Array.isArray(currentValue) ? currentValue : [];
+  const submittedInput = Array.isArray(submittedValue) ? submittedValue.map(item => ({ ...item })) : [];
+  const lockedFields = ['team_size', 'project_name', 'client', 'project_description', 'functional_area'];
+  const currentLockedById = new Map(current.filter(item => item?.project_id).map(item => [Number(item.project_id), item]));
+  const submitted = submittedInput.map((item, index) => {
+    const projectId = Number(item?.project_id || 0);
+    const original = (projectId && currentLockedById.get(projectId)) || current[index] || null;
+    const protectedItem = { ...item };
+    for (const field of lockedFields) protectedItem[field] = original?.[field] || '';
+    return protectedItem;
+  });
+
+  // Связанный с карточкой проект нельзя удалить из проектного опыта сотрудника.
+  const submittedProjectIds = new Set(submitted.map(item => Number(item?.project_id || 0)).filter(Boolean));
+  for (const item of current) {
+    const projectId = Number(item?.project_id || 0);
+    if (!projectId || submittedProjectIds.has(projectId)) continue;
+    const sameProject = submitted.find(candidate => !candidate?.project_id &&
+      String(candidate?.project_name || '').trim().toLowerCase() === String(item?.project_name || '').trim().toLowerCase() &&
+      String(candidate?.client || '').trim().toLowerCase() === String(item?.client || '').trim().toLowerCase());
+    if (sameProject) sameProject.project_id = projectId;
+    else submitted.push({ ...item });
+    submittedProjectIds.add(projectId);
+  }
+
+  const projectIds = [...new Set(submitted.map(item => Number(item?.project_id || 0)).filter(Boolean))];
+  if (!projectIds.length) return submitted;
+  const projects = await helpers.getProjectsByIds(projectIds);
+  const projectsById = new Map(projects.map(project => [Number(project.id), project]));
+  const currentById = new Map(current.filter(item => item?.project_id).map(item => [Number(item.project_id), item]));
+
+  return submitted.map(item => {
+    const projectId = Number(item?.project_id || 0);
+    if (!projectId) return item;
+    const project = projectsById.get(projectId);
+    if (!project) {
+      const saved = currentById.get(projectId) || {};
+      return {
+        ...item,
+        project_id: projectId,
+        period: saved.period || item.period || '',
+        project_name: saved.project_name || item.project_name || '',
+        team_size: saved.team_size || item.team_size || '',
+        client: saved.client || item.client || '',
+        project_description: saved.project_description || item.project_description || '',
+        task_description: saved.task_description || item.task_description || '',
+        functional_area: saved.functional_area || item.functional_area || '',
+        technologies: saved.technologies || item.technologies || '',
+        functional_blocks: Array.isArray(saved.functional_blocks) ? saved.functional_blocks : (item.functional_blocks || []),
+      };
+    }
+    const functionalBlocks = Array.isArray(project.functional_blocks) ? project.functional_blocks : [];
+    const projectMember = (project.team_members || []).find(member => Number(member.employee_id || member.id || 0) === Number(employeeId || 0));
+    const functionalArea = Array.isArray(projectMember?.functional_areas) && projectMember.functional_areas.length
+      ? projectMember.functional_areas.join(', ')
+      : (project.functional_area || '');
+    return {
+      ...item,
+      project_id: projectId,
+      period: formatManagedProjectPeriod(project),
+      project_name: project.code_name || project.title || '',
+      team_size: String(project.team_size || ''),
+      client: project.industry_description || project.legal_customer_name || project.customer || '',
+      project_description: composeProjectDescription(project.description, functionalBlocks),
+      task_description: '',
+      functional_area: functionalArea,
+      technologies: project.technologies || '',
+      functional_blocks: functionalBlocks,
+    };
+  });
+}
 router.get('/positions', async (req, res, next) => {
   try {
     res.json({ positions: await helpers.getPositions() });
@@ -48,6 +129,9 @@ router.get('/:token', async (req, res, next) => {
       emp.certification_1c = parts[0]?.replace(/^Сертификация 1С:?\s*/i, '').trim() || '';
       emp.courses = parts[1]?.replace(/^Обучающие курсы:?\s*/i, '').trim() || '';
       emp.cert_date = parts[2]?.replace(/^Дата актуализации:?\s*/i, '').trim() || '';
+    }
+    if (Array.isArray(emp.project_experience)) {
+      emp.project_experience = await enforceManagedProjectFields(emp.project_experience, emp.project_experience, emp.id);
     }
     res.json({ ...emp, hasPending: await helpers.hasPendingForEmployee(emp.id) });
   } catch (err) { next(err); }
@@ -93,7 +177,7 @@ router.put('/:token/projects/:projectId', async (req, res, next) => {
     if (!project) return res.status(404).json({ error: 'Проект не найден' });
     if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
 
-    const allowed = ['title','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_blocks','team_members'];
+    const allowed = ['title','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_area','functional_blocks','team_members'];
     const fields = Object.fromEntries(allowed.filter(key => req.body?.[key] !== undefined).map(key => [key, req.body[key]]));
     const updated = await helpers.updateProject(Number(req.params.projectId), fields);
     if (updated) await helpers.syncProjectTeamMembers(updated);
@@ -113,13 +197,21 @@ router.post('/:token/projects/:projectId/members/:employeeId/sync-project-experi
     if (!project.team_members.some(m => Number(m.employee_id || m.id || 0) === employeeId)) {
       return res.status(403).json({ error: 'Сотрудник не состоит в команде проекта' });
     }
+    const projectMember = project.team_members.find(member => Number(member.employee_id || member.id || 0) === employeeId);
+    const functionalArea = Array.isArray(projectMember?.functional_areas) && projectMember.functional_areas.length
+      ? projectMember.functional_areas.join(', ')
+      : (project.functional_area || '');
     const synced = await helpers.syncEmployeeProjectExperience(employeeId, {
-      period: [project.start_period || '', project.end_present ? 'настоящее время' : (project.end_period || '')].filter(Boolean).join(' - '),
-      project_name: project.title,
-      client: project.customer || '',
+      project_id: project.id,
+      period: formatManagedProjectPeriod(project),
+      project_name: project.code_name || project.title,
+      client: project.industry_description || project.legal_customer_name || project.customer || '',
       team_size: project.team_size,
-      project_description: project.description || '',
+      project_description: composeProjectDescription(project.description, project.functional_blocks || []),
+      task_description: '',
+      functional_area: functionalArea,
       technologies: project.technologies || '',
+      functional_blocks: project.functional_blocks || [],
     });
     res.json({ ok: true, employee: synced });
   } catch (err) { next(err); }
@@ -136,6 +228,9 @@ router.post('/:token/submit', async (req, res, next) => {
 
     const contacts = [fields.city, fields.email].filter(Boolean).join('\n');
     const submitFields = { ...fields, contacts };
+    if (Array.isArray(submitFields.project_experience)) {
+      submitFields.project_experience = await enforceManagedProjectFields(emp.project_experience, submitFields.project_experience, emp.id);
+    }
     const certParts = [fields.certification, fields.courses ? 'Обучающие курсы: ' + fields.courses : ''].filter(Boolean);
     if (certParts.length) submitFields.certification = 'Сертификация 1С:\n' + certParts.join('\n\n');
     else submitFields.certification = '';

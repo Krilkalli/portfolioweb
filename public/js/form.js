@@ -222,6 +222,14 @@ function viewValue(text) {
 function viewField(label, text) {
   return `<div class="view-field"><div class="view-field-label">${escHtml(label)}</div>${viewValue(text)}</div>`;
 }
+function viewProjectDescription(description, text) {
+  const blocks = String(text || '').split(',').map(value => value.trim()).filter(Boolean);
+  const base = String(description || '').split(/\r?\n/)
+    .filter(line => !line.trim().toLowerCase().startsWith('функциональные блоки:'))
+    .join('\n').trim();
+  const combined = [base, blocks.length ? `Функциональные блоки: ${blocks.join(', ')}` : ''].filter(Boolean).join('\n');
+  return viewField('Описание проекта', combined);
+}
 function renderAccordionView(items, getTitle, getBody, emptyText) {
   if (!items.length) return `<div class="view-empty">${emptyText}</div>`;
   return items.map(item =>
@@ -372,7 +380,7 @@ function getJobData() {
   };
 }
 
-function addProjectEntry(data) {
+function addProjectEntry(data, openEntry = false) {
   let pStart = '';
   let pEnd = '';
   if (data?.period) {
@@ -384,24 +392,34 @@ function addProjectEntry(data) {
       pStart = data.period.trim();
     }
   }
+  const projectId = Number(data?.project_id || 0);
+  // Карточка сотрудника не предназначена для редактирования общих данных
+  // проекта даже при активной сессии администратора в этом браузере.
+  const managedLocked = true;
+  const lockedAttr = 'readonly disabled aria-readonly="true" aria-disabled="true" title="Поле заполняется руководителем проекта или администратором"';
+  const periodEndLockedAttr = (managedLocked || pEnd === 'настоящее время') ? 'readonly' : '';
+  const functionalBlocks = Array.isArray(data?.functional_blocks) && data.functional_blocks.length
+    ? data.functional_blocks
+    : String(data?.task_description || '').split(',').map(value => value.trim()).filter(Boolean);
   const c = document.getElementById('projectExperienceContainer');
   const e = document.createElement('details');
   e.className = 'proj-entry accordion-entry';
-  e.open = !(data?.client || data?.project_description);
+  e.dataset.projectId = projectId ? String(projectId) : '';
+  e.open = openEntry;
   e.innerHTML = `
     <summary class="proj-summary">${escHtml(projectTitle(data))}</summary>
     <div class="accordion-body">
-      <button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,'proj-entry')">✕</button>
+      ${managedLocked ? '<div style="margin-bottom:12px;padding:9px 11px;border-radius:8px;background:rgba(59,130,246,0.10);color:var(--text-secondary);font-size:0.8rem;">Общие данные проекта заполняет РП или администратор. Сотрудник может дополнить только свою должность и роль.</div>' : '<button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,\'proj-entry\')">✕</button>'}
       <div class="form-group" style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label class="form-label">Начало периода (проект)</label>
-          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ или ГГГГ (до 2021)" value="${escHtml(pStart)}">
+          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ или ГГГГ (до 2021)" value="${escHtml(pStart)}" ${lockedAttr}>
         </div>
         <div style="flex:1;">
           <label class="form-label">Конец периода</label>
-          <input type="text" class="form-control proj-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${pEnd === 'настоящее время' ? 'readonly' : ''}>
+          <input type="text" class="form-control proj-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${periodEndLockedAttr} ${managedLocked ? 'aria-readonly="true" title="Период задаёт РП или администратор"' : ''}>
           <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
-            <input type="checkbox" class="proj-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''}> настоящее время
+            <input type="checkbox" class="proj-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''} ${managedLocked ? 'disabled title="Период задаёт РП или администратор"' : ''}> настоящее время
           </label>
         </div>
       </div>
@@ -409,18 +427,20 @@ function addProjectEntry(data) {
         <input type="text" class="form-control proj-position" placeholder="Консультант по внедрению 1С" value="${escHtml(data?.position||'')}"></div>
       <div class="form-group"><label class="form-label">Роль в рамках проекта</label>
         <input type="text" class="form-control proj-role" placeholder="Разработчик / Архитектор / Аналитик" value="${escHtml(data?.role||'')}"></div>
-      <div class="form-group"><label class="form-label">Размер команды</label>
-        <input type="text" class="form-control proj-team" placeholder="5 человек" value="${escHtml(data?.team_size||'')}"></div>
-      <div class="form-group"><label class="form-label">Название проекта</label>
-        <input type="text" class="form-control proj-name" placeholder="Оптимизация моделирования" value="${escHtml(data?.project_name||'')}"></div>
+      <div class="form-group"><label class="form-label">Количество участников команды</label>
+        <input type="number" min="0" step="1" class="form-control proj-team" placeholder="Например: 12" value="${escHtml(data?.team_size||'')}" ${lockedAttr}></div>
+      <div class="form-group"><label class="form-label">Название в резюме</label>
+        <input type="text" class="form-control proj-name" placeholder="Например: Автоматизация казначейства" value="${escHtml(data?.project_name||'')}" ${lockedAttr}></div>
       <div class="form-group"><label class="form-label">Заказчик + отрасль</label>
-        <input type="text" class="form-control proj-client" placeholder="ООО «Пример» (нефтегазовая отрасль)" value="${escHtml(data?.client||'')}"></div>
+        <input type="text" class="form-control proj-client" placeholder="Например: крупная нефтяная компания" value="${escHtml(data?.client||'')}" ${lockedAttr}></div>
       <div class="form-group"><label class="form-label">Описание проекта</label>
-        <textarea class="form-control proj-descr" rows="2" placeholder="Краткое описание проекта">${escHtml(data?.project_description||'')}</textarea></div>
-      <div class="form-group"><label class="form-label">Описание задачи, реализованной сотрудником</label>
-        <textarea class="form-control proj-task" rows="2" placeholder="Что было сделано?">${escHtml(data?.task_description||'')}</textarea></div>
+        <textarea class="form-control proj-descr" rows="3" placeholder="Краткое описание проекта" ${lockedAttr}>${escHtml([String(data?.project_description || '').replace(/\n?Функциональные блоки:.*$/im, '').trim(), functionalBlocks.length ? `Функциональные блоки: ${functionalBlocks.join(', ')}` : ''].filter(Boolean).join('\n'))}</textarea>
+        <input type="hidden" class="proj-task" value="">
+      </div>
+      <div class="form-group"><label class="form-label">Функциональная область</label>
+        <textarea class="form-control proj-functional-area" rows="2" placeholder="Заполняется автоматически из УПП" ${lockedAttr}>${escHtml(data?.functional_area || '')}</textarea></div>
       <div class="form-group"><label class="form-label">Программные продукты / Технологии</label>
-        <input type="text" class="form-control proj-tech" placeholder="1С:ERP 2.5, XML, JSON, REST API" value="${escHtml(data?.technologies||'')}"></div>
+        <input type="text" class="form-control proj-tech" placeholder="Например: 1С:ERP 2.5, XML, JSON, REST API" value="${escHtml(data?.technologies||'')}" ${lockedAttr}></div>
     </div>`;
   c.appendChild(e);
   
@@ -456,6 +476,7 @@ function loadProjectData(arr) {
 
 function getProjectData() {
   return Array.from(document.querySelectorAll('.proj-entry')).map(el => ({
+    project_id: Number(el.dataset.projectId || 0) || null,
     period: [el.querySelector('.proj-period-start').value.trim(), el.querySelector('.proj-period-end').value.trim()].filter(Boolean).join(' - '),
     project_name: el.querySelector('.proj-name').value.trim(),
     position: el.querySelector('.proj-position').value.trim(),
@@ -464,6 +485,7 @@ function getProjectData() {
     client: el.querySelector('.proj-client').value.trim(),
     project_description: el.querySelector('.proj-descr').value.trim(),
     task_description: el.querySelector('.proj-task').value.trim(),
+    functional_area: el.querySelector('.proj-functional-area').value.trim(),
     technologies: el.querySelector('.proj-tech').value.trim(),
   })).filter(p => p.period || p.position || p.role || p.client || p.project_description);
 }
@@ -527,9 +549,10 @@ function showForm(emp) {
   else myProjectsBtn?.classList.add('hidden');
   const projectExperienceBody = document.getElementById('projectExperienceBody');
   const projectExperienceToggle = document.getElementById('toggleProjectExperienceBtn');
-  if (emp.is_rp && projectExperienceBody && projectExperienceToggle) {
+  if (projectExperienceBody && projectExperienceToggle) {
     projectExperienceBody.style.display = 'none';
     projectExperienceToggle.textContent = 'Развернуть';
+    projectExperienceToggle.setAttribute('aria-expanded', 'false');
   }
   const avatarEl = document.getElementById('avatarEl');
   if (emp.photo) {
@@ -644,8 +667,8 @@ function renderViewContent() {
   document.getElementById('viewProjects').innerHTML = renderAccordionView(getProjectData(),
     projectTitle,
     d => viewField('Период', d.period) + viewField('Должность', d.position) + viewField('Роль', d.role) +
-      viewField('Размер команды', d.team_size) + viewField('Заказчик + отрасль', d.client) +
-      viewField('Описание проекта', d.project_description) + viewField('Описание задачи', d.task_description) +
+      viewField('Количество участников команды', d.team_size) + viewField('Заказчик + отрасль', d.client) +
+      viewProjectDescription(d.project_description, d.task_description) + viewField('Функциональная область', d.functional_area) +
       viewField('Технологии', d.technologies),
     'Проектный опыт не указан');
 }
@@ -912,9 +935,12 @@ document.getElementById('myProjectsBtn').addEventListener('click', () => {
 
 document.getElementById('toggleProjectExperienceBtn').addEventListener('click', () => {
   const body = document.getElementById('projectExperienceBody');
-  const hidden = body.style.display === 'none';
-  body.style.display = hidden ? 'block' : 'none';
-  document.getElementById('toggleProjectExperienceBtn').textContent = hidden ? 'Свернуть' : 'Развернуть';
+  const button = document.getElementById('toggleProjectExperienceBtn');
+  const expanding = body.style.display === 'none';
+  body.style.display = expanding ? 'block' : 'none';
+  if (!expanding) body.querySelectorAll('.accordion-entry').forEach(project => { project.open = false; });
+  button.textContent = expanding ? 'Свернуть' : 'Развернуть';
+  button.setAttribute('aria-expanded', String(expanding));
 });
 
 document.querySelectorAll('#starRating button').forEach(btn => {
@@ -937,7 +963,7 @@ document.getElementById('addTotalJobBtn').addEventListener('click', () => {
   addTotalJobEntry({ company: '', position: '', period: '' }); trackChanges();
 });
 document.getElementById('addProjectBtn').addEventListener('click', () => {
-  addProjectEntry({ period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', technologies: '' }); trackChanges();
+  addProjectEntry({ period: '', position: '', role: '', team_size: '', client: '', project_description: '', task_description: '', functional_area: '', technologies: '' }, true); trackChanges();
 });
 
 function escHtml(str) {
