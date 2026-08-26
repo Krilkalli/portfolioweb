@@ -1,6 +1,10 @@
 const ldap = require('ldapjs');
 const config = require('../config');
 
+function getAccountName(emailOrUsername) {
+  return String(emailOrUsername || '').trim().split('@')[0];
+}
+
 /**
  * Проверяет логин/пароль через bind к Active Directory.
  * Возвращает true при успехе, бросает ошибку при неверных данных
@@ -8,6 +12,7 @@ const config = require('../config');
  */
 function bindAD(username, password) {
   return new Promise((resolve, reject) => {
+    const accountName = getAccountName(username);
     const client = ldap.createClient({
       url: config.ad.url,
       connectTimeout: 3000, // не ждём вечно, если сервер недоступен
@@ -22,10 +27,10 @@ function bindAD(username, password) {
       reject(new Error('AD недоступен: ' + err.message));
     });
 
-    client.bind(`${username}@${config.ad.domain}`, password, (err) => {
+    client.bind(`${accountName}@${config.ad.domain}`, password, (err) => {
       if (err) {
         client.unbind();
-        return reject(new Error('Неверный логин или пароль (AD)'));
+        return reject(new Error('Неверная почта или пароль (AD)'));
       }
       resolve(client); // передаём открытый клиент дальше — он уже авторизован
     });
@@ -38,10 +43,11 @@ function bindAD(username, password) {
  */
 function getUserGroups(client, username) {
   return new Promise((resolve, reject) => {
+    const accountName = getAccountName(username);
     const domainParts = config.ad.domain.split('.').map(p => `dc=${p}`).join(',');
     const searchBase = domainParts;
     const opts = {
-      filter: `(sAMAccountName=${username})`,
+      filter: `(sAMAccountName=${accountName})`,
       scope: 'sub',
       attributes: ['memberOf'],
     };
@@ -70,11 +76,12 @@ function getUserGroups(client, username) {
  * Возвращает { username, role, groups } при успехе.
  */
 async function authenticateAD(username, password) {
-  const client = await bindAD(username, password);
+  const accountName = getAccountName(username);
+  const client = await bindAD(accountName, password);
   try {
-    const groups = await getUserGroups(client, username);
+    const groups = await getUserGroups(client, accountName);
     const role = groups.includes(config.ad.adminGroup) ? 'admin' : config.ad.defaultRole;
-    return { username, role, groups };
+    return { username: accountName, role, groups };
   } finally {
     client.unbind();
   }

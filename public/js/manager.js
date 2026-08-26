@@ -169,7 +169,7 @@ function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   const searchQuery = document.getElementById('searchInput').value.trim();
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => {
@@ -183,45 +183,47 @@ function renderTable(list) {
       </div>` : '';
     return `
     <tr class="${e.status === 'archived' ? 'row-archived' : ''}">
-      <td class="col-check" style="text-align:center;">
+      <td class="col-check" data-label="Выбрать" style="text-align:center;">
         <input type="checkbox" class="emp-check" data-id="${e.id}" ${selectedIds.has(e.id) ? 'checked' : ''} ${e.status === 'archived' ? 'disabled' : ''}>
       </td>
-      <td style="text-align:left;">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-          ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${escHtml(e.photo)}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>`}
+      <td class="employee-primary col-employee" data-label="Сотрудник" style="text-align:left;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="employee-avatar-wrap">
+            ${e.photo ? `<div class="avatar" style="background-image:url('/uploads/${escHtml(e.photo)}');background-size:cover;background-position:center;color:transparent;${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>` : `<div class="avatar" style="${e.status === 'archived' ? 'opacity:0.4' : ''}">${escHtml(initials(e.name))}</div>`}
+            ${e.is_rp ? '<span class="employee-rp-marker">РП</span>' : ''}
+          </div>
           <div>
-            <div class="employee-name" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.is_rp ? '<span class="badge badge-accent" style="font-size:0.62rem;padding:2px 7px;">РП</span>' : ''}${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div class="employee-name"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
             ${matchHtml}
           </div>
         </div>
       </td>
-      <td style="text-align:left;">
+      <td class="col-role" data-label="Должность" style="text-align:left;">
         <span class="employee-pos" style="display:block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${escHtml(e.position || '')}">${escHtml(e.position || '—')}</span>
       </td>
-      <td style="text-align:left;">
-        <span style="font-size:0.82rem;color:var(--text-secondary)">${escHtml(e.city || '—')}</span>
+      <td class="col-city" data-label="Город" style="text-align:left;">
+        <span class="employee-city">${escHtml(e.city || '—')}</span>
       </td>
-      <td style="text-align:left;">
-        ${e.status === 'archived'
-          ? '<span class="badge badge-muted">Архив</span>'
-            : e.pendingCount > 0
-              ? `<a href="/review.html" class="badge badge-warning" style="text-decoration:none;cursor:pointer;"><i class="fi fi-rr-bolt"></i> ${e.pendingCount} изм.</a>`
-            : `<span class="badge badge-muted">Актуально</span>`}
+      <td class="col-status" data-label="Статус и дата" style="text-align:left;">
+        <div class="employee-status-wrap">
+          ${e.status === 'archived'
+            ? '<span class="badge badge-muted">Архив</span>'
+              : e.pendingCount > 0
+                ? `<a href="/review.html" class="badge badge-warning" style="text-decoration:none;cursor:pointer;"><i class="fi fi-rr-bolt"></i> ${e.pendingCount} изм.</a>`
+              : `<span class="badge badge-muted">Актуально</span>`}
+          <span class="employee-updated">Обновлено ${formatDate(e.updated_at)}</span>
+        </div>
       </td>
-      <td style="text-align:left;font-size:0.82rem;color:var(--text-muted);white-space:nowrap;">${formatDate(e.updated_at)}</td>
-      <td class="col-link" style="text-align:left;">
+      <td class="col-link" data-label="Ссылка" style="text-align:center;">
         ${e.status !== 'archived'
-          ? `<div style="display:flex;align-items:center;gap:4px;max-width:220px;">
-              <a class="link-cell" href="${e.link}" target="_blank" rel="noopener" title="${e.link}">${e.link}</a>
-              <button class="btn btn-ghost btn-icon" style="width:26px;height:26px;font-size:0.7rem;flex-shrink:0;" onclick="copyToClipboard('${e.link}')" title="Скопировать ссылку"><i class="fi fi-rr-clipboard"></i></button>
-            </div>`
+          ? `<button class="btn btn-ghost btn-icon copy-link-btn" onclick="copyToClipboard('${e.link}')" title="Скопировать персональную ссылку" aria-label="Скопировать персональную ссылку"><i class="fi fi-rr-clipboard"></i></button>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-resume" style="text-align:center;">
+      <td class="col-resume" data-label="Резюме" style="text-align:center;">
         ${e.status !== 'archived'
           ? `<div class="resume-menu" style="position:relative;display:inline-flex;">
-              <button class="btn btn-primary btn-sm" onclick="toggleResumeMenu(this)" style="min-width:80px;"><i class="fi fi-rr-document"></i> Резюме</button>
+              <button class="btn btn-primary btn-icon resume-icon-btn" onclick="toggleResumeMenu(this)" title="Скачать резюме" aria-label="Скачать резюме"><i class="fi fi-rr-document"></i></button>
               <div class="resume-dropdown">
                 <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=docx" target="_blank"><i class="fi fi-rr-document"></i> Word (DOCX)</a>
                 <a class="resume-dropdown-item" href="/api/employees/${e.id}/resume?format=pdf" target="_blank"><i class="fi fi-rr-file-pdf"></i> PDF</a>
@@ -229,12 +231,12 @@ function renderTable(list) {
             </div>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
-      <td class="col-actions" style="text-align:center;">
+      <td class="col-actions" data-label="Действия" style="text-align:center;">
         <div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
             ? `<button class="btn btn-primary btn-icon" style="width:32px;height:32px;" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Восстановить"><i class="fi fi-rr-undo"></i></button>
                <button class="btn btn-icon" style="width:32px;height:32px;background:rgba(239,68,68,0.15);color:var(--danger);margin-left:6px;" onclick="deleteEmployeePermanently(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Удалить безвозвратно"><i class="fi fi-rr-trash"></i></button>`
-            : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" style="font-size:1.2rem;line-height:1;padding:4px 10px;letter-spacing:2px;">⋮</button>
+            : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" title="Действия"><span class="desktop-only" style="font-size:1.2rem;line-height:1;letter-spacing:2px;">⋮</span><span class="mobile-only">Действия</span></button>
                <div class="action-dropdown">
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>
                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-box"></i> Архив</button>
@@ -808,7 +810,9 @@ function applyRoleUI(role) {
 
   currentManager = auth.manager;
   const nm = document.getElementById('navbarManager');
-  if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
+  if (nm && auth.manager) nm.textContent = `${auth.manager.name} — ${auth.manager.email}`;
+  const senderEmail = document.getElementById('mailSenderEmail');
+  if (senderEmail) senderEmail.textContent = auth.manager?.email || '—';
 
   initTheme();
   applyRoleUI(auth.manager?.role || 'leader');

@@ -5,11 +5,12 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Дашборд — Портфолио IS1C</title>
   <meta name="description" content="Управление портфолио сотрудников — список сотрудников и ссылки">
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <style>
     .main-content { padding: 32px 0; flex: 1; }
     .employee-name { font-weight: 600; font-size: 0.9rem; }
-    .employee-pos  { font-size: 0.78rem; color: var(--text-muted); }
+    .employee-pos  { font-size: 0.86rem; color: var(--text-muted); }
     .experience-match {
       margin-top: 6px;
       padding: 5px 7px;
@@ -49,21 +50,18 @@
     #employeesTable { width: 100%; table-layout: fixed; }
     #employeesTable thead { position: sticky; top: 0; z-index: 10; }
     #employeesTable thead th { background: var(--bg-secondary); }
-    #employeesTable .col-link { width: 200px; overflow: hidden; }
-    #employeesTable .col-link .link-cell {
-      display: block;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
+    #employeesTable .col-employee { width: 30%; }
+    #employeesTable .col-role { width: 18%; }
+    #employeesTable .col-city { width: 110px; }
+    #employeesTable .col-status { width: 150px; }
+    #employeesTable .col-link { width: 64px; }
     #employeesTable .col-resume {
-      width: 100px;
+      width: 72px;
       text-align: center;
       vertical-align: middle;
     }
     #employeesTable .col-actions {
-      width: 130px;
+      width: 64px;
       text-align: center;
       vertical-align: middle;
     }
@@ -72,8 +70,26 @@
     #employeesTable th.col-actions { white-space: nowrap; }
     #employeesTable td { text-align: center; }
     #employeesTable td:first-child + td { text-align: left; }
-    #employeesTable td.col-link { text-align: left; }
-    #employeesTable td.col-resume { text-align: center; }
+    #employeesTable td.col-role,
+    #employeesTable td.col-city,
+    #employeesTable td.col-status { font-size: 0.86rem; }
+    #employeesTable .employee-city { font-size: 0.86rem; }
+    #employeesTable .employee-updated { font-size: 0.8rem; }
+    #employeesTable .col-status .badge { font-size: 0.8rem; }
+    #employeesTable th.col-link,
+    #employeesTable th.col-resume,
+    #employeesTable td.col-link,
+    #employeesTable td.col-resume {
+      padding-left: 0;
+      padding-right: 0;
+      text-align: center !important;
+    }
+    #employeesTable td.col-link .copy-link-btn { margin-inline: auto; }
+    #employeesTable td.col-resume .resume-menu {
+      display: flex !important;
+      justify-content: center;
+      width: 100%;
+    }
     #employeesTable td.col-actions { text-align: center; }
 
     .resume-dropdown {
@@ -177,8 +193,10 @@
 <!-- Navbar -->
 <nav class="navbar">
   <div class="navbar-brand">
-    <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
-    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
     <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
@@ -304,18 +322,17 @@
             <th class="col-check" style="text-align:center;width:40px;">
               <input type="checkbox" id="selectAll">
             </th>
-            <th style="text-align:left;">Сотрудник</th>
-            <th style="text-align:left;">Должность</th>
-            <th style="text-align:left;">Город</th>
-            <th style="text-align:left;">Статус</th>
-            <th class="col-date" style="text-align:left;">Обновлено</th>
-            <th class="col-link" style="text-align:left;">Ссылка</th>
+            <th class="col-employee" style="text-align:left;">Сотрудник</th>
+            <th class="col-role" style="text-align:left;">Должность</th>
+            <th class="col-city" style="text-align:left;">Город</th>
+            <th class="col-status" style="text-align:left;">Статус</th>
+            <th class="col-link" style="text-align:center;">Ссылка</th>
             <th class="col-resume" style="text-align:center;">Резюме</th>
             <th class="col-actions" style="text-align:center;"></th>
           </tr>
         </thead>
         <tbody id="employeesTbody">
-          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--text-muted)">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">
             <span class="spinner"></span>
           </td></tr>
         </tbody>
@@ -391,6 +408,9 @@
       <div id="selectedRecipientsInfo" style="background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:16px;font-size:0.9rem;">
         👥 Выбрано: 0 сотрудников
       </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin:-6px 0 16px;">
+        Отправитель: <strong id="mailSenderEmail" style="color:var(--text-secondary);">—</strong>
+      </div>
 
       <form id="massMailForm">
         <div class="form-group">
@@ -424,5 +444,6 @@
 
 <script src="/js/employee-search.js"></script>
 <script src="/js/manager.js"></script>
+<script src="/js/navbar.js"></script>
 </body>
 </html>

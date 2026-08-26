@@ -6,7 +6,7 @@ const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { composeProjectDescription } = require('../projectDescription');
-const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
+const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyProjectMembersAdded } = require('../mailer');
 const https = require('https');
 const querystring = require('querystring');
 
@@ -30,6 +30,12 @@ function formatManagedProjectPeriod(project) {
     project?.start_period || '',
     project?.end_present ? 'настоящее время' : (project?.end_period || ''),
   ].filter(Boolean).join(' - ');
+}
+
+function projectMemberIds(project) {
+  return new Set((project?.team_members || [])
+    .map(member => Number(member?.employee_id || member?.id || 0))
+    .filter(Boolean));
 }
 
 async function enforceManagedProjectFields(currentValue, submittedValue, employeeId = null) {
@@ -181,7 +187,20 @@ router.put('/:token/projects/:projectId', async (req, res, next) => {
     const fields = Object.fromEntries(allowed.filter(key => req.body?.[key] !== undefined).map(key => [key, req.body[key]]));
     const updated = await helpers.updateProject(Number(req.params.projectId), fields);
     if (updated) await helpers.syncProjectTeamMembers(updated);
-    res.json({ ok: true, project: updated });
+    const previousMemberIds = projectMemberIds(project);
+    const addedMemberIds = [...projectMemberIds(updated)]
+      .filter(employeeId => !previousMemberIds.has(employeeId) && employeeId !== Number(updated?.leader_employee_id));
+    let notifications = { sent: 0, failed: 0, skipped: 0 };
+    if (addedMemberIds.length) {
+      try {
+        const base = `${req.protocol}://${req.get('host')}`;
+        notifications = await notifyProjectMembersAdded(updated, addedMemberIds, emp.name, base);
+      } catch (mailError) {
+        console.error('Ошибка уведомления участников проекта:', mailError.message);
+        notifications.failed = addedMemberIds.length;
+      }
+    }
+    res.json({ ok: true, project: updated, notifications });
   } catch (err) { next(err); }
 });
 

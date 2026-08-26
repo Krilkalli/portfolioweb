@@ -295,7 +295,14 @@ async function saveProject(id) {
   });
   const d = await r.json();
   if (r.ok) {
-    toast('Проект сохранён', 'success');
+    const notifications = d.notifications || {};
+    if (notifications.failed || notifications.skipped) {
+      toast(`Проект сохранён. Письма: отправлено ${notifications.sent || 0}, не отправлено ${(notifications.failed || 0) + (notifications.skipped || 0)}`, 'warning');
+    } else if (notifications.sent) {
+      toast(`Проект сохранён. Новым участникам отправлено писем: ${notifications.sent}`, 'success');
+    } else {
+      toast('Проект сохранён', 'success');
+    }
     await loadProjects();
   } else {
     toast(d.error || 'Ошибка сохранения', 'error');

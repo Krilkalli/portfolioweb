@@ -11,7 +11,7 @@ const { convertToPdf, hasLibreOffice } = require('../pdfconv');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection, sendMail } = require('../mailer');
+const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, notifyProjectMembersAdded, testConnection, sendMail } = require('../mailer');
 const { parseProjectExperienceFile } = require('../projectExperienceImport');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
@@ -53,6 +53,27 @@ function requireCanEdit(req, res, next) {
   const role = req.session.managerRole || 'leader';
   if (role === 'leader') return res.status(403).json({ error: 'Руководитель не может редактировать данные' });
   next();
+}
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function isEmail(value) {
+  return /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(value);
+}
+
+function senderWithEmail(value, email) {
+  const displayName = String(value || '')
+    .replace(/<[^>]*>/g, '')
+    .trim() || 'Портфолио IS1C';
+  return `${displayName} <${email}>`;
+}
+
+function projectMemberIds(project) {
+  return new Set((project?.team_members || [])
+    .map(member => Number(member?.employee_id || member?.id || 0))
+    .filter(Boolean));
 }
 
 router.get('/employees', requireAuth, async (req, res, next) => {
@@ -497,10 +518,25 @@ router.post('/projects', requireAdmin, async (req, res, next) => {
 
 router.put('/projects/:id', requireAdmin, async (req, res, next) => {
   try {
+    const previousProject = await helpers.getProjectById(Number(req.params.id));
+    if (!previousProject) return res.status(404).json({ error: 'Проект не найден' });
     const project = await helpers.updateProject(Number(req.params.id), req.body || {});
-    if (!project) return res.status(404).json({ error: 'Проект не найден' });
     await helpers.syncProjectTeamMembers(project);
-    res.json({ ok: true, project });
+    const previousMemberIds = projectMemberIds(previousProject);
+    const addedMemberIds = [...projectMemberIds(project)]
+      .filter(employeeId => !previousMemberIds.has(employeeId) && employeeId !== Number(project.leader_employee_id));
+    let notifications = { sent: 0, failed: 0, skipped: 0 };
+    if (addedMemberIds.length) {
+      try {
+        const base = `${req.protocol}://${req.get('host')}`;
+        const senderEmail = req.session.managerEmail || req.session.managerLogin || '';
+        notifications = await notifyProjectMembersAdded(project, addedMemberIds, project.leader_name, base, senderEmail);
+      } catch (mailError) {
+        console.error('Ошибка уведомления участников проекта:', mailError.message);
+        notifications.failed = addedMemberIds.length;
+      }
+    }
+    res.json({ ok: true, project, notifications });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -594,6 +630,7 @@ router.get('/settings', requireAuth, async (req, res, next) => {
     const keys = ['smtp_host','smtp_port','smtp_user','smtp_from','manager_email', 'positions'];
     const out  = {};
     for (const k of keys) out[k] = await helpers.getSetting(k);
+    out.current_manager_email = req.session.managerEmail || req.session.managerLogin || '';
     try { out.positions = JSON.parse(out.positions || '[]'); } catch { out.positions = []; }
     res.json(out);
   } catch (err) { next(err); }
@@ -602,12 +639,20 @@ router.get('/settings', requireAuth, async (req, res, next) => {
 router.put('/settings', requireAuth, async (req, res, next) => {
   try {
     const role = req.session.managerRole || 'admin';
+    const managerEmail = normalizeEmail(req.session.managerEmail || req.session.managerLogin);
+    if (!isEmail(managerEmail)) return res.status(400).json({ error: 'Войдите в систему по электронной почте повторно' });
     const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review'];
     const canEdit = ['manager_email'];
+    const payload = {
+      ...req.body,
+      smtp_user: managerEmail,
+      smtp_from: senderWithEmail(req.body.smtp_from, managerEmail),
+      manager_email: managerEmail,
+    };
     if (role === 'admin') {
-      for (const k of [...adminOnly, ...canEdit]) if (req.body[k] !== undefined) await helpers.setSetting(k, req.body[k]);
+      for (const k of [...adminOnly, ...canEdit]) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
     } else if (role === 'scrum') {
-      for (const k of canEdit) if (req.body[k] !== undefined) await helpers.setSetting(k, req.body[k]);
+      for (const k of canEdit) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
     } else {
       return res.status(403).json({ error: 'Недостаточно прав для изменения настроек' });
     }
@@ -639,12 +684,14 @@ router.get('/managers', requireAdmin, async (req, res, next) => {
 
 router.post('/managers', requireAdmin, async (req, res, next) => {
   try {
-    const { name, login, password, role } = req.body;
+    const { name, password, role } = req.body;
+    const email = normalizeEmail(req.body.email || req.body.login);
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
-    if (!login || !login.trim()) return res.status(400).json({ error: 'Логин обязателен' });
+    if (!email) return res.status(400).json({ error: 'Почта обязательна' });
+    if (!isEmail(email)) return res.status(400).json({ error: 'Введите корректный адрес электронной почты' });
     if (!password || password.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
     const hash = require('bcryptjs').hashSync(password, 10);
-    const manager = await helpers.createManager(name.trim(), login.trim(), hash, role);
+    const manager = await helpers.createManager(name.trim(), email, hash, role);
     res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role } });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -726,7 +773,8 @@ router.post('/mass-mailing', requireCanEdit, async (req, res, next) => {
 
     const { notifyMassMailing } = require('../mailer');
     const base = `${req.protocol}://${req.get('host')}`;
-    const results = await notifyMassMailing(employees, subject, htmlContent, base);
+    const senderEmail = req.session.managerEmail || req.session.managerLogin || '';
+    const results = await notifyMassMailing(employees, subject, htmlContent, base, senderEmail);
 
     const successCount = results.filter(r => r.success).length;
     const failCount = results.filter(r => !r.success).length;

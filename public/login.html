@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Вход — Портфолио IS1C</title>
   <meta name="description" content="Вход в систему управления портфолио сотрудников IS1C">
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
@@ -13,22 +14,25 @@
   <div class="login-card fade-in">
     <div class="login-logo">
       <div style="display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px;">
-        <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 70px; width: auto;">
-        <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 85px; width: auto;">
+        <a href="/index.html" class="login-logo-link" aria-label="Вернуться на дашборд" title="На дашборд">
+          <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 70px; width: auto;">
+          <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 85px; width: auto;">
+        </a>
         <!-- <h1 style="margin:0;">IS1C Портфолио</h1> -->
       </div>
       <p>Система управления портфолио сотрудников</p>
     </div>
     <form id="loginForm" autocomplete="on">
       <div class="form-group">
-        <label class="form-label" for="login">Логин</label>
+        <label class="form-label" for="email">Электронная почта</label>
         <input
-          id="login"
-          name="login"
-          type="text"
+          id="email"
+          name="email"
+          type="email"
           class="form-control"
-          placeholder="Введите логин"
-          autocomplete="username"
+          placeholder="name@company.ru"
+          autocomplete="email"
+          inputmode="email"
           required
         >
       </div>
@@ -85,7 +89,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('loginBtn');
   const err = document.getElementById('errorMsg');
-  const login = document.getElementById('login').value;
+  const email = document.getElementById('email').value.trim().toLowerCase();
   const password = document.getElementById('password').value;
 
   btn.disabled = true;
@@ -96,7 +100,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ login, password }),
+      body: JSON.stringify({ email, password }),
     });
     const data = await res.json();
 

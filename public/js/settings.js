@@ -352,11 +352,12 @@ async function loadSettings() {
     if (r.status === 401) { location.href = '/login.html'; return; }
     const s = await r.json();
 
+    const managerEmail = currentManager?.email || s.current_manager_email || '';
     document.getElementById('smtp_host').value    = s.smtp_host    || '';
     document.getElementById('smtp_port').value    = s.smtp_port    || '587';
-    document.getElementById('smtp_user').value    = s.smtp_user    || '';
-    document.getElementById('smtp_from').value    = s.smtp_from    || '';
-    document.getElementById('manager_email').value = s.manager_email || '';
+    document.getElementById('smtp_user').value    = managerEmail;
+    document.getElementById('smtp_from').value    = senderWithEmail(s.smtp_from, managerEmail);
+    document.getElementById('manager_email').value = managerEmail;
 
     // AI Settings
     if (document.getElementById('ai_base_url')) {
@@ -369,6 +370,14 @@ async function loadSettings() {
       }
     }
   } catch { toast('Не удалось загрузить настройки', 'error'); }
+}
+
+function senderWithEmail(value, email) {
+  if (!email) return value || '';
+  const displayName = String(value || '')
+    .replace(/<[^>]*>/g, '')
+    .trim() || 'Портфолио IS1C';
+  return `${displayName} <${email}>`;
 }
 
 
@@ -384,9 +393,9 @@ document.getElementById('smtpForm').addEventListener('submit', async (e) => {
   const payload = {
     smtp_host:     document.getElementById('smtp_host').value.trim(),
     smtp_port:     document.getElementById('smtp_port').value.trim(),
-    smtp_user:     document.getElementById('smtp_user').value.trim(),
-    smtp_from:     document.getElementById('smtp_from').value.trim(),
-    manager_email: document.getElementById('manager_email').value.trim(),
+    smtp_user:     currentManager?.email || document.getElementById('smtp_user').value.trim(),
+    smtp_from:     senderWithEmail(document.getElementById('smtp_from').value, currentManager?.email),
+    manager_email: currentManager?.email || document.getElementById('manager_email').value.trim(),
   };
   const pass = document.getElementById('smtp_pass').value;
   if (pass) payload.smtp_pass = pass;
@@ -561,24 +570,25 @@ async function deleteManager(id) {
 
 document.getElementById('addManagerBtn').addEventListener('click', async () => {
   const name = document.getElementById('newManagerName').value.trim();
-  const login = document.getElementById('newManagerLogin').value.trim();
+  const email = document.getElementById('newManagerEmail').value.trim().toLowerCase();
   const password = document.getElementById('newManagerPass').value;
   const role = document.getElementById('newManagerRole')?.value || 'scrum';
 
   if (!name) { toast('Введите имя менеджера', 'warning'); return; }
-  if (!login) { toast('Введите логин', 'warning'); return; }
+  if (!email) { toast('Введите почту менеджера', 'warning'); return; }
+  if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) { toast('Введите корректную почту менеджера', 'warning'); return; }
   if (password.length < 8) { toast('Пароль должен быть не менее 8 символов', 'warning'); return; }
 
   try {
     const r = await fetch('/api/managers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, login, password, role }),
+      body: JSON.stringify({ name, email, password, role }),
     });
     if (r.ok) {
       toast(`Менеджер «${name}» добавлен`, 'success');
       document.getElementById('newManagerName').value = '';
-      document.getElementById('newManagerLogin').value = '';
+      document.getElementById('newManagerEmail').value = '';
       document.getElementById('newManagerPass').value = '';
       await loadManagers();
     } else {
@@ -669,6 +679,7 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   if (!auth.authenticated) { location.href = '/login.html'; return; }
   currentManager = auth.manager;
   document.getElementById('currentManagerLogin').textContent = currentManager?.email || '';
+  document.getElementById('navbarManager').textContent = currentManager ? `${currentManager.name} — ${currentManager.email}` : '';
 
   initTheme();
   applyRoleUI(currentManager?.role);
@@ -695,38 +706,7 @@ function applyRoleUI(role) {
         c.style.display = 'none';
       }
     });
-    // load scrum email
-    loadScrumEmail();
   }
-}
-
-// ─── Scrum email save ─────────────────────────────────────────────────────
-async function loadScrumEmail() {
-  try {
-    const r = await fetch('/api/settings');
-    const s = await r.json();
-    document.getElementById('scrum_manager_email').value = s.manager_email || '';
-  } catch {}
-}
-
-const scrumEmailForm = document.getElementById('scrumEmailForm');
-if (scrumEmailForm) {
-  scrumEmailForm.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = document.getElementById('saveScrumEmailBtn');
-    const result = document.getElementById('scrumEmailResult');
-    btn.disabled = true;
-    try {
-      const r = await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ manager_email: document.getElementById('scrum_manager_email').value.trim() }),
-      });
-      if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Сохранено'; toast('Email сохранён', 'success'); }
-      else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> ' + (d.error || 'Ошибка'); }
-    } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
-    finally { btn.disabled = false; btn.textContent = 'Сохранить'; setTimeout(() => { result.textContent = ''; }, 5000); }
-  });
 }
 
 // ─── Role change on manager list ────────────────────────────────────────────

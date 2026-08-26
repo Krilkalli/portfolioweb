@@ -523,12 +523,12 @@ async function init() {
   const mgrCount = await _get('SELECT COUNT(*)::int cnt FROM managers');
   if (mgrCount.cnt === 0) {
     const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 10);
-    const login = 'admin';
+    const email = config.defaultManagerEmail;
     await _run(
       'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5)',
-      ['Главный администратор', login, hash, 'admin', new Date().toISOString()]
+      ['Главный администратор', email, hash, 'admin', new Date().toISOString()]
     );
-    console.log(`✅ Создан менеджер по умолчанию: ${login}`);
+    console.log(`✅ Создан менеджер по умолчанию: ${email}`);
   }
 
   // Миграция: установить роль всем менеджерам без роли
@@ -693,6 +693,14 @@ const helpers = {
   async getEmployeesByIds(ids) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     return _all("SELECT id, name FROM employees WHERE id = ANY($1::int[]) AND status = 'active'", [ids.map(Number)]);
+  },
+
+  async getProjectNotificationRecipients(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+    return _all(
+      "SELECT id, name, email, token FROM employees WHERE id = ANY($1::int[]) AND status = 'active'",
+      [ids.map(Number)]
+    );
   },
 
   async getProjectsByIds(ids) {
@@ -1545,8 +1553,8 @@ const helpers = {
   },
 
   // ── Менеджеры ────────────────────────────────────────────────────────────────
-  getManagerByLogin(login) {
-    return _get('SELECT * FROM managers WHERE email = $1', [String(login).trim().toLowerCase()]);
+  getManagerByLogin(email) {
+    return _get('SELECT * FROM managers WHERE email = $1', [String(email).trim().toLowerCase()]);
   },
   getManagerById(id) {
     return _get('SELECT * FROM managers WHERE id = $1', [Number(id)]);
@@ -1555,17 +1563,18 @@ const helpers = {
     return _all('SELECT id, name, email, role, created_at FROM managers ORDER BY name');
   },
 
-  async createManager(name, login, passwordHash, role) {
+  async createManager(name, email, passwordHash, role) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const existing = await client.query('SELECT * FROM managers WHERE email = $1', [String(login).trim().toLowerCase()]);
-      if (existing.rows[0]) throw new Error('Менеджер с таким логином уже существует');
+      const normalizedEmail = String(email).trim().toLowerCase();
+      const existing = await client.query('SELECT * FROM managers WHERE email = $1', [normalizedEmail]);
+      if (existing.rows[0]) throw new Error('Менеджер с такой почтой уже существует');
       const validRoles = ['admin', 'scrum', 'leader'];
       const managerRole = validRoles.includes(role) ? role : 'scrum';
       const result = await client.query(
         'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [String(name || '').trim(), String(login).trim().toLowerCase(), passwordHash, managerRole, new Date().toISOString()]
+        [String(name || '').trim(), normalizedEmail, passwordHash, managerRole, new Date().toISOString()]
       );
       await client.query('COMMIT');
       return result.rows[0];
@@ -1575,6 +1584,10 @@ const helpers = {
     } finally {
       client.release();
     }
+  },
+
+  updateManagerEmail(id, email) {
+    return _run('UPDATE managers SET email = $1 WHERE id = $2', [String(email).trim().toLowerCase(), Number(id)]);
   },
 
   async deleteManager(id) {

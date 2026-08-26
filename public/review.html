@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Проверка изменений — Портфолио IS1C</title>
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <style>
     .main-content { padding: 32px 0; flex: 1; }
@@ -78,8 +79,10 @@
 
 <nav class="navbar">
   <div class="navbar-brand">
-    <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
-    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
@@ -134,5 +137,6 @@
 <div class="toast-container" id="toastContainer"></div>
 
 <script src="/js/review.js"></script>
+<script src="/js/navbar.js"></script>
 </body>
 </html>

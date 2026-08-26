@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Настройки — Портфолио IS1C</title>
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <style>
     .main-content { padding: 32px 0; flex: 1; }
@@ -63,8 +64,10 @@
 
 <nav class="navbar">
   <div class="navbar-brand">
-    <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" style="height: 50px; width: auto;">
-    <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 32px; width: auto; display: none;">
+    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" style="height: 50px; width: auto;">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 60px; width: auto;">
+    </a>
     <!-- <span>IS1C Портфолио</span> -->
   </div>
   <div class="navbar-actions">
@@ -98,8 +101,8 @@
           <input id="smtp_port" name="smtp_port" type="number" class="form-control" placeholder="587" value="587">
         </div>
         <div class="form-group">
-          <label class="form-label" for="smtp_user">Логин <span class="text-muted" style="font-weight:400;">— email-адрес для отправки писем</span></label>
-          <input id="smtp_user" name="smtp_user" type="email" class="form-control" placeholder="noreply@company.ru">
+          <label class="form-label" for="smtp_user">Почта отправителя <span class="text-muted" style="font-weight:400;">— подставляется из вашей учётной записи</span></label>
+          <input id="smtp_user" name="smtp_user" type="email" class="form-control" placeholder="name@company.ru" readonly>
         </div>
         <div class="form-group">
           <label class="form-label" for="smtp_pass">Пароль <span class="text-muted" style="font-weight:400;">— оставьте пустым, чтобы не менять</span></label>
@@ -112,7 +115,7 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="manager_email">Email менеджера <span class="text-muted" style="font-weight:400;">— на этот адрес приходят уведомления о новых изменениях</span></label>
-          <input id="manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru">
+          <input id="manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru" readonly>
         </div>
 
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -180,22 +183,6 @@
           <button type="submit" class="btn btn-primary" id="saveAiBtn">Сохранить настройки ИИ</button>
         </div>
         <div id="aiResult" style="margin-top:12px;font-size:0.875rem;"></div>
-      </form>
-    </div>
-
-    <!-- Scrum-only email section -->
-    <div class="card" data-role="scrum" style="display:none;">
-      <div class="card-header">
-        <span class="card-title"><i class="fi fi-rr-envelope"></i> Email менеджера</span>
-      </div>
-      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">На этот адрес приходят уведомления о новых изменениях.</p>
-      <form id="scrumEmailForm">
-        <div class="form-group">
-          <label class="form-label" for="scrum_manager_email">Email менеджера</label>
-          <input id="scrum_manager_email" name="manager_email" type="email" class="form-control" placeholder="manager@company.ru">
-        </div>
-        <button type="submit" class="btn btn-primary" id="saveScrumEmailBtn">Сохранить</button>
-        <div id="scrumEmailResult" style="margin-top:12px;font-size:0.875rem;"></div>
       </form>
     </div>
 
@@ -302,7 +289,7 @@
       <hr class="divider">
       <div style="display:flex;flex-direction:column;gap:12px;" data-role="admin">
         <input type="text" class="form-control" id="newManagerName" placeholder="Имя менеджера">
-        <input type="text" class="form-control" id="newManagerLogin" placeholder="Логин">
+        <input type="email" class="form-control" id="newManagerEmail" placeholder="Почта менеджера" autocomplete="email" inputmode="email">
         <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 8 символов)">
         <select class="form-control" id="newManagerRole">
           <option value="scrum">Скрам-мастер</option>
@@ -314,7 +301,6 @@
       </div>
     </div>
 
-    Import Card
     <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title"><i class="fi fi-rr-download"></i> Импорт сотрудников из Excel</span>
@@ -404,5 +390,6 @@
 
 <div class="toast-container" id="toastContainer"></div>
 <script src="/js/settings.js"></script>
+<script src="/js/navbar.js"></script>
 </body>
 </html>

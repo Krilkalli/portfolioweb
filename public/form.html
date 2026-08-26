@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Обновление профиля — IS1C</title>
   <meta name="description" content="Форма обновления профиля сотрудника IS1C">
+  <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
   <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
@@ -27,7 +28,8 @@
       top: 0;
       z-index: 100;
     }
-    body.light-theme .form-header {
+    body.light-theme .form-header,
+    html.theme-light-preload .form-header {
       background: rgba(255,255,255,0.9);
     }
     .form-header-left { display: flex; align-items: center; gap: 12px; }
@@ -233,6 +235,11 @@
 
     @media (max-width: 768px) {
       .fields-grid { grid-template-columns: 1fr; }
+      .form-header { padding: 8px 12px; flex-wrap: wrap; }
+      .form-header-left { min-width: 0; flex: 1 1 220px; }
+      .form-header-left #headerSubtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .form-header-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
+      .form-logo-link img { max-height: 44px; }
     }
   </style>
 </head>
@@ -240,12 +247,14 @@
 
 <header class="form-header">
   <div class="form-header-left">
-    <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 50px; width: auto; border-radius: 4px;">
-    <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 60px; width: auto; border-radius: 4px;">
+    <a href="/index.html" class="form-logo-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 50px; width: auto; border-radius: 4px;">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 60px; width: auto; border-radius: 4px;">
+    </a>
     <!-- <span style="font-weight:700;font-size:1rem;">IS1C Портфолио</span> -->
     <span style="color:var(--text-muted);font-size:0.85rem;" id="headerSubtitle">— Обновление профиля</span>
   </div>
-  <div style="display:flex;align-items:center;gap:8px;">
+  <div class="form-header-actions" style="display:flex;align-items:center;gap:8px;">
     <button id="myProjectsBtn" class="btn btn-ghost btn-sm hidden"><i class="fi fi-rr-folder-open"></i> Мои проекты</button>
     <button id="editModeBtn" class="btn btn-primary btn-sm hidden"><i class="fi fi-rr-pencil"></i> Редактировать</button>
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
@@ -530,5 +539,6 @@
 <div class="toast-container" id="toastContainer"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
 <script src="/js/form.js?v=5"></script>
+<script src="/js/navbar.js"></script>
 </body>
 </html>
