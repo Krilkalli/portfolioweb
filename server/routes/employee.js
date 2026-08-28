@@ -17,7 +17,17 @@ if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const sharp   = require('sharp');
 
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    const allowed = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    if (!allowed.has(String(file.mimetype || '').toLowerCase())) {
+      return callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'photo'));
+    }
+    callback(null, true);
+  },
+});
 
 const { enhanceText, enhanceJSON } = require('../ai');
 
@@ -311,6 +321,10 @@ router.post('/:token/submit', async (req, res, next) => {
       return res.json({ ok: true, changed: 0, message: 'Изменений не обнаружено' });
 
     if (req.query.mode === 'manager') {
+      const role = req.session?.managerRole || '';
+      if (!req.session?.isManager || !['admin', 'scrum'].includes(role)) {
+        return res.status(403).json({ error: 'Режим менеджера требует авторизации' });
+      }
       const updates = {};
       for (const c of changes) {
         updates[c.field_name] = submitFields[c.field_name];
@@ -367,6 +381,9 @@ router.post('/:token/photo', upload.single('photo'), async (req, res, next) => {
 
 router.post('/correct-text', async (req, res) => {
   try {
+    if (!req.session?.isManager) {
+      return res.status(401).json({ error: 'Требуется авторизация менеджера' });
+    }
     const { fields } = req.body;
     if (!fields || typeof fields !== 'object')
       return res.status(400).json({ error: 'Нет данных для проверки' });

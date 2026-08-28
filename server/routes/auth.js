@@ -7,13 +7,22 @@ const { authenticateAD } = require('../auth/adAuth');
 
 // ─── Устанавливает сессию и отвечает клиенту ───────────────────────────────
 function setManagerSession(req, res, manager) {
-  req.session.isManager = true;
-  req.session.managerId = manager.id;
-  req.session.managerName = manager.name;
-  req.session.managerEmail = manager.email;
-  req.session.managerLogin = manager.email; // совместимость с уже созданными сессиями
-  req.session.managerRole = manager.role || 'leader';
-  res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader' } });
+  return new Promise((resolve, reject) => {
+    req.session.regenerate((regenerateError) => {
+      if (regenerateError) return reject(regenerateError);
+      req.session.isManager = true;
+      req.session.managerId = manager.id;
+      req.session.managerName = manager.name;
+      req.session.managerEmail = manager.email;
+      req.session.managerLogin = manager.email;
+      req.session.managerRole = manager.role || 'leader';
+      req.session.save((saveError) => {
+        if (saveError) return reject(saveError);
+        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader' } });
+        resolve();
+      });
+    });
+  });
 }
 
 function normalizeEmail(value) {
@@ -74,11 +83,12 @@ router.post('/login', async (req, res, next) => {
           manager.role = adResult.role;
         }
 
-        return setManagerSession(req, res, manager);
+        return await setManagerSession(req, res, manager);
       } catch (adError) {
-        console.log('AD-авторизация не удалась, пробуем локальную базу:', adError.message);
-        // Падаем в локальную проверку ниже, а не отказываем сразу —
-        // это и есть требуемый fallback на случай недоступности AD.
+        console.warn('AD-авторизация не удалась:', adError.message);
+        if (!config.ad.allowLocalFallback) {
+          return res.status(401).json({ error: 'Неверная почта или пароль' });
+        }
       }
     }
 
@@ -88,7 +98,7 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ error: 'Неверная почта или пароль' });
     }
     manager = await migrateManagerEmail(manager, email);
-    setManagerSession(req, res, manager);
+    await setManagerSession(req, res, manager);
   } catch (err) { next(err); }
 });
 

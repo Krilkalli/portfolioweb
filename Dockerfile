@@ -1,8 +1,5 @@
 FROM node:20-alpine
 
-# Устанавливаем Python и компилятор для better-sqlite3
-RUN apk add --no-cache python3 make g++
-
 # Устанавливаем LibreOffice (для конвертации docx -> pdf) и шрифты с поддержкой кириллицы
 # (кириллица уже входит в font-dejavu / font-liberation / font-noto, отдельный пакет не нужен)
 RUN apk add --no-cache \
@@ -17,10 +14,12 @@ WORKDIR /app
 
 # Копируем package.json и устанавливаем зависимости
 COPY package*.json ./
-RUN npm install --production
+RUN npm ci --omit=dev
 
 # Копируем весь код
-COPY . .
+COPY --chown=node:node . .
+
+USER node
 
 EXPOSE 3000
 

@@ -2,9 +2,12 @@ require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
 const config = require('./config');
 const { Store } = require('express-session');
 const { sessions, initPromise } = require('./db');
+const { securityHeaders, createRateLimiter, csrfProtection } = require('./security');
 
 // ─── PostgreSQL Session Store ──────────────────────────────────────────────────
 class PgStore extends Store {
@@ -38,23 +41,38 @@ class PgStore extends Store {
 }
 
 const app = express();
-app.set('trust proxy', 1);
+app.disable('x-powered-by');
+app.set('trust proxy', config.trustProxy);
 
 // ─── Middleware ───────────────────────────────────────────────────────────────
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(securityHeaders);
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb', parameterLimit: 200 }));
+
+app.use('/api/auth/login', createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 8,
+  message: 'Слишком много попыток входа. Повторите через 15 минут.',
+}));
+app.use('/api/form/correct-text', createRateLimiter({ windowMs: 5 * 60 * 1000, max: 15 }));
+app.use('/api/ai', createRateLimiter({ windowMs: 5 * 60 * 1000, max: 30 }));
+app.use('/api/form', createRateLimiter({ windowMs: 5 * 60 * 1000, max: 180 }));
+app.use('/api', createRateLimiter({ windowMs: 5 * 60 * 1000, max: 600 }));
 
 app.use(session({
+  name: 'portfolio.sid',
   store: new PgStore(),
   secret: config.sessionSecret,
   resave: false,
   saveUninitialized: false,
   cookie: {
-    secure: false,
+    secure: config.secureCookies,
     httpOnly: true,
+    sameSite: 'strict',
     maxAge: 8 * 60 * 60 * 1000,
   },
 }));
+app.use('/api', csrfProtection);
 
 // ─── Защита страниц менеджера ─────────────────────────────────────────────────
 const PROTECTED_PAGES = ['/index.html', '/review.html', '/history.html', '/settings.html'];
@@ -89,7 +107,13 @@ app.use('/api/ai',      require('./routes/ai'));
 // ─── Error handler ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  if (err?.name === 'MulterError') {
+    const message = err.code === 'LIMIT_FILE_SIZE'
+      ? 'Файл превышает допустимый размер'
+      : 'Недопустимый файл или превышено ограничение загрузки';
+    return res.status(400).json({ error: message });
+  }
+  res.status(500).json({ error: 'Внутренняя ошибка сервера' });
 });
 
 // ─── 404 ─────────────────────────────────────────────────────────────────────
@@ -100,16 +124,26 @@ app.use((req, res) => {
 
 // ─── Запуск после инициализации БД ────────────────────────────────────────────
 initPromise.then(() => {
-  app.listen(config.port, config.host, () => {
+  const hasTls = Boolean(config.tls.keyPath && config.tls.certPath);
+  const server = hasTls
+    ? https.createServer({
+        key: fs.readFileSync(config.tls.keyPath),
+        cert: fs.readFileSync(config.tls.certPath),
+      }, app)
+    : app;
+  server.listen(config.port, config.host, () => {
+    const protocol = hasTls ? 'https' : 'http';
     console.log(`
   ╔══════════════════════════════════════════╗
   ║   Портфолио IS1C — сервер запущен        ║
-  ║   http://localhost:${config.port}                  ║
+  ║   ${protocol}://localhost:${config.port}                  ║
   ║                                          ║
   ║   Вход менеджера: /login.html            ║
-  ║   Пароль по умолчанию: Admin1234!        ║
   ╚══════════════════════════════════════════╝
     `);
+    if (!hasTls && process.env.NODE_ENV === 'production') {
+      console.warn('⚠️  HTTP без шифрования: настройте корпоративный HTTPS reverse proxy или TLS_CERT_PATH/TLS_KEY_PATH.');
+    }
   });
 }).catch(err => {
   console.error('❌ Не удалось инициализировать БД:', err.message);

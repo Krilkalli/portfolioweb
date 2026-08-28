@@ -16,4 +16,11 @@ node_modules/
 # Загруженные файлы (фото)
 uploads/
 backups/
+*.dump
+data/.session-secret
+data/.initial-admin-password
+data/.admin-reset-password.json
+.npm-cache/
+certs/
+data/.admin-reset-password
 

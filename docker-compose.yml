@@ -1,4 +1,16 @@
 services:
+  secrets-init:
+    image: alpine:3.22
+    command: >-
+      /bin/sh -c "umask 077;
+      if [ ! -s /run/portfolio-secrets/postgres_password ]; then
+        head -c 48 /dev/urandom | base64 > /run/portfolio-secrets/postgres_password;
+      fi;
+      chmod 0444 /run/portfolio-secrets/postgres_password"
+    volumes:
+      - secrets_data:/run/portfolio-secrets
+    restart: "no"
+
   # PostgreSQL база данных
   postgres:
     image: postgres:15
@@ -6,12 +18,11 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: portfolio
-      POSTGRES_PASSWORD: portfolio_password
+      POSTGRES_PASSWORD_FILE: /run/portfolio-secrets/postgres_password
       POSTGRES_DB: portfolio
-    ports:
-      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - secrets_data:/run/portfolio-secrets:ro
       - ./portfolio_backup.dump:/docker-entrypoint-initdb.d/portfolio_backup.dump:ro
       - ./docker/postgres/10-restore-portfolio-backup.sh:/docker-entrypoint-initdb.d/10-restore-portfolio-backup.sh:ro
     networks:
@@ -21,30 +32,9 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  # Тестовый Active Directory (Samba AD DC) — заменяет VirtualBox-ВМ для демо
-  samba-ad:
-    image: nowsci/samba-domain
-    container_name: samba-ad
-    restart: unless-stopped
-    privileged: true
-    cap_add:
-      - SYS_ADMIN
-      - DAC_READ_SEARCH
-      - DAC_OVERRIDE
-    environment:
-      DOMAIN: TEST.LOCAL
-      DOMAINPASS: "YourStr0ngP@ss!"
-      DNS_FORWARDER: 8.8.8.8
-      INSECURE: "true"
-    ports:
-      - "389:389"
-      - "636:636"
-    volumes:
-      - samba_data:/var/lib/samba
-      - samba_config:/etc/samba/external
-    networks:
-      - portfolio-network
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
 
   # Ваш Node.js сервер
   app:
@@ -55,6 +45,8 @@ services:
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
+      - ./certs:/app/certs:ro
+      - secrets_data:/run/portfolio-secrets:ro
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -66,18 +58,31 @@ services:
       - PG_PORT=5432
       - PG_DATABASE=portfolio
       - PG_USER=portfolio
-      - PG_PASSWORD=portfolio_password
-      # Active Directory — теперь тоже внутри Docker-сети, имя сервиса "samba-ad"
-      - AD_ENABLED=true
-      - AD_URL=ldaps://samba-ad:636
-      - AD_DOMAIN=test.local
-      - AD_ADMIN_GROUP=HR_Managers
-      - AD_DEFAULT_ROLE=scrum
+      - PG_PASSWORD_FILE=/run/portfolio-secrets/postgres_password
+      # AD выключен по умолчанию; при включении используется только корпоративный LDAPS.
+      - AD_ENABLED=${AD_ENABLED:-false}
+      - AD_URL=${AD_URL:-}
+      - AD_DOMAIN=${AD_DOMAIN:-test.local}
+      - AD_ADMIN_GROUP=${AD_ADMIN_GROUP:-HR_Managers}
+      - AD_ALLOWED_GROUPS=${AD_ALLOWED_GROUPS:-HR_Managers}
+      - AD_DEFAULT_ROLE=${AD_DEFAULT_ROLE:-leader}
+      - AD_ALLOW_LOCAL_FALLBACK=${AD_ALLOW_LOCAL_FALLBACK:-false}
+      - AD_TLS_REJECT_UNAUTHORIZED=${AD_TLS_REJECT_UNAUTHORIZED:-true}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-false}
+      - TRUST_PROXY=${TRUST_PROXY:-false}
+      - TLS_CERT_PATH=${TLS_CERT_PATH:-}
+      - TLS_KEY_PATH=${TLS_KEY_PATH:-}
+    user: node
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    init: true
     depends_on:
+      secrets-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
-      samba-ad:
-        condition: service_started
     shm_size: "1gb"
     tmpfs:
       - /tmp
@@ -87,8 +92,7 @@ services:
 
 volumes:
   postgres_data:
-  samba_data:
-  samba_config:
+  secrets_data:
 
 networks:
   portfolio-network:

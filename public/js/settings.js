@@ -486,7 +486,7 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
   const confirm = document.getElementById('confirm_password').value;
 
   if (!currentPass) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Введите текущий пароль'; return; }
-  if (newPass.length < 8) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароль должен быть не менее 8 символов'; return; }
+  if (newPass.length < 12) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароль должен быть не менее 12 символов'; return; }
   if (newPass !== confirm) { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Пароли не совпадают'; return; }
 
   btn.disabled = true;
@@ -498,7 +498,16 @@ document.getElementById('passwordForm').addEventListener('submit', async (e) => 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ currentPassword: currentPass, newPassword: newPass }),
     });
-    if (r.ok) { result.style.color = 'var(--success)'; result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Пароль успешно изменён'; toast('Пароль изменён', 'success'); document.getElementById('current_password').value = ''; document.getElementById('new_password').value = ''; document.getElementById('confirm_password').value = ''; }
+    if (r.ok) {
+      const d = await r.json();
+      result.style.color = 'var(--success)';
+      result.innerHTML = '<i class="fi fi-rr-check-circle"></i> Пароль изменён. Выполняется повторный вход…';
+      toast('Пароль изменён', 'success');
+      document.getElementById('current_password').value = '';
+      document.getElementById('new_password').value = '';
+      document.getElementById('confirm_password').value = '';
+      if (d.reauthenticationRequired) setTimeout(() => { window.location.href = '/login.html'; }, 800);
+    }
     else { const d = await r.json(); result.style.color = 'var(--danger)'; result.innerHTML = `<i class="fi fi-rr-cross-circle"></i> ${d.error}`; }
   } catch { result.style.color = 'var(--danger)'; result.innerHTML = '<i class="fi fi-rr-cross-circle"></i> Ошибка соединения'; }
   finally { btn.disabled = false; btn.innerHTML = '<i class="fi fi-rr-key"></i> Сменить пароль'; setTimeout(() => { result.textContent = ''; }, 6000); }
@@ -577,7 +586,7 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
   if (!name) { toast('Введите имя менеджера', 'warning'); return; }
   if (!email) { toast('Введите почту менеджера', 'warning'); return; }
   if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) { toast('Введите корректную почту менеджера', 'warning'); return; }
-  if (password.length < 8) { toast('Пароль должен быть не менее 8 символов', 'warning'); return; }
+  if (password.length < 12) { toast('Пароль должен быть не менее 12 символов', 'warning'); return; }
 
   try {
     const r = await fetch('/api/managers', {

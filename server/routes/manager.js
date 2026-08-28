@@ -3,7 +3,7 @@ const router  = express.Router();
 const bcrypt  = require('bcryptjs');
 const archiver = require('archiver');
 const XLSX    = require('xlsx');
-const { helpers, FIELD_LABELS } = require('../db');
+const { helpers, FIELD_LABELS, sessions } = require('../db');
 const { generateResume } = require('../wordgen');
 const { generatePdfResume } = require('../pdfgen');
 const { generateFromTemplate } = require('../templater');
@@ -17,7 +17,28 @@ const { getPublicBaseUrl } = require('../publicUrl');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
-const upload = multer({ dest: path.join(__dirname, '..', '..', 'uploads') });
+const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+const projectUpload = multer({
+  dest: uploadsDir,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    if (!['.xls', '.xlsx'].includes(extension)) {
+      return callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'file'));
+    }
+    callback(null, true);
+  },
+});
+const templateUpload = multer({
+  dest: uploadsDir,
+  limits: { fileSize: 15 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    if (path.extname(file.originalname || '').toLowerCase() !== '.docx') {
+      return callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'template'));
+    }
+    callback(null, true);
+  },
+});
 
 async function sendReviewSummaryIfDone(employeeId, req) {
   const pendingCount = await helpers.countPendingForEmployee(employeeId);
@@ -77,7 +98,7 @@ function projectMemberIds(project) {
     .filter(Boolean));
 }
 
-router.get('/employees', requireAuth, async (req, res, next) => {
+router.get('/employees', requireCanReview, async (req, res, next) => {
 
   try {
     const base = getPublicBaseUrl(req);
@@ -89,7 +110,7 @@ router.get('/employees', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/employees/:id', requireAuth, async (req, res, next) => {
+router.get('/employees/:id', requireCanReview, async (req, res, next) => {
   try {
     const emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
@@ -149,13 +170,13 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
   } catch (err) { next(err); }
 });
 
-router.get('/pending', requireAuth, async (req, res, next) => {
+router.get('/pending', requireCanReview, async (req, res, next) => {
   try {
     res.json(await helpers.getPendingGrouped());
   } catch (err) { next(err); }
 });
 
-router.get('/approval-history', requireAuth, async (req, res, next) => {
+router.get('/approval-history', requireCanReview, async (req, res, next) => {
   try {
     const history = await helpers.getApprovalHistory(req.query.limit);
     res.json({
@@ -321,7 +342,7 @@ router.get('/position-aliases', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/position-aliases', requireAuth, async (req, res, next) => {
+router.put('/position-aliases', requireCanEdit, async (req, res, next) => {
   try {
     const { aliases, useAliases } = req.body;
     await helpers.setSetting('position_aliases', JSON.stringify({ aliases: aliases || {}, useAliases: !!useAliases }));
@@ -329,7 +350,7 @@ router.put('/position-aliases', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/employees/:id/resume', requireAuth, async (req, res, next) => {
+router.get('/employees/:id/resume', requireCanReview, async (req, res, next) => {
   try {
     let emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
@@ -354,7 +375,7 @@ router.get('/employees/:id/resume', requireAuth, async (req, res, next) => {
   }
 });
 
-router.post('/employees/export', requireAuth, async (req, res, next) => {
+router.post('/employees/export', requireCanReview, async (req, res, next) => {
   try {
     const { ids, format } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
@@ -388,7 +409,7 @@ router.post('/employees/export', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
+router.post('/employees/export-excel', requireCanReview, async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
@@ -574,7 +595,8 @@ router.post('/projects', requireAdmin, async (req, res, next) => {
     const project = await helpers.createProject(req.body || {});
     res.json({ ok: true, project });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Ошибка создания проекта:', err);
+    res.status(400).json({ error: 'Не удалось создать проект. Проверьте заполненные поля.' });
   }
 });
 
@@ -604,7 +626,7 @@ router.put('/projects/:id', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.post('/projects/import', requireAdmin, upload.single('file'), async (req, res, next) => {
+router.post('/projects/import', requireAdmin, projectUpload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const parsed = parseProjectExperienceFile(req.file.path);
@@ -728,11 +750,12 @@ router.post('/settings/test-email', requireAdmin, async (req, res, next) => {
     await testConnection();
     res.json({ ok: true, message: 'Соединение успешно' });
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('Ошибка проверки SMTP:', err);
+    res.status(400).json({ error: 'Не удалось подключиться к почтовому серверу. Проверьте настройки.' });
   }
 });
 
-router.get('/stats', requireAuth, async (req, res, next) => {
+router.get('/stats', requireCanReview, async (req, res, next) => {
   try {
     res.json(await helpers.getStats());
   } catch (err) { next(err); }
@@ -751,8 +774,8 @@ router.post('/managers', requireAdmin, async (req, res, next) => {
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
     if (!email) return res.status(400).json({ error: 'Почта обязательна' });
     if (!isEmail(email)) return res.status(400).json({ error: 'Введите корректный адрес электронной почты' });
-    if (!password || password.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
-    const hash = require('bcryptjs').hashSync(password, 10);
+    if (!password || password.length < 12) return res.status(400).json({ error: 'Пароль должен быть не менее 12 символов' });
+    const hash = require('bcryptjs').hashSync(password, 12);
     const manager = await helpers.createManager(name.trim(), email, hash, role);
     res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role } });
   } catch (e) {
@@ -784,7 +807,7 @@ router.put('/managers/me/password', requireAuth, async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) return res.status(400).json({ error: 'Все поля обязательны' });
-    if (newPassword.length < 8) return res.status(400).json({ error: 'Пароль должен быть не менее 8 символов' });
+    if (newPassword.length < 12) return res.status(400).json({ error: 'Пароль должен быть не менее 12 символов' });
 
     const manager = await helpers.getManagerById(req.session.managerId);
     if (!manager) return res.status(404).json({ error: 'Менеджер не найден' });
@@ -793,13 +816,14 @@ router.put('/managers/me/password', requireAuth, async (req, res, next) => {
       return res.status(400).json({ error: 'Неверный текущий пароль' });
     }
 
-    const hash = bcrypt.hashSync(newPassword, 10);
+    const hash = bcrypt.hashSync(newPassword, 12);
     await helpers.updateManagerPassword(manager.id, hash);
-    res.json({ ok: true });
+    await sessions.destroyForManager(manager.id);
+    req.session.destroy(() => res.json({ ok: true, reauthenticationRequired: true }));
   } catch (err) { next(err); }
 });
 
-router.post('/template/upload', requireAdmin, upload.single('template'), (req, res) => {
+router.post('/template/upload', requireAdmin, templateUpload.single('template'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
   const dest = path.join(templatesDir, 'custom_template.docx');
   fs.copyFileSync(req.file.path, dest);

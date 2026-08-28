@@ -12,6 +12,9 @@ function getAccountName(emailOrUsername) {
  */
 function bindAD(username, password) {
   return new Promise((resolve, reject) => {
+    if (!config.ad.url || !config.ad.url.startsWith('ldaps://')) {
+      return reject(new Error('AD_URL должен быть настроен через защищённый протокол LDAPS'));
+    }
     const accountName = getAccountName(username);
     const client = ldap.createClient({
       url: config.ad.url,
@@ -20,7 +23,10 @@ function bindAD(username, password) {
       // Тестовый AD использует самоподписанный сертификат — на проде,
       // если компания даст собственный CA, эту опцию нужно будет убрать
       // или указать valid CA через `ca: [fs.readFileSync('path/to/ca.crt')]`.
-      tlsOptions: { rejectUnauthorized: false },
+      tlsOptions: {
+        rejectUnauthorized: config.ad.tlsRejectUnauthorized,
+        ca: config.ad.tlsCa ? [config.ad.tlsCa] : undefined,
+      },
     });
 
     client.on('error', (err) => {
@@ -80,6 +86,8 @@ async function authenticateAD(username, password) {
   const client = await bindAD(accountName, password);
   try {
     const groups = await getUserGroups(client, accountName);
+    const allowed = config.ad.allowedGroups.some(group => groups.includes(group));
+    if (!allowed) throw new Error('Пользователь не входит в разрешённую группу портфолио');
     const role = groups.includes(config.ad.adminGroup) ? 'admin' : config.ad.defaultRole;
     return { username: accountName, role, groups };
   } finally {

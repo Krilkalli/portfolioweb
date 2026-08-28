@@ -1,10 +1,36 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { composeProjectDescription } = require('./projectDescription');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
 const config = require('./config');
+
+const SECRET_SETTING_KEYS = new Set(['smtp_pass', 'ai_api_key']);
+const settingsEncryptionKey = crypto.createHash('sha256').update(config.sessionSecret).digest();
+
+function encryptSetting(key, value) {
+  const plain = String(value ?? '');
+  if (!SECRET_SETTING_KEYS.has(key) || !plain || plain.startsWith('enc:v1:')) return plain;
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', settingsEncryptionKey, iv);
+  const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  return `enc:v1:${iv.toString('base64url')}:${cipher.getAuthTag().toString('base64url')}:${encrypted.toString('base64url')}`;
+}
+
+function decryptSetting(key, value) {
+  const stored = String(value ?? '');
+  if (!SECRET_SETTING_KEYS.has(key) || !stored.startsWith('enc:v1:')) return stored;
+  try {
+    const [, , iv, tag, encrypted] = stored.split(':');
+    const decipher = crypto.createDecipheriv('aes-256-gcm', settingsEncryptionKey, Buffer.from(iv, 'base64url'));
+    decipher.setAuthTag(Buffer.from(tag, 'base64url'));
+    return Buffer.concat([decipher.update(Buffer.from(encrypted, 'base64url')), decipher.final()]).toString('utf8');
+  } catch {
+    return '';
+  }
+}
 
 const pool = new Pool({
   host: config.pg.host,
@@ -62,6 +88,7 @@ const SCHEMA_SQL = `
     photo TEXT DEFAULT '',
     is_rp BOOLEAN NOT NULL DEFAULT FALSE,
     token TEXT,
+    token_expires_at TEXT DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
     created_at TEXT,
     updated_at TEXT
@@ -279,6 +306,7 @@ function prepEmployee(emp) {
     photo: emp.photo || '',
     is_rp: !!emp.is_rp,
     token: emp.token || uuidv4(),
+    token_expires_at: emp.token_expires_at || new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString(),
     status: emp.status === 'archived' ? 'archived' : 'active',
     created_at: emp.created_at || now,
     updated_at: now,
@@ -288,7 +316,7 @@ function prepEmployee(emp) {
 // ─── Настройки ────────────────────────────────────────────────────────────────
 async function loadSettings() {
   const rows = await _all('SELECT key, value FROM settings');
-  const s = Object.fromEntries(rows.map(r => [r.key, r.value]));
+  const s = Object.fromEntries(rows.map(r => [r.key, decryptSetting(r.key, r.value)]));
   try { s.positions = s.positions ? JSON.parse(s.positions) : []; } catch { s.positions = []; }
   return s;
 }
@@ -298,7 +326,7 @@ async function saveSettings(obj) {
   try {
     await client.query('BEGIN');
     for (const [k, v] of Object.entries(obj)) {
-      const val = k === 'positions' ? JSON.stringify(v) : String(v ?? '');
+      const val = encryptSetting(k, k === 'positions' ? JSON.stringify(v) : String(v ?? ''));
       await client.query(
         'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
         [k, val]
@@ -391,6 +419,9 @@ async function init() {
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active'").catch(() => {});
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_rp BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
+  await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS token_expires_at TEXT DEFAULT ''").catch(() => {});
+  await _run("UPDATE employees SET token_expires_at = $1 WHERE token_expires_at IS NULL OR token_expires_at = ''", [new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString()]).catch(() => {});
+  await _run("CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_token_unique ON employees(token) WHERE token IS NOT NULL AND token <> ''").catch(() => {});
   await _run("ALTER TABLE pending_changes ADD COLUMN IF NOT EXISTS reviewed_by TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS reverted_at TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS reverted_by TEXT DEFAULT ''").catch(() => {});
@@ -523,6 +554,12 @@ async function init() {
     ai_prompt_summarize: 'Ты опытный HR-аналитик. Проанализируй список отзывов сотрудников о компании и составь краткое резюме: выдели основные плюсы, минусы и общие настроения.'
   };
   for (const [k,v] of Object.entries(defs)) { if (settings[k] === undefined) { settings[k] = v; changed = true; } }
+  for (const key of SECRET_SETTING_KEYS) {
+    const raw = await _get('SELECT value FROM settings WHERE key = $1', [key]);
+    if (raw?.value && !String(raw.value).startsWith('enc:v1:')) {
+      await _run('UPDATE settings SET value = $1 WHERE key = $2', [encryptSetting(key, raw.value), key]);
+    }
+  }
   if (!settings.positions || !Array.isArray(settings.positions) || settings.positions.length === 0) {
     settings.positions = ['Стажер-консультант по внедрению 1С','Младший консультант по внедрению 1С','Консультант по внедрению 1С','Старший консультант по внедрению 1С','Ведущий консультант по внедрению 1С','Эксперт-консультант по внедрению 1С'];
     changed = true;
@@ -592,7 +629,7 @@ async function init() {
   // Создать первого менеджера, если нет ни одного
   const mgrCount = await _get('SELECT COUNT(*)::int cnt FROM managers');
   if (mgrCount.cnt === 0) {
-    const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 10);
+    const hash = settings.manager_password_hash || bcrypt.hashSync(config.defaultManagerPassword, 12);
     const email = config.defaultManagerEmail;
     await _run(
       'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5)',
@@ -709,12 +746,12 @@ async function init() {
 const helpers = {
   // ── Настройки ───────────────────────────────────────────────────────────────
   getSetting(key) {
-    return _get('SELECT value FROM settings WHERE key = $1', [key]).then(r => r ? r.value : '');
+    return _get('SELECT value FROM settings WHERE key = $1', [key]).then(r => r ? decryptSetting(key, r.value) : '');
   },
   setSetting(key, value) {
     return _run(
       'INSERT INTO settings (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = $2',
-      [key, String(value ?? '')]
+      [key, encryptSetting(key, value)]
     );
   },
 
@@ -837,7 +874,7 @@ const helpers = {
   },
 
   getEmployeeByToken(token) {
-    return _get('SELECT * FROM employees WHERE token = $1', [token]).then(castEmployee);
+    return _get("SELECT * FROM employees WHERE token = $1 AND (token_expires_at = '' OR token_expires_at > $2)", [token, new Date().toISOString()]).then(castEmployee);
   },
 
   async createEmployee(data) {
@@ -932,9 +969,10 @@ const helpers = {
       const emp = await client.query('SELECT * FROM employees WHERE id = $1', [Number(id)]);
       if (!emp.rows[0]) { await client.query('ROLLBACK'); return null; }
       const newToken = uuidv4();
-      await client.query('UPDATE employees SET token = $1, updated_at = $2 WHERE id = $3', [newToken, new Date().toISOString(), Number(id)]);
+      const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000).toISOString();
+      await client.query('UPDATE employees SET token = $1, token_expires_at = $2, updated_at = $3 WHERE id = $4', [newToken, expiresAt, new Date().toISOString(), Number(id)]);
       await client.query('COMMIT');
-      return castEmployee({ ...emp.rows[0], token: newToken });
+      return castEmployee({ ...emp.rows[0], token: newToken, token_expires_at: expiresAt });
     } catch (err) {
       await client.query('ROLLBACK');
       throw err;
@@ -2030,6 +2068,9 @@ const sessions = {
   },
   destroy(sid) {
     return _run('DELETE FROM sessions WHERE sid = $1', [sid]);
+  },
+  destroyForManager(managerId) {
+    return _run("DELETE FROM sessions WHERE NULLIF(sess::jsonb ->> 'managerId', '')::int = $1", [Number(managerId)]);
   },
   touch(sid, maxAge) {
     return _run('UPDATE sessions SET expired = $1 WHERE sid = $2', [Date.now() + maxAge, sid]);

@@ -10,7 +10,17 @@ const { getPublicBaseUrl } = require('../publicUrl');
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
-const upload = multer({ dest: uploadsDir });
+const upload = multer({
+  dest: uploadsDir,
+  limits: { fileSize: 20 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, callback) => {
+    const extension = path.extname(file.originalname || '').toLowerCase();
+    if (!['.xls', '.xlsx'].includes(extension)) {
+      return callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'file'));
+    }
+    callback(null, true);
+  },
+});
 
 function requireAuth(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
@@ -20,6 +30,14 @@ function requireAuth(req, res, next) {
 function requireAdmin(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
   if (req.session.managerRole !== 'admin') return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
+  next();
+}
+
+function requireCanEdit(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (!['admin', 'scrum'].includes(req.session.managerRole || 'leader')) {
+    return res.status(403).json({ error: 'Недостаточно прав' });
+  }
   next();
 }
 
@@ -232,7 +250,7 @@ function resolveColumns(headerRow) {
   return idx;
 }
 
-router.post('/import', requireAuth, upload.single('file'), async (req, res, next) => {
+router.post('/import', requireCanEdit, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const mode = req.body.mode || 'add';
@@ -288,11 +306,12 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
     res.json({ ok: true, imported, updated, removed, skipped, total: rows.length - 1, mode });
   } catch (err) {
     if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-    res.status(500).json({ error: `Ошибка импорта: ${err.message}` });
+    console.error('Ошибка импорта сотрудников:', err);
+    res.status(500).json({ error: 'Не удалось импортировать файл' });
   }
 });
 
-router.get('/export', requireAuth, async (req, res, next) => {
+router.get('/export', requireCanEdit, async (req, res, next) => {
   try {
     const base = getPublicBaseUrl(req);
     function fmtEducation(edu) {
