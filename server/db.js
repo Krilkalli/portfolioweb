@@ -80,6 +80,26 @@ const SCHEMA_SQL = `
     reject_reason TEXT DEFAULT ''
   );
 
+  CREATE TABLE IF NOT EXISTS approval_history (
+    id SERIAL PRIMARY KEY,
+    source_change_id INTEGER NOT NULL,
+    employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+    employee_name TEXT DEFAULT '',
+    employee_position TEXT DEFAULT '',
+    field_name TEXT DEFAULT '',
+    old_value TEXT DEFAULT '',
+    new_value TEXT DEFAULT '',
+    submitted_at TEXT DEFAULT '',
+    reviewed_at TEXT DEFAULT '',
+    reviewed_by TEXT DEFAULT '',
+    decision_status TEXT NOT NULL DEFAULT 'approved',
+    reject_reason TEXT DEFAULT '',
+    reverted_at TEXT DEFAULT '',
+    reverted_by TEXT DEFAULT '',
+    returned_to_pending_at TEXT DEFAULT '',
+    returned_to_pending_by TEXT DEFAULT ''
+  );
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
@@ -372,6 +392,53 @@ async function init() {
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS photo TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE employees ADD COLUMN IF NOT EXISTS is_rp BOOLEAN NOT NULL DEFAULT FALSE").catch(() => {});
   await _run("ALTER TABLE pending_changes ADD COLUMN IF NOT EXISTS reviewed_by TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS reverted_at TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS reverted_by TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS decision_status TEXT NOT NULL DEFAULT 'approved'").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS reject_reason TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS returned_to_pending_at TEXT DEFAULT ''").catch(() => {});
+  await _run("ALTER TABLE approval_history ADD COLUMN IF NOT EXISTS returned_to_pending_by TEXT DEFAULT ''").catch(() => {});
+  await _run('ALTER TABLE approval_history DROP CONSTRAINT IF EXISTS approval_history_source_change_id_key').catch(() => {});
+
+  // Переносим уже подтверждённые изменения в постоянный журнал.
+  await _run(`
+    INSERT INTO approval_history (
+      source_change_id, employee_id, employee_name, employee_position,
+      field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+      decision_status
+    )
+    SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+           pc.field_name, pc.old_value, pc.new_value, pc.submitted_at,
+           COALESCE(NULLIF(pc.reviewed_at, ''), pc.submitted_at), pc.reviewed_by,
+           'approved'
+    FROM pending_changes pc
+    LEFT JOIN employees e ON e.id = pc.employee_id
+    WHERE pc.status = 'approved'
+      AND NOT EXISTS (
+        SELECT 1 FROM approval_history ah
+        WHERE ah.source_change_id = pc.id AND ah.decision_status = 'approved'
+      )
+  `);
+
+  // Переносим уже отклонённые изменения в тот же журнал решений.
+  await _run(`
+    INSERT INTO approval_history (
+      source_change_id, employee_id, employee_name, employee_position,
+      field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+      decision_status, reject_reason
+    )
+    SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+           pc.field_name, pc.old_value, pc.new_value, pc.submitted_at,
+           COALESCE(NULLIF(pc.reviewed_at, ''), pc.submitted_at), pc.reviewed_by,
+           'rejected', pc.reject_reason
+    FROM pending_changes pc
+    LEFT JOIN employees e ON e.id = pc.employee_id
+    WHERE pc.status = 'rejected'
+      AND NOT EXISTS (
+        SELECT 1 FROM approval_history ah
+        WHERE ah.source_change_id = pc.id AND ah.decision_status = 'rejected'
+      )
+  `);
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Черновик'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT ''").catch(() => {});
@@ -433,6 +500,9 @@ async function init() {
   await _run('CREATE INDEX IF NOT EXISTS idx_employees_status ON employees(status)');
   await _run('CREATE INDEX IF NOT EXISTS idx_changes_status ON pending_changes(status)');
   await _run('CREATE INDEX IF NOT EXISTS idx_changes_employee ON pending_changes(employee_id)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_approval_history_reviewed_at ON approval_history(reviewed_at DESC)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_approval_history_employee ON approval_history(employee_id)');
+  await _run('CREATE INDEX IF NOT EXISTS idx_approval_history_source_change ON approval_history(source_change_id)');
   await _run('CREATE INDEX IF NOT EXISTS idx_feedback_employee ON employee_feedback(employee_id)');
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)');
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id)');
@@ -1092,6 +1162,215 @@ const helpers = {
     return _all("SELECT * FROM pending_changes WHERE employee_id = $1 AND status IN ('approved','rejected') AND reviewed_at != ''", [Number(employeeId)]);
   },
 
+  async getApprovalHistory(limit = 500) {
+    const safeLimit = Math.min(1000, Math.max(1, Number(limit) || 500));
+    const [items, totals] = await Promise.all([
+      _all(`
+        SELECT id, employee_id, employee_name, employee_position, field_name,
+               old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+               decision_status, reject_reason, reverted_at, reverted_by,
+               returned_to_pending_at, returned_to_pending_by
+        FROM approval_history
+        ORDER BY reviewed_at DESC, id DESC
+        LIMIT $1
+      `, [safeLimit]),
+      _get(`
+        SELECT COUNT(*)::int AS total,
+               COUNT(*) FILTER (WHERE decision_status = 'approved' AND COALESCE(reverted_at, '') = '')::int AS active_count,
+               COUNT(*) FILTER (WHERE COALESCE(reverted_at, '') <> '')::int AS reverted_count,
+               COUNT(*) FILTER (WHERE decision_status = 'rejected' AND COALESCE(returned_to_pending_at, '') = '')::int AS rejected_count,
+               COUNT(*) FILTER (WHERE COALESCE(returned_to_pending_at, '') <> '')::int AS returned_count,
+               COUNT(DISTINCT employee_id)::int AS employee_count
+        FROM approval_history
+      `),
+    ]);
+    return {
+      total: totals?.total || 0,
+      activeCount: totals?.active_count || 0,
+      revertedCount: totals?.reverted_count || 0,
+      rejectedCount: totals?.rejected_count || 0,
+      returnedCount: totals?.returned_count || 0,
+      employeeCount: totals?.employee_count || 0,
+      items,
+    };
+  },
+
+  async revertApprovalHistory(historyId, reviewerName = '') {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const historyResult = await client.query('SELECT * FROM approval_history WHERE id = $1 FOR UPDATE', [Number(historyId)]);
+      const history = historyResult.rows[0];
+      if (!history) { await client.query('ROLLBACK'); return { ok: false, reason: 'not_found' }; }
+      if (history.decision_status !== 'approved') { await client.query('ROLLBACK'); return { ok: false, reason: 'not_available' }; }
+      if (history.reverted_at) { await client.query('ROLLBACK'); return { ok: false, reason: 'already_reverted' }; }
+      if (!history.employee_id || !ALLOWED_FIELDS.has(history.field_name)) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'not_available' };
+      }
+
+      const employeeResult = await client.query('SELECT * FROM employees WHERE id = $1 FOR UPDATE', [Number(history.employee_id)]);
+      const employee = employeeResult.rows[0];
+      if (!employee) { await client.query('ROLLBACK'); return { ok: false, reason: 'not_available' }; }
+
+      const currentValue = employee[history.field_name] == null ? '' : String(employee[history.field_name]);
+      const approvedValue = history.new_value == null ? '' : String(history.new_value);
+      if (currentValue !== approvedValue) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'changed_after_approval' };
+      }
+
+      const restoredValue = history.old_value == null ? '' : String(history.old_value);
+      const now = new Date().toISOString();
+      await client.query(`UPDATE employees SET "${history.field_name}" = $1, updated_at = $2 WHERE id = $3`, [restoredValue, now, history.employee_id]);
+
+      if (history.field_name === 'contacts') {
+        const lines = restoredValue.split('\n').map(line => line.trim()).filter(Boolean);
+        const email = lines.find(line => line.includes('@')) || '';
+        await client.query('UPDATE employees SET city = $1, email = $2 WHERE id = $3', [lines[0] || '', email, history.employee_id]);
+      }
+      if (history.field_name === 'name') {
+        await client.query('UPDATE employees SET name_lower = $1 WHERE id = $2', [normalizeName(restoredValue), history.employee_id]);
+      }
+
+      await client.query('UPDATE approval_history SET reverted_at = $1, reverted_by = $2 WHERE id = $3', [now, reviewerName, Number(historyId)]);
+      await client.query("UPDATE pending_changes SET status = 'reverted' WHERE id = $1 AND status = 'approved'", [history.source_change_id]);
+      await client.query('COMMIT');
+      return { ok: true, revertedAt: now, revertedBy: reviewerName };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
+  async returnHistoryToPending(historyId, reviewerName = '') {
+    return helpers.decideApprovalHistory(historyId, 'pending', '', reviewerName);
+  },
+
+  async decideApprovalHistory(historyId, decision, reason = '', reviewerName = '') {
+    if (!['approved', 'rejected', 'pending'].includes(decision)) {
+      return { ok: false, reason: 'invalid_decision' };
+    }
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const historyResult = await client.query('SELECT * FROM approval_history WHERE id = $1 FOR UPDATE', [Number(historyId)]);
+      const history = historyResult.rows[0];
+      if (!history) { await client.query('ROLLBACK'); return { ok: false, reason: 'not_found' }; }
+      if (!history.employee_id || !ALLOWED_FIELDS.has(history.field_name)) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'not_available' };
+      }
+
+      const employeeResult = await client.query('SELECT * FROM employees WHERE id = $1 FOR UPDATE', [Number(history.employee_id)]);
+      const employee = employeeResult.rows[0];
+      if (!employee) { await client.query('ROLLBACK'); return { ok: false, reason: 'not_available' }; }
+
+      const currentValue = employee[history.field_name] == null ? '' : String(employee[history.field_name]);
+      const oldValue = history.old_value == null ? '' : String(history.old_value);
+      const proposedValue = history.new_value == null ? '' : String(history.new_value);
+      const sourceResult = await client.query('SELECT * FROM pending_changes WHERE id = $1 FOR UPDATE', [Number(history.source_change_id)]);
+      const sourceChange = sourceResult.rows[0] || null;
+
+      if (decision === 'approved' && currentValue === proposedValue) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'already_approved' };
+      }
+      if (decision === 'rejected' && currentValue === oldValue && sourceChange?.status === 'rejected') {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'already_rejected' };
+      }
+      if (decision === 'pending' && sourceChange?.status === 'pending') {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'already_pending' };
+      }
+      if (currentValue !== oldValue && currentValue !== proposedValue) {
+        await client.query('ROLLBACK');
+        return { ok: false, reason: 'changed_after_decision' };
+      }
+
+      const otherPending = await client.query(
+        "SELECT id FROM pending_changes WHERE employee_id = $1 AND field_name = $2 AND status = 'pending' AND id <> $3 LIMIT 1",
+        [Number(history.employee_id), history.field_name, Number(history.source_change_id)]
+      );
+      if (otherPending.rows[0]) { await client.query('ROLLBACK'); return { ok: false, reason: 'already_pending' }; }
+
+      const now = new Date().toISOString();
+      const resultingValue = decision === 'approved' ? proposedValue : oldValue;
+      if (currentValue !== resultingValue) {
+        await client.query(`UPDATE employees SET "${history.field_name}" = $1, updated_at = $2 WHERE id = $3`, [resultingValue, now, history.employee_id]);
+        if (history.field_name === 'contacts') {
+          const lines = resultingValue.split('\n').map(line => line.trim()).filter(Boolean);
+          const email = lines.find(line => line.includes('@')) || '';
+          await client.query('UPDATE employees SET city = $1, email = $2 WHERE id = $3', [lines[0] || '', email, history.employee_id]);
+        }
+        if (history.field_name === 'name') {
+          await client.query('UPDATE employees SET name_lower = $1 WHERE id = $2', [normalizeName(resultingValue), history.employee_id]);
+        }
+      }
+
+      let sourceChangeId = sourceChange?.id;
+      const pendingStatus = decision === 'approved' ? 'approved' : decision === 'rejected' ? 'rejected' : 'pending';
+      if (sourceChange) {
+        await client.query(`
+          UPDATE pending_changes
+          SET old_value = $1, new_value = $2, submitted_at = $3, status = $4,
+              reviewed_at = $5, reviewed_by = $6, reject_reason = $7
+          WHERE id = $8
+        `, [oldValue, proposedValue, now, pendingStatus,
+          decision === 'pending' ? '' : now,
+          decision === 'pending' ? '' : reviewerName,
+          decision === 'rejected' ? reason : '', sourceChangeId]);
+      } else {
+        const inserted = await client.query(`
+          INSERT INTO pending_changes (employee_id, field_name, old_value, new_value, submitted_at, status, reviewed_at, reviewed_by, reject_reason)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+          RETURNING id
+        `, [Number(history.employee_id), history.field_name, oldValue, proposedValue, now, pendingStatus,
+          decision === 'pending' ? '' : now,
+          decision === 'pending' ? '' : reviewerName,
+          decision === 'rejected' ? reason : '']);
+        sourceChangeId = inserted.rows[0].id;
+      }
+
+      if (decision !== 'approved') {
+        await client.query(`
+          UPDATE approval_history
+          SET reverted_at = $1, reverted_by = $2
+          WHERE decision_status = 'approved' AND COALESCE(reverted_at, '') = ''
+            AND employee_id = $3 AND field_name = $4 AND new_value = $5
+        `, [now, reviewerName, Number(history.employee_id), history.field_name, proposedValue]);
+      }
+
+      await client.query(`
+        INSERT INTO approval_history (
+          source_change_id, employee_id, employee_name, employee_position,
+          field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+          decision_status, reject_reason, returned_to_pending_at, returned_to_pending_by
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      `, [sourceChangeId, Number(history.employee_id), history.employee_name || employee.name || '',
+        history.employee_position || employee.position || '', history.field_name, oldValue, proposedValue,
+        history.submitted_at || now, now, reviewerName, decision, decision === 'rejected' ? reason : '',
+        decision === 'pending' ? now : '', decision === 'pending' ? reviewerName : '']);
+
+      await client.query('COMMIT');
+      return {
+        ok: true,
+        decision,
+        pendingChangeId: sourceChangeId,
+        reviewedAt: now,
+        reviewedBy: reviewerName,
+      };
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  },
+
   countPendingForEmployee(employeeId) {
     return _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE employee_id = $1 AND status = 'pending'", [Number(employeeId)]).then(r => r ? r.cnt : 0);
   },
@@ -1100,7 +1379,7 @@ const helpers = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status IN ('pending','approved','rejected')", [Number(employeeId)]);
+      await client.query("DELETE FROM pending_changes WHERE employee_id = $1 AND status IN ('pending','approved','rejected','reverted')", [Number(employeeId)]);
       const now = new Date().toISOString();
       for (const ch of changesArray) {
         await client.query(
@@ -1135,6 +1414,17 @@ const helpers = {
           if (email) await client.query('UPDATE employees SET email = $1 WHERE id = $2', [email, change.employee_id]);
         }
       }
+      await client.query(`
+        INSERT INTO approval_history (
+          source_change_id, employee_id, employee_name, employee_position,
+          field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by
+        )
+        SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+               pc.field_name, pc.old_value, pc.new_value, pc.submitted_at, $1, $2
+        FROM pending_changes pc
+        LEFT JOIN employees e ON e.id = pc.employee_id
+        WHERE pc.id = $3
+      `, [now, reviewerName, Number(changeId)]);
       await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE id = $3", [now, reviewerName, Number(changeId)]);
       await client.query('COMMIT');
       return true;
@@ -1147,11 +1437,35 @@ const helpers = {
   },
 
   async rejectChange(changeId, reason = '', reviewerName = '') {
-    const ch = await _get('SELECT * FROM pending_changes WHERE id = $1', [Number(changeId)]);
-    if (!ch || ch.status !== 'pending') return false;
-    await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE id = $4",
-      [new Date().toISOString(), reviewerName, reason, Number(changeId)]);
-    return true;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const changeResult = await client.query("SELECT * FROM pending_changes WHERE id = $1 AND status = 'pending' FOR UPDATE", [Number(changeId)]);
+      if (!changeResult.rows[0]) { await client.query('ROLLBACK'); return false; }
+      const now = new Date().toISOString();
+      await client.query(`
+        INSERT INTO approval_history (
+          source_change_id, employee_id, employee_name, employee_position,
+          field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+          decision_status, reject_reason
+        )
+        SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+               pc.field_name, pc.old_value, pc.new_value, pc.submitted_at, $1, $2,
+               'rejected', $3
+        FROM pending_changes pc
+        LEFT JOIN employees e ON e.id = pc.employee_id
+        WHERE pc.id = $4
+      `, [now, reviewerName, reason, Number(changeId)]);
+      await client.query("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE id = $4",
+        [now, reviewerName, reason, Number(changeId)]);
+      await client.query('COMMIT');
+      return true;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   async approveAllForEmployee(employeeId, reviewerName = '') {
@@ -1174,6 +1488,17 @@ const helpers = {
           }
         }
       }
+      await client.query(`
+        INSERT INTO approval_history (
+          source_change_id, employee_id, employee_name, employee_position,
+          field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by
+        )
+        SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+               pc.field_name, pc.old_value, pc.new_value, pc.submitted_at, $1, $2
+        FROM pending_changes pc
+        LEFT JOIN employees e ON e.id = pc.employee_id
+        WHERE pc.employee_id = $3 AND pc.status = 'pending'
+      `, [now, reviewerName, Number(employeeId)]);
       await client.query("UPDATE pending_changes SET status = 'approved', reviewed_at = $1, reviewed_by = $2 WHERE employee_id = $3 AND status = 'pending'",
         [now, reviewerName, Number(employeeId)]);
       await client.query('COMMIT');
@@ -1187,15 +1512,40 @@ const helpers = {
   },
 
   async rejectAllForEmployee(employeeId, reason = '', reviewerName = '') {
-    const res = await _run("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE employee_id = $4 AND status = 'pending'",
-      [new Date().toISOString(), reviewerName, reason, Number(employeeId)]);
-    return res ? res.rowCount : 0;
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const changes = await client.query("SELECT id FROM pending_changes WHERE employee_id = $1 AND status = 'pending' FOR UPDATE", [Number(employeeId)]);
+      const now = new Date().toISOString();
+      await client.query(`
+        INSERT INTO approval_history (
+          source_change_id, employee_id, employee_name, employee_position,
+          field_name, old_value, new_value, submitted_at, reviewed_at, reviewed_by,
+          decision_status, reject_reason
+        )
+        SELECT pc.id, pc.employee_id, COALESCE(e.name, ''), COALESCE(e.position, ''),
+               pc.field_name, pc.old_value, pc.new_value, pc.submitted_at, $1, $2,
+               'rejected', $3
+        FROM pending_changes pc
+        LEFT JOIN employees e ON e.id = pc.employee_id
+        WHERE pc.employee_id = $4 AND pc.status = 'pending'
+      `, [now, reviewerName, reason, Number(employeeId)]);
+      await client.query("UPDATE pending_changes SET status = 'rejected', reviewed_at = $1, reviewed_by = $2, reject_reason = $3 WHERE employee_id = $4 AND status = 'pending'",
+        [now, reviewerName, reason, Number(employeeId)]);
+      await client.query('COMMIT');
+      return changes.rowCount;
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   async getStats() {
     const empCount = await _get("SELECT COUNT(*)::int cnt FROM employees WHERE status = 'active'");
     const pendingCount = await _get("SELECT COUNT(DISTINCT employee_id)::int cnt FROM pending_changes WHERE status = 'pending'");
-    const approvedCount = await _get("SELECT COUNT(*)::int cnt FROM pending_changes WHERE status = 'approved'");
+    const approvedCount = await _get("SELECT COUNT(*)::int cnt FROM approval_history WHERE decision_status = 'approved' AND COALESCE(reverted_at, '') = ''");
     return { total: empCount.cnt, pending: pendingCount.cnt, approved: approvedCount.cnt };
   },
 
@@ -1459,7 +1809,7 @@ const helpers = {
       SELECT p.*, e.name AS leader_employee_name
       FROM projects p
       LEFT JOIN employees e ON e.id = p.leader_employee_id
-      WHERE p.leader_employee_id = $1 AND p.status = 'Отправлено'
+      WHERE p.leader_employee_id = $1
       ORDER BY p.created_at DESC, p.id DESC
     `, [Number(employeeId)]);
 

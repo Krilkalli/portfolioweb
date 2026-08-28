@@ -26,10 +26,10 @@
 <body class="page-wrapper">
 <nav class="navbar">
   <div class="navbar-brand">
-    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+    <div class="navbar-brand-static">
       <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
       <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
-    </a>
+    </div>
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm"><i class="fi fi-rr-moon"></i></button>
@@ -40,9 +40,24 @@
 </nav>
 
 <main class="main-content container">
-  <div style="margin-bottom:18px;">
-    <div class="page-title">Мои проекты</div>
-    <div class="page-subtitle">Карточки проектов, за которые вы отвечаете.</div>
+  <div style="margin-bottom:18px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+    <div>
+      <div class="page-title">Мои проекты</div>
+      <div class="page-subtitle">Карточки проектов, за которые вы отвечаете.</div>
+    </div>
+    <button id="createProjectBtn" type="button" class="btn btn-primary btn-sm hidden"><i class="fi fi-rr-add"></i> Создать проект</button>
+  </div>
+
+  <div id="createProjectPanel" class="card hidden" style="margin-bottom:16px;">
+    <div class="card-title" style="margin-bottom:12px;">Новый проект</div>
+    <div class="form-group" style="margin-bottom:12px;">
+      <label class="form-label" for="newProjectTitle">Название проекта</label>
+      <input id="newProjectTitle" class="form-control" placeholder="Например: Внедрение 1С:ERP">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;">
+      <button id="cancelCreateProjectBtn" type="button" class="btn btn-ghost btn-sm">Отмена</button>
+      <button id="saveNewProjectBtn" type="button" class="btn btn-primary btn-sm">Создать и заполнить</button>
+    </div>
   </div>
 
   <div id="projectsList" class="projects-list"></div>

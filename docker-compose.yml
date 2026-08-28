@@ -58,6 +58,8 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Публичный адрес используется во всех ссылках в письмах и выгрузках.
+      - PUBLIC_BASE_URL=${PUBLIC_BASE_URL:-}
       # Подключение к PostgreSQL — по имени сервиса "postgres" внутри Docker-сети,
       # а не "localhost". Именно эти переменные читает config.js.
       - PG_HOST=postgres

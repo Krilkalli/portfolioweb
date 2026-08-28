@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>История подтверждений — Портфолио IS1C</title>
+  <script src="/js/theme-init.js"></script>
+  <link rel="stylesheet" href="/css/styles.css">
+  <style>
+    .main-content { padding: 32px 0 56px; flex: 1; }
+    .history-hero { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; flex-wrap:wrap; }
+    .history-title { font-size:1.55rem; font-weight:750; margin-bottom:5px; }
+    .history-subtitle { color:var(--text-muted); font-size:.9rem; }
+    .history-summary { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:20px; }
+    .history-stat { padding:16px 18px; border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-card); }
+    .history-stat-value { font-size:1.5rem; line-height:1.2; font-weight:750; color:var(--success); }
+    .history-stat-label { margin-top:4px; color:var(--text-muted); font-size:.78rem; }
+    .history-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:24px; flex-wrap:wrap; }
+    .history-search { position:relative; flex:1 1 360px; max-width:620px; }
+    .history-search i { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none; }
+    .history-search .form-control { padding-left:38px; }
+    .history-count { color:var(--text-muted); font-size:.82rem; white-space:nowrap; }
+    .history-day { margin-bottom:28px; }
+    .history-day-title { display:flex; align-items:center; gap:10px; margin-bottom:12px; color:var(--text-secondary); font-size:.85rem; font-weight:650; }
+    .history-day-title::after { content:''; height:1px; background:var(--border); flex:1; }
+    .history-timeline { position:relative; display:grid; gap:12px; padding-left:28px; }
+    .history-timeline::before { content:''; position:absolute; left:8px; top:10px; bottom:10px; width:2px; background:linear-gradient(var(--success),var(--border)); border-radius:2px; }
+    .history-entry { position:relative; }
+    .history-dot { position:absolute; left:-26px; top:23px; width:14px; height:14px; border-radius:50%; background:var(--success); border:3px solid var(--bg-primary); box-shadow:0 0 0 2px rgba(34,197,94,.25); }
+    .history-card { border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-card); overflow:hidden; transition:border-color var(--transition),transform var(--transition),box-shadow var(--transition); }
+    .history-card:hover { border-color:rgba(34,197,94,.35); transform:translateY(-1px); box-shadow:var(--shadow-card); }
+    .history-card-head { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 18px; flex-wrap:wrap; }
+    .history-person { display:flex; align-items:center; gap:12px; min-width:0; }
+    .history-person-name { font-weight:650; color:var(--text-primary); }
+    .history-person-position { color:var(--text-muted); font-size:.78rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .history-meta { display:flex; align-items:center; justify-content:flex-end; gap:8px 14px; flex-wrap:wrap; color:var(--text-muted); font-size:.76rem; }
+    .history-meta span { display:inline-flex; align-items:center; gap:5px; }
+    .history-details { border-top:1px solid var(--border); }
+    .history-details summary { cursor:pointer; list-style:none; padding:11px 18px; color:var(--text-secondary); font-size:.8rem; font-weight:600; user-select:none; }
+    .history-details summary::-webkit-details-marker { display:none; }
+    .history-details summary::before { content:'›'; display:inline-block; margin-right:8px; color:var(--success); transition:transform var(--transition); }
+    .history-details[open] summary::before { transform:rotate(90deg); }
+    .history-diff { display:grid; grid-template-columns:1fr 1fr; border-top:1px solid var(--border); }
+    .history-diff-col { padding:15px 18px; min-width:0; }
+    .history-diff-col:first-child { border-right:1px solid var(--border); background:rgba(239,68,68,.035); }
+    .history-diff-col:last-child { background:rgba(34,197,94,.035); }
+    .history-diff-label { font-size:.7rem; font-weight:750; text-transform:uppercase; letter-spacing:.06em; margin-bottom:7px; }
+    .history-diff-col:first-child .history-diff-label { color:var(--danger); }
+    .history-diff-col:last-child .history-diff-label { color:var(--success); }
+    .history-value { color:var(--text-secondary); font-size:.82rem; line-height:1.55; white-space:pre-wrap; overflow-wrap:anywhere; max-height:300px; overflow:auto; }
+    .history-empty { text-align:center; padding:70px 20px; border:1px dashed var(--border); border-radius:var(--radius-lg); color:var(--text-muted); }
+    .history-filters { display:flex; align-items:center; gap:10px; flex:1 1 620px; flex-wrap:wrap; }
+    .history-date-filter { display:flex; align-items:center; gap:7px; padding:0 8px 0 12px; border:1px solid var(--border); border-radius:var(--radius-sm); background:rgba(255,255,255,.04); }
+    .history-date-filter i { color:var(--text-muted); }
+    .history-date-filter input { min-width:145px; border:0; background:transparent; color:var(--text-primary); padding:9px 0; outline:0; font:inherit; font-size:.85rem; color-scheme:dark; }
+    body.light-theme .history-date-filter input { color-scheme:light; }
+    .history-date-clear { border:0; background:transparent; color:var(--text-muted); cursor:pointer; font-size:1.05rem; padding:5px; line-height:1; }
+    .history-date-clear:hover { color:var(--danger); }
+    .history-batch-list { display:grid; gap:10px; }
+    .history-batch { border:1px solid var(--border); border-radius:var(--radius-md); background:var(--bg-card); overflow:hidden; }
+    .history-batch-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 15px; flex-wrap:wrap; }
+    .history-batch-meta { display:flex; align-items:center; gap:8px 13px; flex-wrap:wrap; color:var(--text-muted); font-size:.74rem; }
+    .history-batch-meta span { display:inline-flex; align-items:center; gap:5px; }
+    .history-changes { border-top:1px solid var(--border); }
+    .history-change + .history-change { border-top:1px solid var(--border); }
+    .history-change > summary { display:flex; align-items:center; gap:9px; padding:9px 14px; cursor:pointer; list-style:none; color:var(--text-secondary); font-size:.81rem; font-weight:600; user-select:none; }
+    .history-change > summary::-webkit-details-marker { display:none; }
+    .history-change > summary::before { content:'+'; display:inline-flex; align-items:center; justify-content:center; width:20px; height:20px; flex:0 0 20px; border-radius:6px; background:rgba(108,99,255,.12); color:var(--accent-light); font-size:1rem; line-height:1; }
+    .history-change[open] > summary::before { content:'−'; }
+    .history-change > summary:hover { background:var(--bg-card-hover); color:var(--text-primary); }
+    .history-change-field { flex:1; min-width:0; }
+    .history-change-status { margin-left:auto; font-size:.69rem; }
+    .history-change.is-reverted { opacity:.72; }
+    .history-change-body { border-top:1px solid var(--border); }
+    .history-action-bar { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 14px; border-top:1px solid var(--border); background:rgba(255,255,255,.02); color:var(--text-muted); font-size:.74rem; flex-wrap:wrap; }
+    .history-action-buttons { display:flex; align-items:center; justify-content:flex-end; gap:7px; flex-wrap:wrap; margin-left:auto; }
+    .history-approve-btn { color:var(--success); border-color:rgba(34,197,94,.35); }
+    .history-reject-btn { color:var(--danger); border-color:rgba(239,68,68,.3); }
+    .history-return-btn { color:var(--warning); border-color:rgba(245,158,11,.35); }
+    .history-action-buttons .btn { min-height:32px; white-space:nowrap; }
+    @media (max-width:950px) and (min-width:701px) { .history-summary { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+    @media (max-width:700px) {
+      .main-content { padding-top:22px; }
+      .history-summary { grid-template-columns:1fr; }
+      .history-card-head { align-items:flex-start; }
+      .history-meta { justify-content:flex-start; width:100%; padding-left:48px; }
+      .history-diff { grid-template-columns:1fr; }
+      .history-diff-col:first-child { border-right:0; border-bottom:1px solid var(--border); }
+      .history-timeline { padding-left:22px; }
+      .history-dot { left:-20px; }
+      .history-timeline::before { left:8px; }
+      .history-search { flex-basis:100%; max-width:none; }
+      .history-date-filter { flex:1 1 100%; }
+      .history-date-filter input { flex:1; }
+      .history-batch-head { align-items:flex-start; }
+      .history-batch-meta { width:100%; padding-left:48px; }
+      .history-action-buttons { width:100%; justify-content:flex-start; margin-left:0; }
+      .history-action-buttons .btn { flex:1 1 150px; }
+    }
+  </style>
+  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+</head>
+<body class="page-wrapper">
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
+    <a href="/review.html" class="btn btn-ghost btn-sm"><i class="fi fi-rr-bolt"></i> Проверить изменения</a>
+    <a href="/index.html" class="btn btn-ghost btn-sm">← Дашборд</a>
+    <span id="navbarManager" style="font-size:.75rem;color:var(--text-muted);padding:0 4px;"></span>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="main-content container">
+  <div class="history-hero">
+    <div>
+      <h1 class="history-title">История подтверждений</h1>
+      <p class="history-subtitle">Постоянный журнал изменений, принятых менеджерами.</p>
+    </div>
+    <span class="badge badge-success"><i class="fi fi-rr-shield-check"></i> Подтверждено</span>
+  </div>
+
+  <section class="history-summary" aria-label="Сводка истории">
+    <div class="history-stat"><div id="historyActive" class="history-stat-value">—</div><div class="history-stat-label">Действующих подтверждений</div></div>
+    <div class="history-stat"><div id="historyRejected" class="history-stat-value" style="color:var(--danger);">—</div><div class="history-stat-label">Отклонено</div></div>
+    <div class="history-stat"><div id="historyLatest" class="history-stat-value" style="font-size:1rem;padding-top:5px;">—</div><div class="history-stat-label">Последнее решение</div></div>
+  </section>
+
+  <div class="history-toolbar">
+    <div class="history-filters">
+      <label class="history-search">
+        <i class="fi fi-rr-search"></i>
+        <input id="historySearch" type="search" class="form-control" placeholder="Сотрудник, поле или проверяющий..." aria-label="Поиск по истории подтверждений">
+      </label>
+      <label class="history-date-filter" title="Фильтр по дате подтверждения">
+        <i class="fi fi-rr-calendar"></i>
+        <input id="historyDate" type="date" aria-label="Дата подтверждения">
+        <button id="clearHistoryDate" type="button" class="history-date-clear hidden" aria-label="Очистить дату" title="Очистить дату">×</button>
+      </label>
+    </div>
+    <span id="historyCount" class="history-count"></span>
+  </div>
+
+  <div id="historyLoading" style="text-align:center;padding:60px;"><span class="spinner" style="width:32px;height:32px;border-width:3px;"></span></div>
+  <div id="historyEmpty" class="history-empty hidden"><i class="fi fi-rr-time-check" style="font-size:2.5rem;opacity:.45;"></i><h2 style="font-size:1.05rem;margin:12px 0 5px;color:var(--text-secondary);">История пока пуста</h2><p>Подтверждённые изменения появятся здесь автоматически.</p></div>
+  <div id="historyList"></div>
+</main>
+
+<div class="toast-container" id="toastContainer"></div>
+<script src="/js/history.js"></script>
+<script src="/js/navbar.js"></script>
+</body>
+</html>

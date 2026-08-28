@@ -13,6 +13,7 @@ const path    = require('path');
 const fs      = require('fs');
 const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, notifyProjectMembersAdded, testConnection, sendMail } = require('../mailer');
 const { parseProjectExperienceFile } = require('../projectExperienceImport');
+const { getPublicBaseUrl } = require('../publicUrl');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
@@ -23,7 +24,7 @@ async function sendReviewSummaryIfDone(employeeId, req) {
   if (pendingCount > 0) return;
   const emp = await helpers.getEmployee(employeeId);
   if (!emp) return;
-  const base = `${req.protocol}://${req.get('host')}`;
+  const base = getPublicBaseUrl(req);
   const reviewed = await helpers.getReviewedChangesForEmployee(employeeId);
   const approvedLabels = reviewed.filter(c => c.status === 'approved').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: '' }));
   const rejectedLabels = reviewed.filter(c => c.status === 'rejected').map(c => ({ label: FIELD_LABELS[c.field_name] || c.field_name, reason: c.reject_reason || '' }));
@@ -79,7 +80,7 @@ function projectMemberIds(project) {
 router.get('/employees', requireAuth, async (req, res, next) => {
 
   try {
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     const list = (await helpers.getAllEmployees()).map(e => ({
       ...e,
       link: `${base}/form.html?token=${e.token}&as`,
@@ -92,7 +93,7 @@ router.get('/employees/:id', requireAuth, async (req, res, next) => {
   try {
     const emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     res.json({
       ...emp,
       pendingChanges: await helpers.getPendingByEmployee(emp.id),
@@ -143,7 +144,7 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
   try {
     const emp = await helpers.regenerateToken(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as`, employee: emp });
   } catch (err) { next(err); }
 });
@@ -151,6 +152,67 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
 router.get('/pending', requireAuth, async (req, res, next) => {
   try {
     res.json(await helpers.getPendingGrouped());
+  } catch (err) { next(err); }
+});
+
+router.get('/approval-history', requireAuth, async (req, res, next) => {
+  try {
+    const history = await helpers.getApprovalHistory(req.query.limit);
+    res.json({
+      ...history,
+      items: history.items.map(item => ({
+        ...item,
+        field_label: FIELD_LABELS[item.field_name] || item.field_name || 'Изменение',
+      })),
+    });
+  } catch (err) { next(err); }
+});
+
+router.post('/approval-history/:historyId/revert', requireCanReview, async (req, res, next) => {
+  try {
+    const result = await helpers.revertApprovalHistory(Number(req.params.historyId), req.session.managerName || '');
+    if (result.ok) return res.json(result);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'Запись истории не найдена' });
+    if (result.reason === 'already_reverted') return res.status(409).json({ error: 'Это изменение уже отменено' });
+    if (result.reason === 'changed_after_approval') {
+      return res.status(409).json({ error: 'После этого подтверждения поле уже менялось. Автоматическая отмена небезопасна.' });
+    }
+    return res.status(409).json({ error: 'Это изменение нельзя отменить автоматически' });
+  } catch (err) { next(err); }
+});
+
+router.post('/approval-history/:historyId/return-to-pending', requireCanReview, async (req, res, next) => {
+  try {
+    const result = await helpers.returnHistoryToPending(Number(req.params.historyId), req.session.managerName || '');
+    if (result.ok) return res.json(result);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'Запись истории не найдена' });
+    if (result.reason === 'already_pending') return res.status(409).json({ error: 'Изменение уже ожидает подтверждения' });
+    if (result.reason === 'changed_after_decision') return res.status(409).json({ error: 'Поле изменялось после этого решения. Возврат может перезаписать новые данные.' });
+    return res.status(409).json({ error: 'Изменение нельзя вернуть на подтверждение' });
+  } catch (err) { next(err); }
+});
+
+router.post('/approval-history/:historyId/approve', requireCanReview, async (req, res, next) => {
+  try {
+    const result = await helpers.decideApprovalHistory(Number(req.params.historyId), 'approved', '', req.session.managerName || '');
+    if (result.ok) return res.json(result);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'Запись истории не найдена' });
+    if (result.reason === 'already_approved') return res.status(409).json({ error: 'Это значение уже подтверждено и находится в портфолио' });
+    if (result.reason === 'already_pending') return res.status(409).json({ error: 'По этому полю уже есть другая заявка на подтверждение' });
+    if (result.reason === 'changed_after_decision') return res.status(409).json({ error: 'Поле изменялось после этого решения. Подтверждение может перезаписать новые данные.' });
+    return res.status(409).json({ error: 'Изменение нельзя подтвердить' });
+  } catch (err) { next(err); }
+});
+
+router.post('/approval-history/:historyId/reject', requireCanReview, async (req, res, next) => {
+  try {
+    const result = await helpers.decideApprovalHistory(Number(req.params.historyId), 'rejected', req.body.reason || '', req.session.managerName || '');
+    if (result.ok) return res.json(result);
+    if (result.reason === 'not_found') return res.status(404).json({ error: 'Запись истории не найдена' });
+    if (result.reason === 'already_rejected') return res.status(409).json({ error: 'Это изменение уже отклонено' });
+    if (result.reason === 'already_pending') return res.status(409).json({ error: 'По этому полю уже есть другая заявка на подтверждение' });
+    if (result.reason === 'changed_after_decision') return res.status(409).json({ error: 'Поле изменялось после этого решения. Отклонение может перезаписать новые данные.' });
+    return res.status(409).json({ error: 'Изменение нельзя отклонить' });
   } catch (err) { next(err); }
 });
 
@@ -199,7 +261,7 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res, next
 router.post('/employees', requireCanEdit, async (req, res, next) => {
   try {
     const emp = await helpers.createEmployee(req.body);
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
   } catch (err) { next(err); }
 });
@@ -331,7 +393,7 @@ router.post('/employees/export-excel', requireAuth, async (req, res, next) => {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
 
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     const fmtEducation = (e) => {
       if (!e) return '';
       if (typeof e === 'string') return e;
@@ -528,7 +590,7 @@ router.put('/projects/:id', requireAdmin, async (req, res, next) => {
     let notifications = { sent: 0, failed: 0, skipped: 0 };
     if (addedMemberIds.length) {
       try {
-        const base = `${req.protocol}://${req.get('host')}`;
+        const base = getPublicBaseUrl(req);
         const senderEmail = req.session.managerEmail || req.session.managerLogin || '';
         notifications = await notifyProjectMembersAdded(project, addedMemberIds, project.leader_name, base, senderEmail);
       } catch (mailError) {
@@ -577,7 +639,7 @@ router.post('/projects/send', requireAdmin, async (req, res, next) => {
     }
 
     const sent = await helpers.markProjectsSent(ids);
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
 
     const projectsByLeader = new Map();
     for (const project of projects) {
@@ -602,7 +664,7 @@ router.post('/projects/send', requireAdmin, async (req, res, next) => {
             <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
               <p>Здравствуйте!</p>
               <p>Просьба заполнить карточки проектов: <strong>${names}</strong>.</p>
-              <p><a href="${base}/form.html?token=${leader.token}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Открыть мои проекты</a></p>
+              <p><a href="${base}/myprojects.html?token=${leader.token}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Открыть мои проекты</a></p>
             </div>
           </div>
         `,
@@ -772,7 +834,7 @@ router.post('/mass-mailing', requireCanEdit, async (req, res, next) => {
     }
 
     const { notifyMassMailing } = require('../mailer');
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     const senderEmail = req.session.managerEmail || req.session.managerLogin || '';
     const results = await notifyMassMailing(employees, subject, htmlContent, base, senderEmail);
 

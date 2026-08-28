@@ -5,6 +5,7 @@ const XLSX    = require('xlsx');
 const path    = require('path');
 const fs      = require('fs');
 const { helpers } = require('../db');
+const { getPublicBaseUrl } = require('../publicUrl');
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -293,7 +294,7 @@ router.post('/import', requireAuth, upload.single('file'), async (req, res, next
 
 router.get('/export', requireAuth, async (req, res, next) => {
   try {
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     function fmtEducation(edu) {
       if (typeof edu === 'string') return edu;
       if (Array.isArray(edu)) {

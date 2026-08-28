@@ -239,7 +239,7 @@
       .form-header-left { min-width: 0; flex: 1 1 220px; }
       .form-header-left #headerSubtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .form-header-actions { margin-left: auto; flex-wrap: wrap; justify-content: flex-end; }
-      .form-logo-link img { max-height: 44px; }
+      .form-logo-static img { max-height: 44px; }
     }
   </style>
 </head>
@@ -247,10 +247,10 @@
 
 <header class="form-header">
   <div class="form-header-left">
-    <a href="/index.html" class="form-logo-link" aria-label="Вернуться на дашборд" title="На дашборд">
+    <div class="form-logo-static">
       <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 50px; width: auto; border-radius: 4px;">
       <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 60px; width: auto; border-radius: 4px;">
-    </a>
+    </div>
     <!-- <span style="font-weight:700;font-size:1rem;">IS1C Портфолио</span> -->
     <span style="color:var(--text-muted);font-size:0.85rem;" id="headerSubtitle">— Обновление профиля</span>
   </div>

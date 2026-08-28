@@ -12,7 +12,7 @@ const SOFFICE_NAMES = process.platform === 'win32'
       'soffice',
       'C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe',
     ]
-  : ['soffice', '/usr/bin/libreoffice', '/usr/bin/soffice'];
+  : ['/usr/bin/libreoffice', '/usr/bin/soffice', 'soffice'];
 
 function findSoffice() {
   for (const name of SOFFICE_NAMES) {

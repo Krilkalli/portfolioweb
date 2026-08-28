@@ -197,6 +197,52 @@ async function loadProjects() {
   renderProjects();
 }
 
+function setCreateProjectPanel(open) {
+  const panel = document.getElementById('createProjectPanel');
+  const input = document.getElementById('newProjectTitle');
+  panel?.classList.toggle('hidden', !open);
+  if (open) {
+    input?.focus();
+  } else if (input) {
+    input.value = '';
+  }
+}
+
+async function createProject() {
+  const titleInput = document.getElementById('newProjectTitle');
+  const saveButton = document.getElementById('saveNewProjectBtn');
+  const title = titleInput?.value.trim() || '';
+  if (!title) {
+    toast('Введите название проекта', 'warning');
+    titleInput?.focus();
+    return;
+  }
+
+  saveButton.disabled = true;
+  try {
+    const response = await fetch(`/api/form/${token}/projects`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      toast(data.error || 'Не удалось создать проект', 'error');
+      return;
+    }
+
+    setCreateProjectPanel(false);
+    await loadProjects();
+    toggleEdit(data.project.id);
+    document.querySelector(`[data-project-id="${data.project.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('Проект создан. Заполните карточку и сохраните её', 'success');
+  } catch {
+    toast('Ошибка соединения с сервером', 'error');
+  } finally {
+    saveButton.disabled = false;
+  }
+}
+
 function toggleEdit(id) {
   const view = document.querySelector(`[data-view-id="${id}"]`);
   const edit = document.querySelector(`[data-edit-id="${id}"]`);
@@ -319,6 +365,16 @@ document.getElementById('backBtn').addEventListener('click', (e) => {
   location.href = backUrl();
 });
 
+document.getElementById('createProjectBtn')?.addEventListener('click', () => setCreateProjectPanel(true));
+document.getElementById('cancelCreateProjectBtn')?.addEventListener('click', () => setCreateProjectPanel(false));
+document.getElementById('saveNewProjectBtn')?.addEventListener('click', createProject);
+document.getElementById('newProjectTitle')?.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    createProject();
+  }
+});
+
 (async () => {
   token = parseToken();
   if (!token) { location.href = '/login.html'; return; }
@@ -332,6 +388,7 @@ document.getElementById('backBtn').addEventListener('click', (e) => {
   if (!employeeResponse.ok) { location.href = '/login.html'; return; }
   employee = await employeeResponse.json();
   if (!employee.is_rp) { location.href = backUrl(); return; }
+  document.getElementById('createProjectBtn')?.classList.remove('hidden');
   document.getElementById('navbarManager').textContent = managerUser?.email || employee.name || '';
   initTheme();
   document.getElementById('backBtn').href = backUrl();

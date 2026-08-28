@@ -7,6 +7,7 @@ const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { composeProjectDescription } = require('../projectDescription');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyProjectMembersAdded } = require('../mailer');
+const { getPublicBaseUrl } = require('../publicUrl');
 const https = require('https');
 const querystring = require('querystring');
 
@@ -153,6 +154,23 @@ router.get('/:token/projects', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+router.post('/:token/projects', async (req, res, next) => {
+  try {
+    const emp = await helpers.getEmployeeByToken(req.params.token);
+    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
+    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
+
+    const project = await helpers.createProject({
+      title: req.body?.title,
+      leaderEmployeeId: emp.id,
+      status: 'Черновик',
+    });
+    res.json({ ok: true, project });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get('/:token/project-functional-blocks', async (req, res, next) => {
   try {
     const emp = await helpers.getEmployeeByToken(req.params.token);
@@ -193,7 +211,7 @@ router.put('/:token/projects/:projectId', async (req, res, next) => {
     let notifications = { sent: 0, failed: 0, skipped: 0 };
     if (addedMemberIds.length) {
       try {
-        const base = `${req.protocol}://${req.get('host')}`;
+        const base = getPublicBaseUrl(req);
         notifications = await notifyProjectMembersAdded(updated, addedMemberIds, emp.name, base);
       } catch (mailError) {
         console.error('Ошибка уведомления участников проекта:', mailError.message);
@@ -307,7 +325,7 @@ router.post('/:token/submit', async (req, res, next) => {
 
     await helpers.submitChanges(emp.id, changes);
 
-    const base = `${req.protocol}://${req.get('host')}`;
+    const base = getPublicBaseUrl(req);
     notifyManagerNewSubmission(emp, base).catch(() => {});
     notifyEmployeeSubmitted(emp).catch(() => {});
 

@@ -57,7 +57,7 @@ app.use(session({
 }));
 
 // ─── Защита страниц менеджера ─────────────────────────────────────────────────
-const PROTECTED_PAGES = ['/index.html', '/review.html', '/settings.html'];
+const PROTECTED_PAGES = ['/index.html', '/review.html', '/history.html', '/settings.html'];
 const ADMIN_ONLY_PAGES = ['/projects.html', '/project.html'];
 app.use((req, res, next) => {
   if (PROTECTED_PAGES.includes(req.path) && !req.session.isManager) {

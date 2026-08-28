@@ -3,6 +3,7 @@ require('dotenv').config();
 module.exports = {
   port: process.env.PORT || 3000,
   host: process.env.HOST || '0.0.0.0',
+  publicBaseUrl: process.env.PUBLIC_BASE_URL || '',
   sessionSecret: process.env.SESSION_SECRET || 'portfolio-secret-key-change-me',
   defaultManagerEmail: (process.env.DEFAULT_MANAGER_EMAIL || `admin@${process.env.AD_DOMAIN || 'test.local'}`).toLowerCase(),
   defaultManagerPassword: process.env.DEFAULT_MANAGER_PASSWORD || 'Admin1234!',
