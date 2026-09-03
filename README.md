@@ -693,7 +693,10 @@ npm audit --omit=dev
 ```powershell
 Get-NetTCPConnection -LocalPort 3000 -ErrorAction SilentlyContinue
 ```
-
+### Пароль PostgreSQL можно посмотреть локально командой:
+```powershell
+docker compose exec postgres sh -c "cat /run/portfolio-secrets/postgres_password"
+```
 ## Типичные проблемы
 
 ### `portfolio_backup.dump` отсутствует или пустой

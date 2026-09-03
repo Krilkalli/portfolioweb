@@ -16,6 +16,9 @@ services:
     image: postgres:15
     container_name: portfolio-postgres
     restart: unless-stopped
+    ports:
+      # Доступ к PostgreSQL из локальной сети. На хосте 5432 уже занят.
+      - "5433:5432"
     environment:
       POSTGRES_USER: portfolio
       POSTGRES_PASSWORD_FILE: /run/portfolio-secrets/postgres_password
