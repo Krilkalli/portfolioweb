@@ -524,7 +524,35 @@ async function loadManagers() {
   } catch {}
 }
 
-const ROLE_LABELS = { admin: 'Главный администратор', scrum: 'Скрам-мастер', leader: 'Руководитель' };
+const ROLE_LABELS = { admin: 'Главный администратор', scrum: 'Скрам-мастер', leader: 'Руководитель проекта (РП)' };
+let rpEmployees = [];
+
+async function loadRpEmployees() {
+  try {
+    const response = await fetch('/api/employees');
+    if (!response.ok) return;
+    const employees = await response.json();
+    rpEmployees = (employees || []).filter(employee => employee.is_rp && employee.status !== 'archived');
+    const select = document.getElementById('newManagerEmployee');
+    if (!select) return;
+    select.innerHTML = '<option value="">Выберите сотрудника-РП</option>' + rpEmployees.map(employee =>
+      `<option value="${employee.id}">${escHtml(employee.name)}${employee.email ? ` — ${escHtml(employee.email)}` : ''}</option>`
+    ).join('');
+  } catch {}
+}
+
+function syncManagerEmployeeField() {
+  const leaderRole = document.getElementById('newManagerRole')?.value === 'leader';
+  document.getElementById('newManagerEmployeeWrap')?.classList.toggle('hidden', !leaderRole);
+}
+
+document.getElementById('newManagerRole')?.addEventListener('change', syncManagerEmployeeField);
+document.getElementById('newManagerEmployee')?.addEventListener('change', event => {
+  const employee = rpEmployees.find(item => String(item.id) === String(event.target.value));
+  if (!employee) return;
+  document.getElementById('newManagerName').value = employee.name || '';
+  document.getElementById('newManagerEmail').value = employee.email || '';
+});
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -546,6 +574,7 @@ function renderManagers(managers) {
         <div style="font-size:0.75rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <span>${escHtml(m.email)}</span>
           <span class="badge badge-accent" style="font-size:0.65rem;">${ROLE_LABELS[m.role] || m.role}</span>
+          ${m.employee_name ? `<span>Сотрудник: ${escHtml(m.employee_name)}</span>` : ''}
           ${m.id === currentManager?.id ? '<span class="badge badge-accent" style="font-size:0.65rem;">Вы</span>' : ''}
         </div>
         ${isAdmin && m.id !== currentManager?.id ? `
@@ -553,7 +582,7 @@ function renderManagers(managers) {
           <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
             <option value="admin" ${m.role==='admin'?'selected':''}>Главный администратор</option>
             <option value="scrum" ${m.role==='scrum'?'selected':''}>Скрам-мастер</option>
-            <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель</option>
+            <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель проекта (РП)</option>
           </select>
         </div>` : ''}
       </div>
@@ -587,17 +616,19 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
   const email = document.getElementById('newManagerEmail').value.trim().toLowerCase();
   const password = document.getElementById('newManagerPass').value;
   const role = document.getElementById('newManagerRole')?.value || 'scrum';
+  const employeeId = role === 'leader' ? document.getElementById('newManagerEmployee')?.value : null;
 
   if (!name) { toast('Введите имя менеджера', 'warning'); return; }
   if (!email) { toast('Введите почту менеджера', 'warning'); return; }
   if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) { toast('Введите корректную почту менеджера', 'warning'); return; }
   if (password.length < 12) { toast('Пароль должен быть не менее 12 символов', 'warning'); return; }
+  if (role === 'leader' && !employeeId) { toast('Выберите сотрудника-РП', 'warning'); return; }
 
   try {
     const r = await fetch('/api/managers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role }),
+      body: JSON.stringify({ name, email, password, role, employeeId }),
     });
     if (r.ok) {
       toast(`${ROLE_LABELS[role] || 'Пользователь'} «${name}» добавлен`, 'success');
@@ -605,6 +636,8 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
       document.getElementById('newManagerEmail').value = '';
       document.getElementById('newManagerPass').value = '';
       document.getElementById('newManagerRole').value = 'scrum';
+      document.getElementById('newManagerEmployee').value = '';
+      syncManagerEmployeeField();
       await loadManagers();
     } else {
       const d = await r.json();
@@ -698,7 +731,8 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
   initTheme();
   applyRoleUI(currentManager?.role);
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadRpEmployees(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
+  syncManagerEmployeeField();
 })();
 
 function applyRoleUI(role) {

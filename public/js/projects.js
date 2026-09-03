@@ -43,6 +43,7 @@ let searchQuery = '';
 let leaderFilter = '';
 let sortOrder = 'newest';
 let showArchived = false;
+let isAdmin = false;
 
 function openModal() { document.getElementById('projectModal').classList.add('active'); }
 function closeModal() { document.getElementById('projectModal').classList.remove('active'); }
@@ -88,10 +89,21 @@ function syncSelectAll() {
   if (activeChecks.length === 0) {
     selectAll.checked = false;
     selectAll.indeterminate = false;
+    updateProjectActions();
     return;
   }
   selectAll.checked = activeChecks.every(c => c.checked);
   selectAll.indeterminate = activeChecks.some(c => c.checked) && !activeChecks.every(c => c.checked);
+  updateProjectActions();
+}
+
+function updateProjectActions() {
+  if (!isAdmin) return;
+  const selected = projects.filter(project => selectedIds.has(Number(project.id)));
+  const onlyArchived = selected.length > 0 && selected.every(project => project.status === 'Архив');
+  const onlyActive = selected.length > 0 && selected.every(project => project.status !== 'Архив');
+  document.getElementById('archiveProjectsBtn').style.display = onlyActive ? '' : 'none';
+  document.getElementById('restoreProjectsBtn').style.display = onlyArchived ? '' : 'none';
 }
 
 function updateSelectionFromDom() {
@@ -135,7 +147,7 @@ function renderProjects(list) {
   const filtered = applyFilters(list);
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">Пока нет проектов</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Пока нет закреплённых проектов</td></tr>';
     syncSelectAll();
     return;
   }
@@ -150,15 +162,32 @@ function renderProjects(list) {
       : sent
         ? 'background:rgba(34,197,94,0.15);color:var(--success);'
         : 'background:rgba(245,158,11,0.15);color:var(--warning);';
+    const check = project.date_check || {};
+    const dateDetails = (check.members || []).map(member => `${member.employee_name}: ${member.period || 'дата не заполнена'}`).join('\n');
+    const dateLabel = !check.total
+      ? 'Нет сотрудников'
+      : check.missing
+        ? `Не заполнено: ${check.missing}`
+        : check.individual
+          ? `Индивидуальные: ${check.individual}`
+          : 'Даты совпадают';
+    const dateStyle = !check.total
+      ? 'background:rgba(148,163,184,0.15);color:#94a3b8;'
+      : check.missing
+        ? 'background:rgba(239,68,68,0.14);color:var(--danger);'
+        : check.individual
+          ? 'background:rgba(59,130,246,0.14);color:#60a5fa;'
+          : 'background:rgba(34,197,94,0.15);color:var(--success);';
 
     return `
       <tr class="project-row ${archived ? 'row-archived' : ''}">
-        <td class="col-check" style="text-align:center;">
-          <input type="checkbox" class="project-check" data-id="${project.id}" ${selectedIds.has(Number(project.id)) ? 'checked' : ''} ${archived ? 'disabled' : ''}>
+        <td class="col-check" data-admin-only style="text-align:center;${isAdmin ? '' : 'display:none;'}">
+          <input type="checkbox" class="project-check" data-id="${project.id}" ${selectedIds.has(Number(project.id)) ? 'checked' : ''}>
         </td>
         <td><div class="project-name"><a href="/project.html?id=${project.id}" target="_self">${escHtml(project.title)}</a></div></td>
         <td><span class="badge" style="${statusStyle}padding:6px 10px;border-radius:999px;">${escHtml(status)}</span></td>
         <td>${escHtml(leader)}</td>
+        <td class="date-check-column" title="${escHtml(dateDetails)}"><span class="badge date-check-badge" style="${dateStyle}padding:6px 10px;border-radius:999px;">${escHtml(dateLabel)}</span></td>
       </tr>
     `;
   }).join('');
@@ -176,10 +205,10 @@ async function loadProjects() {
 }
 
 async function loadLeaders() {
-  const r = await fetch('/api/employees');
+  const r = await fetch('/api/project-employees');
   if (!r.ok) return;
   const d = await r.json();
-  leaders = (d || []).filter(m => m.is_rp && m.status !== 'archived');
+  leaders = (d.employees || []).filter(m => m.is_rp && m.status !== 'archived');
   populateLeaderSelect();
 }
 
@@ -255,7 +284,7 @@ document.getElementById('projectExcelInput').addEventListener('change', async (e
           Проекты: создано ${Number(d.projectsCreated || 0)}, обновлено ${Number(d.projectsUpdated || 0)}.<br>
           Сотрудники: создано ${Number(d.employeesCreated || 0)}, обновлено ${Number(d.employeesUpdated || 0)}.<br>
           Пропущено жёлтых строк: ${Number(d.skippedInactiveRows || 0)} (${Number(d.inactiveEmployees || 0)} неработающих сотрудников).
-          Загруженные проекты созданы как черновики. Откройте карточки, назначьте РП и отправьте их руководителям.
+          Загруженные проекты созданы как черновики. Откройте карточки и назначьте РП — проект сразу появится в его кабинете.
         </div>`;
       await loadProjects();
     } else {
@@ -266,25 +295,6 @@ document.getElementById('projectExcelInput').addEventListener('change', async (e
   } finally {
     e.target.value = '';
   }
-});
-
-document.getElementById('sendProjectsBtn').addEventListener('click', async () => {
-  if (selectedIds.size === 0) { toast('Сначала выберите проекты', 'warning'); return; }
-  try {
-    const r = await fetch('/api/projects/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedIds) }),
-    });
-    const d = await r.json();
-    if (r.ok) {
-      toast(`Отправлено проектов: ${d.sent}`, 'success');
-      selectedIds.clear();
-      await loadProjects();
-    } else {
-      toast(d.error || 'Ошибка отправки', 'error');
-    }
-  } catch { toast('Ошибка соединения', 'error'); }
 });
 
 document.getElementById('archiveProjectsBtn').addEventListener('click', async () => {
@@ -304,6 +314,17 @@ document.getElementById('archiveProjectsBtn').addEventListener('click', async ()
     } else {
       toast(d.error || 'Ошибка архивации', 'error');
     }
+  } catch { toast('Ошибка соединения', 'error'); }
+});
+
+document.getElementById('restoreProjectsBtn').addEventListener('click', async () => {
+  if (selectedIds.size === 0) return;
+  try {
+    const r = await fetch('/api/projects/restore', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ ids:[...selectedIds] }) });
+    const d = await r.json();
+    if (!r.ok) return toast(d.error || 'Ошибка восстановления', 'error');
+    toast(`Восстановлено проектов: ${d.restored}`, 'success');
+    selectedIds.clear(); await loadProjects();
   } catch { toast('Ошибка соединения', 'error'); }
 });
 
@@ -339,8 +360,13 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
-  if (auth.manager?.role !== 'admin') { location.href = '/index.html'; return; }
+  if (!['admin', 'leader'].includes(auth.manager?.role)) { location.href = '/index.html'; return; }
   currentManager = auth.manager;
+  isAdmin = currentManager.role === 'admin';
+  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = isAdmin ? '' : 'none'; });
+  if (!isAdmin) {
+    document.getElementById('projectsSubtitle').textContent = 'Здесь отображаются только проекты, в которых вы назначены руководителем.';
+  }
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await Promise.all([loadLeaders(), loadProjects()]);

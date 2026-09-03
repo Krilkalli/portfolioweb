@@ -146,7 +146,8 @@ const SCHEMA_SQL = `
     email TEXT NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
     created_at TEXT,
-    role TEXT DEFAULT 'admin'
+    role TEXT DEFAULT 'admin',
+    employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL
   );
 
   CREATE TABLE IF NOT EXISTS projects (
@@ -199,6 +200,7 @@ const FIELD_LABELS = {
   position: 'Должность',
   contacts: 'Контактные данные',
   experience: 'Стаж работы',
+  total_experience: 'Общий стаж',
   about: 'Обо мне',
   competencies: 'Компетенции',
   project_experience: 'Проектный опыт',
@@ -284,6 +286,58 @@ async function withActiveProjectMembers(projects) {
       .map(member => ({ ...member, name: activeNames.get(Number(member.employee_id)) }))
   }));
   return single ? (filtered[0] || null) : filtered;
+}
+
+function formatProjectPeriod(project) {
+  return [
+    project?.start_period || '',
+    project?.end_present ? 'настоящее время' : (project?.end_period || ''),
+  ].filter(Boolean).join(' - ');
+}
+
+async function withProjectDateChecks(projects) {
+  const single = !Array.isArray(projects);
+  const list = (single ? [projects] : projects).filter(Boolean);
+  const memberIds = [...new Set(list.flatMap(project =>
+    (project.team_members || []).map(member => Number(member.employee_id || member.id || 0)).filter(Boolean)
+  ))];
+  const employeeRows = memberIds.length
+    ? await _all('SELECT id, name, project_experience FROM employees WHERE id = ANY($1::int[])', [memberIds])
+    : [];
+  const employees = new Map(employeeRows.map(employee => {
+    let experience = [];
+    try { experience = JSON.parse(employee.project_experience || '[]'); } catch { experience = parseLegacyProject(employee.project_experience); }
+    return [Number(employee.id), { ...employee, experience: Array.isArray(experience) ? experience : [] }];
+  }));
+
+  const checked = list.map(project => {
+    const projectPeriod = formatProjectPeriod(project);
+    const members = (project.team_members || []).map(member => {
+      const employeeId = Number(member.employee_id || member.id || 0);
+      const employee = employees.get(employeeId);
+      const saved = employee?.experience.find(item => Number(item?.project_id || 0) === Number(project.id));
+      const period = String(saved?.period || '').trim();
+      const individual = Boolean(saved?.period_overridden) || Boolean(period && period !== projectPeriod);
+      return {
+        employee_id: employeeId,
+        employee_name: employee?.name || member.employee_name || member.name || '',
+        period,
+        status: !period ? 'missing' : (individual ? 'individual' : 'matches'),
+      };
+    }).filter(member => member.employee_id);
+    return {
+      ...project,
+      date_check: {
+        total: members.length,
+        matching: members.filter(member => member.status === 'matches').length,
+        individual: members.filter(member => member.status === 'individual').length,
+        missing: members.filter(member => member.status === 'missing').length,
+        project_period: projectPeriod,
+        members,
+      },
+    };
+  });
+  return single ? (checked[0] || null) : checked;
 }
 
 // ─── JSON-сериализация для записи ──────────────────────────────────────────
@@ -471,6 +525,18 @@ async function init() {
       )
   `);
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
+  await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
+  await _run(`
+    UPDATE managers m
+    SET employee_id = (
+      SELECT e.id
+      FROM employees e
+      WHERE LOWER(TRIM(e.email)) = LOWER(TRIM(m.email)) AND e.is_rp = TRUE
+      ORDER BY e.id
+      LIMIT 1
+    )
+    WHERE m.role = 'leader' AND m.employee_id IS NULL
+  `).catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Черновик'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS code_name TEXT DEFAULT ''").catch(() => {});
@@ -538,6 +604,7 @@ async function init() {
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_status ON projects(status)');
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id)');
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader_employee ON projects(leader_employee_id)');
+  await _run('CREATE UNIQUE INDEX IF NOT EXISTS idx_managers_employee_unique ON managers(employee_id) WHERE employee_id IS NOT NULL');
 
   // Настройки умолчания
   let settings = await loadSettings();
@@ -802,14 +869,6 @@ const helpers = {
     return _all("SELECT id, name FROM employees WHERE id = ANY($1::int[]) AND status = 'active'", [ids.map(Number)]);
   },
 
-  async getProjectNotificationRecipients(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return [];
-    return _all(
-      "SELECT id, name, email, token FROM employees WHERE id = ANY($1::int[]) AND status = 'active'",
-      [ids.map(Number)]
-    );
-  },
-
   async getProjectsByIds(ids) {
     if (!Array.isArray(ids) || ids.length === 0) return [];
     const projects = await _all(`
@@ -820,7 +879,7 @@ const helpers = {
       WHERE p.id = ANY($1::int[])
       ORDER BY p.created_at DESC, p.id DESC
     `, [ids.map(Number)]).then(castProjects);
-    return withActiveProjectMembers(projects);
+    return withProjectDateChecks(await withActiveProjectMembers(projects));
   },
 
   async syncEmployeeProjectExperience(employeeId, project) {
@@ -835,9 +894,12 @@ const helpers = {
       try { current = JSON.parse(emp.project_experience || '[]'); } catch { current = parseLegacyProject(emp.project_experience); }
       if (!Array.isArray(current)) current = [];
 
+      const existingEntry = current.find(item => Number(item?.project_id || 0) === Number(project?.project_id || project?.id || 0));
+      const preservePersonalPeriod = Boolean(existingEntry?.period_overridden);
       const nextEntry = {
         project_id: project?.project_id || project?.id || null,
-        period: project?.period || '',
+        period: preservePersonalPeriod ? (existingEntry?.period || '') : (project?.period || ''),
+        period_overridden: preservePersonalPeriod,
         project_name: project?.project_name || '',
         position: project?.position || '',
         role: project?.role || '',
@@ -1443,7 +1505,12 @@ const helpers = {
       const change = ch.rows[0];
       const now = new Date().toISOString();
       const emp = await client.query('SELECT * FROM employees WHERE id = $1', [change.employee_id]);
-      if (emp.rows[0] && ALLOWED_FIELDS.has(change.field_name)) {
+      if (emp.rows[0] && change.field_name === 'total_experience') {
+        let experience = {};
+        try { experience = JSON.parse(emp.rows[0].experience || '{}'); } catch {}
+        experience = { ...(experience && typeof experience === 'object' ? experience : {}), total: change.new_value || '' };
+        await client.query('UPDATE employees SET experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(experience), now, change.employee_id]);
+      } else if (emp.rows[0] && ALLOWED_FIELDS.has(change.field_name)) {
         await client.query(`UPDATE employees SET "${change.field_name}" = $1, updated_at = $2 WHERE id = $3`, [change.new_value, now, change.employee_id]);
         if (change.field_name === 'contacts') {
           const lines = (change.new_value || '').split('\n').filter(l => l.trim());
@@ -1515,7 +1582,13 @@ const helpers = {
       const emp = await client.query('SELECT * FROM employees WHERE id = $1', [Number(employeeId)]);
       if (emp.rows[0]) {
         for (const ch of changes.rows) {
-          if (ALLOWED_FIELDS.has(ch.field_name)) {
+          if (ch.field_name === 'total_experience') {
+            let experience = {};
+            try { experience = JSON.parse(emp.rows[0].experience || '{}'); } catch {}
+            experience = { ...(experience && typeof experience === 'object' ? experience : {}), total: ch.new_value || '' };
+            await client.query('UPDATE employees SET experience = $1, updated_at = $2 WHERE id = $3', [JSON.stringify(experience), now, ch.employee_id]);
+            emp.rows[0].experience = JSON.stringify(experience);
+          } else if (ALLOWED_FIELDS.has(ch.field_name)) {
             await client.query(`UPDATE employees SET "${ch.field_name}" = $1, updated_at = $2 WHERE id = $3`, [ch.new_value, now, ch.employee_id]);
             if (ch.field_name === 'contacts') {
               const lines = (ch.new_value || '').split('\n').filter(l => l.trim());
@@ -1600,7 +1673,7 @@ const helpers = {
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       ORDER BY p.created_at DESC, p.id DESC
     `).then(castProjects);
-    return withActiveProjectMembers(projects);
+    return withProjectDateChecks(await withActiveProjectMembers(projects));
   },
 
   async getProjectById(id) {
@@ -1611,7 +1684,7 @@ const helpers = {
       LEFT JOIN employees e ON e.id = p.leader_employee_id
       WHERE p.id = $1
     `, [Number(id)]).then(castProject);
-    return withActiveProjectMembers(project);
+    return withProjectDateChecks(await withActiveProjectMembers(project));
   },
 
   async createProject({ title, leaderEmployeeId, status }) {
@@ -1830,18 +1903,6 @@ const helpers = {
     return [...values].sort((a, b) => a.localeCompare(b, 'ru'));
   },
 
-  async markProjectsSent(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return 0;
-    const now = new Date().toISOString();
-    const res = await _run(
-      `UPDATE projects
-       SET status = 'Отправлено', sent_at = $1, updated_at = $1
-       WHERE id = ANY($2::int[]) AND status IS DISTINCT FROM 'Отправлено'`,
-      [now, ids.map(Number)]
-    );
-    return res ? res.rowCount : 0;
-  },
-
   async getProjectsForLeaderEmployee(employeeId) {
     const rows = await _all(`
       SELECT p.*, e.name AS leader_employee_name
@@ -1864,13 +1925,14 @@ const helpers = {
     const memberRows = await helpers.getEmployeesByIds([...new Set(allIds)]);
     const memberMap = new Map(memberRows.map(m => [Number(m.id), m.name]));
 
-    return parsed.map(row => ({
+    const projects = parsed.map(row => ({
       ...row,
       team_members: (row.team_members || []).map(m => {
         const id = Number(m.employee_id || m.id || 0);
         return { ...m, employee_id: id, employee_name: memberMap.get(id) || m.employee_name || m.name || '' };
       }).filter(member => memberMap.has(Number(member.employee_id))),
     }));
+    return withProjectDateChecks(projects);
   },
 
   async syncProjectTeamMembers(project) {
@@ -1948,10 +2010,26 @@ const helpers = {
     return _get('SELECT * FROM managers WHERE id = $1', [Number(id)]);
   },
   getAllManagers() {
-    return _all('SELECT id, name, email, role, created_at FROM managers ORDER BY name');
+    return _all(`
+      SELECT m.id, m.name, m.email, m.role, m.employee_id, m.created_at,
+             e.name AS employee_name
+      FROM managers m
+      LEFT JOIN employees e ON e.id = m.employee_id
+      ORDER BY m.name
+    `);
   },
 
-  async createManager(name, email, passwordHash, role) {
+  async restoreProjects(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return 0;
+    const res = await _run(
+      `UPDATE projects SET status = 'Черновик', updated_at = $1
+       WHERE id = ANY($2::int[]) AND status = 'Архив'`,
+      [new Date().toISOString(), ids.map(Number)]
+    );
+    return res ? res.rowCount : 0;
+  },
+
+  async createManager(name, email, passwordHash, role, employeeId = null) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -1960,9 +2038,20 @@ const helpers = {
       if (existing.rows[0]) throw new Error('Менеджер с такой почтой уже существует');
       const validRoles = ['admin', 'scrum', 'leader'];
       const managerRole = validRoles.includes(role) ? role : 'scrum';
+      let linkedEmployeeId = null;
+      if (managerRole === 'leader') {
+        const requestedEmployeeId = Number(employeeId || 0);
+        const linked = requestedEmployeeId
+          ? await client.query("SELECT id, is_rp, status FROM employees WHERE id = $1", [requestedEmployeeId])
+          : await client.query("SELECT id, is_rp, status FROM employees WHERE LOWER(TRIM(email)) = $1 ORDER BY id LIMIT 1", [normalizedEmail]);
+        const employee = linked.rows[0];
+        if (!employee || employee.status === 'archived') throw new Error('Для роли РП выберите действующего сотрудника');
+        if (!employee.is_rp) throw new Error('Выбранный сотрудник не отмечен как РП');
+        linkedEmployeeId = employee.id;
+      }
       const result = await client.query(
-        'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-        [String(name || '').trim(), normalizedEmail, passwordHash, managerRole, new Date().toISOString()]
+        'INSERT INTO managers (name, email, password_hash, role, employee_id, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [String(name || '').trim(), normalizedEmail, passwordHash, managerRole, linkedEmployeeId, new Date().toISOString()]
       );
       await client.query('COMMIT');
       return result.rows[0];
@@ -2010,13 +2099,23 @@ const helpers = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const target = await client.query('SELECT id, role FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
+      const target = await client.query('SELECT id, role, email, employee_id FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
       if (!target.rows[0]) throw new Error('Пользователь не найден');
       if (target.rows[0].role === 'admin' && role !== 'admin') {
         const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
         if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя снять роль у последнего главного администратора');
       }
-      await client.query('UPDATE managers SET role = $1 WHERE id = $2', [role, Number(id)]);
+      let employeeId = target.rows[0].employee_id;
+      if (role === 'leader' && !employeeId) {
+        const linked = await client.query("SELECT id, is_rp, status FROM employees WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) ORDER BY id LIMIT 1", [target.rows[0].email]);
+        const employee = linked.rows[0];
+        if (!employee || employee.status === 'archived' || !employee.is_rp) {
+          throw new Error('Для роли РП нужна учётная запись с почтой сотрудника, отмеченного как РП');
+        }
+        employeeId = employee.id;
+      }
+      if (role !== 'leader') employeeId = null;
+      await client.query('UPDATE managers SET role = $1, employee_id = $2 WHERE id = $3', [role, employeeId, Number(id)]);
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');

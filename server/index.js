@@ -76,14 +76,21 @@ app.use('/api', csrfProtection);
 
 // ─── Защита страниц менеджера ─────────────────────────────────────────────────
 const PROTECTED_PAGES = ['/index.html', '/review.html', '/history.html', '/settings.html'];
-const ADMIN_ONLY_PAGES = ['/projects.html', '/project.html'];
+const PROJECT_PAGES = ['/projects.html', '/project.html'];
 app.use((req, res, next) => {
+  if (req.path === '/myprojects.html') {
+    if (!req.session.isManager) return res.redirect('/login.html');
+    return res.redirect(req.session.managerRole === 'leader' ? '/projects.html' : '/index.html');
+  }
   if (PROTECTED_PAGES.includes(req.path) && !req.session.isManager) {
     return res.redirect('/login.html');
   }
-  if (ADMIN_ONLY_PAGES.includes(req.path)) {
+  if (req.path === '/index.html' && req.session.isManager && req.session.managerRole === 'leader') {
+    return res.redirect('/projects.html');
+  }
+  if (PROJECT_PAGES.includes(req.path)) {
     if (!req.session.isManager) return res.redirect('/login.html');
-    if (req.session.managerRole !== 'admin') return res.redirect('/index.html');
+    if (!['admin', 'leader'].includes(req.session.managerRole)) return res.redirect('/index.html');
   }
   next();
 });
@@ -93,7 +100,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/', (req, res) => {
-  if (req.session.isManager) return res.redirect('/index.html');
+  if (req.session.isManager) return res.redirect(req.session.managerRole === 'leader' ? '/projects.html' : '/index.html');
   res.redirect('/login.html');
 });
 

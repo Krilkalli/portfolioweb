@@ -9,8 +9,8 @@
   <style>
     .main-content { padding: 32px 0; flex: 1; }
     .projects-card { padding: 0; }
-    .projects-card .table-wrap { overflow: visible; }
-    #projectsTable { width: 100%; table-layout: fixed; }
+    .projects-card .table-wrap { overflow-x: auto; overflow-y: visible; border-radius: inherit; }
+    #projectsTable { width: 100%; min-width: 920px; table-layout: auto; }
     #projectsTable thead { position: sticky; top: 0; z-index: 10; }
     #projectsTable thead th { background: var(--bg-secondary); }
     #projectsTable td, #projectsTable th { vertical-align: middle; }
@@ -23,6 +23,8 @@
     .toolbar-compact { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin: 8px 0 16px; }
     .toolbar-compact .search-wrap input { width: 320px; }
     .projects-toolbar .btn { min-width:170px; min-height:34px; justify-content:center; }
+    .date-check-column { width:230px; min-width:230px; }
+    .date-check-badge { display:inline-flex; align-items:center; max-width:100%; white-space:normal; line-height:1.25; text-align:left; }
   </style>
   <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
 </head>
@@ -36,8 +38,8 @@
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
-    <a href="/index.html" class="btn btn-ghost btn-sm" data-role="admin">Дашборд</a>
-    <a href="/projects.html" class="btn btn-primary btn-sm" data-role="admin">Проекты</a>
+    <a href="/index.html" class="btn btn-ghost btn-sm" data-admin-only>Дашборд</a>
+    <a href="/projects.html" class="btn btn-primary btn-sm">Проекты</a>
     <a href="/settings.html" class="btn btn-ghost btn-sm" data-role="admin">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -47,19 +49,19 @@
 <main class="main-content container">
   <div style="margin-bottom:18px;">
     <div class="page-title">Проекты</div>
-    <div class="page-subtitle">Создание карточек проектов и назначение руководителя из списка руководителей.</div>
+    <div class="page-subtitle" id="projectsSubtitle">Создание карточек проектов и назначение руководителя из списка руководителей.</div>
   </div>
 
   <div class="projects-toolbar">
     <div class="projects-toolbar-left">
-      <button id="createProjectBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-plus"></i> Создать проект</button>
-      <button id="uploadExcelBtn" class="btn btn-ghost btn-sm"><i class="fi fi-rr-upload"></i> Загрузить эксель</button>
-      <a id="exportUppRegisterBtn" href="/api/projects/export-register" class="btn btn-ghost btn-sm"><i class="fi fi-rr-download"></i> Выгрузить регистр УПП</a>
+      <button id="createProjectBtn" class="btn btn-primary btn-sm" data-admin-only><i class="fi fi-rr-plus"></i> Создать проект</button>
+      <button id="uploadExcelBtn" class="btn btn-ghost btn-sm" data-admin-only><i class="fi fi-rr-upload"></i> Загрузить эксель</button>
+      <a id="exportUppRegisterBtn" href="/api/projects/export-register" class="btn btn-ghost btn-sm" data-admin-only><i class="fi fi-rr-download"></i> Выгрузить регистр УПП</a>
       <input type="file" id="projectExcelInput" accept=".xlsx,.xls" hidden>
     </div>
     <div class="projects-toolbar-right">
-      <button id="sendProjectsBtn" class="btn btn-primary btn-sm"><i class="fi fi-rr-paper-plane"></i> Отправить</button>
-      <button id="archiveProjectsBtn" class="btn btn-danger btn-sm"><i class="fi fi-rr-box"></i> Архив</button>
+      <button id="archiveProjectsBtn" class="btn btn-danger btn-sm" data-admin-only><i class="fi fi-rr-box"></i> Архив</button>
+      <button id="restoreProjectsBtn" class="btn btn-primary btn-sm" data-admin-only style="display:none;"><i class="fi fi-rr-refresh"></i> Восстановить из архива</button>
     </div>
   </div>
   <div id="projectImportResult" class="card" style="display:none;padding:14px;margin-bottom:16px;"></div>
@@ -71,7 +73,7 @@
       </svg>
       <input id="projectSearchInput" type="text" class="form-control" placeholder="Поиск по названию проекта или руководителю...">
     </div>
-    <div class="form-group" style="margin:0;min-width:240px;">
+    <div class="form-group" style="margin:0;min-width:240px;" data-admin-only>
       <select id="projectLeaderFilter" class="form-control">
         <option value="">Все руководители</option>
       </select>
@@ -92,16 +94,17 @@
       <table class="table" id="projectsTable">
         <thead>
           <tr>
-            <th class="col-check" style="text-align:center;width:40px;">
+            <th class="col-check" data-admin-only style="text-align:center;width:40px;">
               <input type="checkbox" id="selectAllProjects">
             </th>
             <th style="text-align:left;">Название проекта</th>
             <th style="text-align:left; width:160px;">Статус</th>
             <th style="text-align:left; width:240px;">Руководитель</th>
+            <th class="date-check-column" style="text-align:left;">Проверка дат сотрудников</th>
           </tr>
         </thead>
         <tbody id="projectsTbody">
-          <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
+          <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
         </tbody>
       </table>
     </div>

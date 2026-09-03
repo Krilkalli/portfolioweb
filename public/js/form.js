@@ -393,11 +393,10 @@ function addProjectEntry(data, openEntry = false) {
     }
   }
   const projectId = Number(data?.project_id || 0);
-  // Карточка сотрудника не предназначена для редактирования общих данных
-  // проекта даже при активной сессии администратора в этом браузере.
-  const managedLocked = true;
+  // В связанном проекте сотрудник редактирует только личные поля и свой период.
+  const managedLocked = Boolean(projectId);
   const lockedAttr = 'readonly disabled aria-readonly="true" aria-disabled="true" title="Поле заполняется руководителем проекта или администратором"';
-  const periodEndLockedAttr = (managedLocked || pEnd === 'настоящее время') ? 'readonly' : '';
+  const periodEndLockedAttr = pEnd === 'настоящее время' ? 'readonly' : '';
   const functionalBlocks = Array.isArray(data?.functional_blocks) && data.functional_blocks.length
     ? data.functional_blocks
     : String(data?.task_description || '').split(',').map(value => value.trim()).filter(Boolean);
@@ -409,17 +408,17 @@ function addProjectEntry(data, openEntry = false) {
   e.innerHTML = `
     <summary class="proj-summary">${escHtml(projectTitle(data))}</summary>
     <div class="accordion-body">
-      ${managedLocked ? '<div style="margin-bottom:12px;padding:9px 11px;border-radius:8px;background:rgba(59,130,246,0.10);color:var(--text-secondary);font-size:0.8rem;">Общие данные проекта заполняет РП или администратор. Сотрудник может дополнить только свою должность и роль.</div>' : '<button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,\'proj-entry\')">✕</button>'}
+      ${managedLocked ? '<div style="margin-bottom:12px;padding:9px 11px;border-radius:8px;background:rgba(59,130,246,0.10);color:var(--text-secondary);font-size:0.8rem;">Общие данные проекта заполняет РП или администратор. Вы можете изменить свой период участия, должность и роль. Личный период не будет перезаписан при изменении общей даты проекта.</div>' : '<button type="button" class="remove-btn" style="position:absolute;top:8px;right:8px;" onclick="confirmRemoveEntry(this,\'proj-entry\')">✕</button>'}
       <div class="form-group" style="display:flex; gap:10px;">
         <div style="flex:1;">
           <label class="form-label">Начало периода (проект)</label>
-          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ или ГГГГ (до 2021)" value="${escHtml(pStart)}" ${lockedAttr}>
+          <input type="text" class="form-control proj-period-start" placeholder="ММ.ГГГГ или ГГГГ (до 2021)" value="${escHtml(pStart)}">
         </div>
         <div style="flex:1;">
           <label class="form-label">Конец периода</label>
-          <input type="text" class="form-control proj-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${periodEndLockedAttr} ${managedLocked ? 'aria-readonly="true" title="Период задаёт РП или администратор"' : ''}>
+          <input type="text" class="form-control proj-period-end" placeholder="ММ.ГГГГ" value="${escHtml(pEnd)}" ${periodEndLockedAttr}>
           <label style="margin-top:6px; font-size:0.75rem; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer; color:var(--text-primary);">
-            <input type="checkbox" class="proj-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''} ${managedLocked ? 'disabled title="Период задаёт РП или администратор"' : ''}> настоящее время
+            <input type="checkbox" class="proj-period-present" ${pEnd === 'настоящее время' ? 'checked' : ''}> настоящее время
           </label>
         </div>
       </div>
@@ -544,9 +543,6 @@ function showForm(emp) {
 
   document.getElementById('employeeName').textContent = emp.name;
   document.getElementById('employeePos').textContent = emp.position || '';
-  const myProjectsBtn = document.getElementById('myProjectsBtn');
-  if (emp.is_rp) myProjectsBtn?.classList.remove('hidden');
-  else myProjectsBtn?.classList.add('hidden');
   const projectExperienceBody = document.getElementById('projectExperienceBody');
   const projectExperienceToggle = document.getElementById('toggleProjectExperienceBtn');
   if (projectExperienceBody && projectExperienceToggle) {
@@ -677,7 +673,6 @@ function setViewMode(view) {
   isViewMode = view;
   const formState = document.getElementById('formState');
   document.getElementById('editModeBtn')?.classList.toggle('hidden', !view);
-  document.getElementById('myProjectsBtn')?.classList.toggle('hidden', !employee?.is_rp);
   document.getElementById('headerSubtitle').textContent = view ? '— Просмотр профиля' : '— Обновление профиля';
   document.getElementById('spellerBtn')?.classList.toggle('hidden', view);
   formState.classList.toggle('view-mode', view);
@@ -718,7 +713,7 @@ function trackChanges() {
   } else if (posEl) posEl.classList.remove('changed');
 
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
-  if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
+  if (JSON.stringify(getJobData().jobs || []) !== JSON.stringify(originalValues._experienceParsed?.jobs || [])) changedFields.push(FIELD_NAMES.experience);
   const certChanged = serializeCertification() !== (originalValues._certSerialized || '');
   const certEl = document.getElementById('f_certification');
   if (certEl) certEl.classList.toggle('changed', certChanged);
@@ -759,7 +754,7 @@ function getChangedFieldNames() {
   const posEl = document.getElementById('f_position');
   if (posEl && posEl.value !== (originalValues.position || '')) changedFields.push(FIELD_NAMES.position);
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
-  if (JSON.stringify(getJobData()) !== JSON.stringify(originalValues._experienceParsed || {})) changedFields.push(FIELD_NAMES.experience);
+  if (JSON.stringify(getJobData().jobs || []) !== JSON.stringify(originalValues._experienceParsed?.jobs || [])) changedFields.push(FIELD_NAMES.experience);
   if (serializeCertification() !== (originalValues._certSerialized || '')) changedFields.push(FIELD_NAMES.certification);
   if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
   return changedFields;
@@ -926,11 +921,6 @@ document.getElementById('editModeBtn').addEventListener('click', () => {
   }
   history.replaceState({}, '', url);
   setViewMode(false);
-});
-
-document.getElementById('myProjectsBtn').addEventListener('click', () => {
-  if (!token) return;
-  location.href = `/myprojects.html?token=${token}${managerUser ? '&mode=manager' : ''}`;
 });
 
 document.getElementById('toggleProjectExperienceBtn').addEventListener('click', () => {
@@ -1128,9 +1118,11 @@ async function initForm() {
 
   // Check if user is a logged-in manager
   try {
-    const auth = await fetch('/api/auth/me').then(r => r.json());
+  const auth = await fetch('/api/auth/me').then(r => r.json());
     if (auth.authenticated && auth.manager) {
-      managerUser = auth.manager;
+    managerUser = auth.manager;
+    const logoLink = document.getElementById('formLogoLink');
+    if (logoLink) { logoLink.href = '/index.html'; logoLink.style.cursor = 'pointer'; }
       document.querySelectorAll('.manager-only').forEach(el => el.classList.remove('manager-only'));
     }
   } catch {}

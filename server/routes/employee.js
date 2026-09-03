@@ -6,7 +6,7 @@ const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { composeProjectDescription } = require('../projectDescription');
-const { notifyManagerNewSubmission, notifyEmployeeSubmitted, notifyProjectMembersAdded } = require('../mailer');
+const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
 const { getPublicBaseUrl } = require('../publicUrl');
 const https = require('https');
 const querystring = require('querystring');
@@ -33,7 +33,7 @@ const { enhanceText, enhanceJSON } = require('../ai');
 
 const EDITABLE_FIELDS = [
   'name','education','position','contacts','experience',
-  'about','competencies','project_experience','certification','photo',
+  'total_experience','about','competencies','project_experience','certification','photo',
 ];
 
 function formatManagedProjectPeriod(project) {
@@ -41,12 +41,6 @@ function formatManagedProjectPeriod(project) {
     project?.start_period || '',
     project?.end_present ? 'настоящее время' : (project?.end_period || ''),
   ].filter(Boolean).join(' - ');
-}
-
-function projectMemberIds(project) {
-  return new Set((project?.team_members || [])
-    .map(member => Number(member?.employee_id || member?.id || 0))
-    .filter(Boolean));
 }
 
 async function enforceManagedProjectFields(currentValue, submittedValue, employeeId = null) {
@@ -85,8 +79,8 @@ async function enforceManagedProjectFields(currentValue, submittedValue, employe
     const projectId = Number(item?.project_id || 0);
     if (!projectId) return item;
     const project = projectsById.get(projectId);
+    const saved = currentById.get(projectId) || {};
     if (!project) {
-      const saved = currentById.get(projectId) || {};
       return {
         ...item,
         project_id: projectId,
@@ -106,10 +100,14 @@ async function enforceManagedProjectFields(currentValue, submittedValue, employe
     const functionalArea = Array.isArray(projectMember?.functional_areas) && projectMember.functional_areas.length
       ? projectMember.functional_areas.join(', ')
       : (project.functional_area || '');
+    const submittedPeriod = String(item?.period || '').trim();
+    const employeeChangedPeriod = submittedPeriod !== String(saved?.period || '').trim();
+    const periodOverridden = Boolean(saved?.period_overridden) || employeeChangedPeriod;
     return {
       ...item,
       project_id: projectId,
-      period: formatManagedProjectPeriod(project),
+      period: periodOverridden ? submittedPeriod : formatManagedProjectPeriod(project),
+      period_overridden: periodOverridden,
       project_name: project.code_name || project.title || '',
       team_size: String(project.team_size || ''),
       client: project.industry_description || project.legal_customer_name || project.customer || '',
@@ -154,116 +152,6 @@ router.get('/:token', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/:token/projects', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.json({ projects: [] });
-    const projects = await helpers.getProjectsForLeaderEmployee(emp.id);
-    res.json({ projects });
-  } catch (err) { next(err); }
-});
-
-router.post('/:token/projects', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
-
-    const project = await helpers.createProject({
-      title: req.body?.title,
-      leaderEmployeeId: emp.id,
-      status: 'Черновик',
-    });
-    res.json({ ok: true, project });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-router.get('/:token/project-functional-blocks', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
-    res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
-  } catch (err) { next(err); }
-});
-
-router.get('/:token/project-employees', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
-    const employees = (await helpers.getAllEmployees())
-      .filter(employee => employee.status !== 'archived')
-      .map(employee => ({ id: employee.id, name: employee.name, position: employee.position }));
-    res.json({ employees });
-  } catch (err) { next(err); }
-});
-
-router.put('/:token/projects/:projectId', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
-    const project = await helpers.getProjectById(Number(req.params.projectId));
-    if (!project) return res.status(404).json({ error: 'Проект не найден' });
-    if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
-
-    const allowed = ['title','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_area','functional_blocks','team_members'];
-    const fields = Object.fromEntries(allowed.filter(key => req.body?.[key] !== undefined).map(key => [key, req.body[key]]));
-    const updated = await helpers.updateProject(Number(req.params.projectId), fields);
-    if (updated) await helpers.syncProjectTeamMembers(updated);
-    const previousMemberIds = projectMemberIds(project);
-    const addedMemberIds = [...projectMemberIds(updated)]
-      .filter(employeeId => !previousMemberIds.has(employeeId) && employeeId !== Number(updated?.leader_employee_id));
-    let notifications = { sent: 0, failed: 0, skipped: 0 };
-    if (addedMemberIds.length) {
-      try {
-        const base = getPublicBaseUrl(req);
-        notifications = await notifyProjectMembersAdded(updated, addedMemberIds, emp.name, base);
-      } catch (mailError) {
-        console.error('Ошибка уведомления участников проекта:', mailError.message);
-        notifications.failed = addedMemberIds.length;
-      }
-    }
-    res.json({ ok: true, project: updated, notifications });
-  } catch (err) { next(err); }
-});
-
-router.post('/:token/projects/:projectId/members/:employeeId/sync-project-experience', async (req, res, next) => {
-  try {
-    const emp = await helpers.getEmployeeByToken(req.params.token);
-    if (!emp) return res.status(404).json({ error: 'Ссылка недействительна или не найдена' });
-    if (!emp.is_rp) return res.status(403).json({ error: 'Недостаточно прав' });
-    const project = await helpers.getProjectById(Number(req.params.projectId));
-    if (!project) return res.status(404).json({ error: 'Проект не найден' });
-    if (Number(project.leader_employee_id) !== Number(emp.id)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
-    const employeeId = Number(req.params.employeeId);
-    if (!project.team_members.some(m => Number(m.employee_id || m.id || 0) === employeeId)) {
-      return res.status(403).json({ error: 'Сотрудник не состоит в команде проекта' });
-    }
-    const projectMember = project.team_members.find(member => Number(member.employee_id || member.id || 0) === employeeId);
-    const functionalArea = Array.isArray(projectMember?.functional_areas) && projectMember.functional_areas.length
-      ? projectMember.functional_areas.join(', ')
-      : (project.functional_area || '');
-    const synced = await helpers.syncEmployeeProjectExperience(employeeId, {
-      project_id: project.id,
-      period: formatManagedProjectPeriod(project),
-      project_name: project.code_name || project.title,
-      client: project.industry_description || project.legal_customer_name || project.customer || '',
-      team_size: project.team_size,
-      project_description: composeProjectDescription(project.description, project.functional_blocks || []),
-      task_description: '',
-      functional_area: functionalArea,
-      technologies: project.technologies || '',
-      functional_blocks: project.functional_blocks || [],
-    });
-    res.json({ ok: true, employee: synced });
-  } catch (err) { next(err); }
-});
-
 router.post('/:token/submit', async (req, res, next) => {
   try {
     const emp = await helpers.getEmployeeByToken(req.params.token);
@@ -275,6 +163,9 @@ router.post('/:token/submit', async (req, res, next) => {
 
     const contacts = [fields.city, fields.email].filter(Boolean).join('\n');
     const submitFields = { ...fields, contacts };
+    if (submitFields.experience && typeof submitFields.experience === 'object') {
+      submitFields.experience = { ...submitFields.experience, total: emp.experience?.total || '' };
+    }
     if (Array.isArray(submitFields.project_experience)) {
       submitFields.project_experience = await enforceManagedProjectFields(emp.project_experience, submitFields.project_experience, emp.id);
     }
@@ -311,9 +202,10 @@ router.post('/:token/submit', async (req, res, next) => {
     for (const fieldName of EDITABLE_FIELDS) {
       if (submitFields[fieldName] === undefined) continue;
       const newNorm = normalizeForComparison(fieldName, submitFields[fieldName]);
-      const oldNorm = normalizeForComparison(fieldName, emp[fieldName]);
+      const oldValue = fieldName === 'total_experience' ? (emp.experience?.total || '') : emp[fieldName];
+      const oldNorm = normalizeForComparison(fieldName, oldValue);
       if (newNorm !== oldNorm) {
-        changes.push({ field_name: fieldName, old_value: storeValue(fieldName, emp[fieldName]), new_value: storeValue(fieldName, submitFields[fieldName]) });
+        changes.push({ field_name: fieldName, old_value: storeValue(fieldName, oldValue), new_value: storeValue(fieldName, submitFields[fieldName]) });
       }
     }
 

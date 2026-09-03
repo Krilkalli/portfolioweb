@@ -220,63 +220,6 @@ async function notifyMassMailing(employees, subject, htmlContent, serverUrl, sen
   return results;
 }
 
-function escapeHtml(value) {
-  return String(value || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-async function notifyProjectMembersAdded(project, employeeIds, leaderName, serverUrl, senderEmail = '') {
-  const uniqueIds = [...new Set((employeeIds || []).map(Number).filter(Boolean))];
-  if (!project || uniqueIds.length === 0) return { sent: 0, failed: 0, skipped: 0 };
-
-  const recipients = await helpers.getProjectNotificationRecipients(uniqueIds);
-  const projectTitle = String(project.title || project.code_name || 'Проект').replace(/[\r\n]+/g, ' ').trim();
-  const resumeTitle = String(project.code_name || '').trim();
-  const rpName = String(leaderName || project.leader_name || 'не указан').trim();
-  const results = { sent: 0, failed: 0, skipped: Math.max(0, uniqueIds.length - recipients.length) };
-
-  for (const employee of recipients) {
-    if (!employee.email || !employee.token) {
-      results.skipped += 1;
-      continue;
-    }
-
-    const portfolioLink = `${serverUrl}/form.html?token=${encodeURIComponent(employee.token)}`;
-    const sent = await sendMail({
-      to: employee.email,
-      senderEmail,
-      subject: `Вы добавлены в проект «${projectTitle}»`,
-      html: `
-        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-          <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
-            <h2 style="margin:0;">Портфолио IS1C</h2>
-          </div>
-          <div style="background:#f5f5f5;color:#1f2937;padding:24px;border-radius:0 0 8px 8px;">
-            <p>Здравствуйте, ${escapeHtml(employee.name)}!</p>
-            <p>Вас добавили в состав участников проекта.</p>
-            <p><strong>Проект:</strong> ${escapeHtml(projectTitle)}</p>
-            ${resumeTitle && resumeTitle !== projectTitle ? `<p><strong>Название в резюме:</strong> ${escapeHtml(resumeTitle)}</p>` : ''}
-            <p><strong>Руководитель проекта:</strong> ${escapeHtml(rpName)}</p>
-            <p>Пожалуйста, проверьте изменения и убедитесь, что проектный опыт корректно отображается в вашем портфолио.</p>
-            <p style="margin-top:20px;">
-              <a href="${escapeHtml(portfolioLink)}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Проверить портфолио</a>
-            </p>
-          </div>
-        </div>
-      `,
-    });
-
-    if (sent) results.sent += 1;
-    else results.failed += 1;
-  }
-
-  return results;
-}
-
 module.exports = {
   sendMail,
   testConnection,
@@ -287,5 +230,4 @@ module.exports = {
   notifyEmployeeReviewCompleted,
   notifyManagerFeedback,
   notifyMassMailing,
-  notifyProjectMembersAdded,
 };

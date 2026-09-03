@@ -11,7 +11,7 @@ const { convertToPdf, hasLibreOffice } = require('../pdfconv');
 const multer  = require('multer');
 const path    = require('path');
 const fs      = require('fs');
-const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, notifyProjectMembersAdded, testConnection, sendMail } = require('../mailer');
+const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection, sendMail } = require('../mailer');
 const { parseProjectExperienceFile } = require('../projectExperienceImport');
 const { getPublicBaseUrl } = require('../publicUrl');
 
@@ -63,6 +63,22 @@ function requireAdmin(req, res, next) {
   next();
 }
 
+function requireProjectAccess(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  const role = req.session.managerRole || '';
+  if (!['admin', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для работы с проектами' });
+  if (role === 'leader' && !req.session.managerEmployeeId) {
+    return res.status(403).json({ error: 'Учётная запись РП не связана с сотрудником' });
+  }
+  next();
+}
+
+function canAccessProject(req, project) {
+  if (req.session.managerRole === 'admin') return true;
+  return req.session.managerRole === 'leader'
+    && Number(project?.leader_employee_id) === Number(req.session.managerEmployeeId);
+}
+
 function requireCanReview(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
   const role = req.session.managerRole || 'leader';
@@ -90,12 +106,6 @@ function senderWithEmail(value, email) {
     .replace(/<[^>]*>/g, '')
     .trim() || 'Портфолио IS1C';
   return `${displayName} <${email}>`;
-}
-
-function projectMemberIds(project) {
-  return new Set((project?.team_members || [])
-    .map(member => Number(member?.employee_id || member?.id || 0))
-    .filter(Boolean));
 }
 
 router.get('/employees', requireCanReview, async (req, res, next) => {
@@ -500,9 +510,12 @@ router.post('/employees/export-excel', requireCanReview, async (req, res, next) 
   } catch (err) { next(err); }
 });
 
-router.get('/projects', requireAdmin, async (req, res, next) => {
+router.get('/projects', requireProjectAccess, async (req, res, next) => {
   try {
-    res.json({ projects: await helpers.getAllProjects() });
+    const projects = req.session.managerRole === 'admin'
+      ? await helpers.getAllProjects()
+      : await helpers.getProjectsForLeaderEmployee(req.session.managerEmployeeId);
+    res.json({ projects });
   } catch (err) { next(err); }
 });
 
@@ -517,9 +530,25 @@ router.post('/employees/remove-rp', requireAdmin, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/projects/functional-blocks', requireAdmin, async (req, res, next) => {
+router.get('/projects/functional-blocks', requireProjectAccess, async (req, res, next) => {
   try {
     res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
+  } catch (err) { next(err); }
+});
+
+router.get('/project-employees', requireProjectAccess, async (req, res, next) => {
+  try {
+    const employees = (await helpers.getAllEmployees())
+      .filter(employee => employee.status !== 'archived')
+      .map(employee => ({
+        id: employee.id,
+        name: employee.name,
+        position: employee.position,
+        email: employee.email,
+        is_rp: employee.is_rp,
+        status: employee.status,
+      }));
+    res.json({ employees });
   } catch (err) { next(err); }
 });
 
@@ -582,10 +611,11 @@ router.get('/projects/export-register', requireAdmin, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-router.get('/projects/:id', requireAdmin, async (req, res, next) => {
+router.get('/projects/:id', requireProjectAccess, async (req, res, next) => {
   try {
     const project = await helpers.getProjectById(Number(req.params.id));
     if (!project) return res.status(404).json({ error: 'Проект не найден' });
+    if (!canAccessProject(req, project)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
     res.json({ project });
   } catch (err) { next(err); }
 });
@@ -600,27 +630,20 @@ router.post('/projects', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.put('/projects/:id', requireAdmin, async (req, res, next) => {
+router.put('/projects/:id', requireProjectAccess, async (req, res, next) => {
   try {
     const previousProject = await helpers.getProjectById(Number(req.params.id));
     if (!previousProject) return res.status(404).json({ error: 'Проект не найден' });
-    const project = await helpers.updateProject(Number(req.params.id), req.body || {});
-    await helpers.syncProjectTeamMembers(project);
-    const previousMemberIds = projectMemberIds(previousProject);
-    const addedMemberIds = [...projectMemberIds(project)]
-      .filter(employeeId => !previousMemberIds.has(employeeId) && employeeId !== Number(project.leader_employee_id));
-    let notifications = { sent: 0, failed: 0, skipped: 0 };
-    if (addedMemberIds.length) {
-      try {
-        const base = getPublicBaseUrl(req);
-        const senderEmail = req.session.managerEmail || req.session.managerLogin || '';
-        notifications = await notifyProjectMembersAdded(project, addedMemberIds, project.leader_name, base, senderEmail);
-      } catch (mailError) {
-        console.error('Ошибка уведомления участников проекта:', mailError.message);
-        notifications.failed = addedMemberIds.length;
-      }
+    if (!canAccessProject(req, previousProject)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
+    const fields = { ...(req.body || {}) };
+    if (req.session.managerRole === 'leader') {
+      delete fields.leader_employee_id;
+      delete fields.leader_name;
+      delete fields.status;
     }
-    res.json({ ok: true, project, notifications });
+    const project = await helpers.updateProject(Number(req.params.id), fields);
+    await helpers.syncProjectTeamMembers(project);
+    res.json({ ok: true, project });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
@@ -648,56 +671,6 @@ router.post('/projects/import', requireAdmin, projectUpload.single('file'), asyn
   }
 });
 
-router.post('/projects/send', requireAdmin, async (req, res, next) => {
-  try {
-    const { ids } = req.body || {};
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Выберите проекты' });
-
-    const projects = await helpers.getProjectsByIds(ids);
-    if (projects.length === 0) return res.status(400).json({ error: 'Проекты не найдены' });
-    const unassigned = projects.filter(project => !project.leader_employee_id);
-    if (unassigned.length) {
-      return res.status(400).json({ error: `Сначала назначьте РП: ${unassigned.slice(0, 3).map(project => project.title).join(', ')}${unassigned.length > 3 ? '…' : ''}` });
-    }
-
-    const sent = await helpers.markProjectsSent(ids);
-    const base = getPublicBaseUrl(req);
-
-    const projectsByLeader = new Map();
-    for (const project of projects) {
-      if (!project.leader_employee_id) continue;
-      if (!projectsByLeader.has(project.leader_employee_id)) projectsByLeader.set(project.leader_employee_id, []);
-      projectsByLeader.get(project.leader_employee_id).push(project);
-    }
-
-    let mailed = 0;
-    for (const [leaderId, list] of projectsByLeader.entries()) {
-      const leader = await helpers.getEmployee(leaderId);
-      if (!leader || !leader.email) continue;
-      const names = list.map(p => p.title).join(', ');
-      await sendMail({
-        to: leader.email,
-        subject: `📩 Просьба заполнить карточки проектов`,
-        html: `
-          <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;">
-            <div style="background:#1a1a2e;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
-              <h2 style="margin:0;">Портфолио IS1C</h2>
-            </div>
-            <div style="background:#f5f5f5;padding:24px;border-radius:0 0 8px 8px;">
-              <p>Здравствуйте!</p>
-              <p>Просьба заполнить карточки проектов: <strong>${names}</strong>.</p>
-              <p><a href="${base}/myprojects.html?token=${leader.token}" style="display:inline-block;background:#6c63ff;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;">Открыть мои проекты</a></p>
-            </div>
-          </div>
-        `,
-      });
-      mailed += 1;
-    }
-
-    res.json({ ok: true, sent, mailed });
-  } catch (err) { next(err); }
-});
-
 router.post('/projects/archive', requireAdmin, async (req, res, next) => {
   try {
     const { ids } = req.body;
@@ -706,6 +679,15 @@ router.post('/projects/archive', requireAdmin, async (req, res, next) => {
     }
     const archived = await helpers.archiveProjects(ids);
     res.json({ ok: true, archived });
+  } catch (err) { next(err); }
+});
+
+router.post('/projects/restore', requireAdmin, async (req, res, next) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Выберите проекты' });
+    const restored = await helpers.restoreProjects(ids);
+    res.json({ ok: true, restored });
   } catch (err) { next(err); }
 });
 
@@ -769,7 +751,7 @@ router.get('/managers', requireAdmin, async (req, res, next) => {
 
 router.post('/managers', requireAdmin, async (req, res, next) => {
   try {
-    const { name, password, role } = req.body;
+    const { name, password, role, employeeId } = req.body;
     const validRoles = new Set(['admin', 'scrum', 'leader']);
     const email = normalizeEmail(req.body.email || req.body.login);
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
@@ -778,8 +760,9 @@ router.post('/managers', requireAdmin, async (req, res, next) => {
     if (!password || password.length < 12) return res.status(400).json({ error: 'Пароль должен быть не менее 12 символов' });
     if (!validRoles.has(role)) return res.status(400).json({ error: 'Выберите корректную роль пользователя' });
     const hash = require('bcryptjs').hashSync(password, 12);
-    const manager = await helpers.createManager(name.trim(), email, hash, role);
-    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role } });
+    if (role === 'leader' && !Number(employeeId || 0)) return res.status(400).json({ error: 'Для роли РП выберите сотрудника' });
+    const manager = await helpers.createManager(name.trim(), email, hash, role, employeeId);
+    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role, employeeId: manager.employee_id } });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

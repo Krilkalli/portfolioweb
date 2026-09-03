@@ -295,9 +295,15 @@
         <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 12 символов)">
         <select class="form-control" id="newManagerRole">
           <option value="scrum">Скрам-мастер</option>
-          <option value="leader">Руководитель</option>
+          <option value="leader">Руководитель проекта (РП)</option>
           <option value="admin">Главный администратор</option>
         </select>
+        <div id="newManagerEmployeeWrap" class="hidden">
+          <select class="form-control" id="newManagerEmployee">
+            <option value="">Выберите сотрудника-РП</option>
+          </select>
+          <div class="form-hint" style="margin-top:6px;">В кабинете РП будут видны только закреплённые за этим сотрудником проекты.</div>
+        </div>
         <div class="form-hint">Чтобы создать второго главного администратора, выберите роль «Главный администратор».</div>
         <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить пользователя</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>

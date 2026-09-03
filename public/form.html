@@ -247,15 +247,14 @@
 
 <header class="form-header">
   <div class="form-header-left">
-    <div class="form-logo-static">
-      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="logo-dark" style="height: 50px; width: auto; border-radius: 4px;">
-      <img src="/infosoft-light.png" alt="ИнфоСофт" class="logo-light" style="height: 60px; width: auto; border-radius: 4px;">
-    </div>
+    <a id="formLogoLink" class="navbar-brand-link form-logo-static" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" style="height: 50px; width: auto;">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" style="height: 60px; width: auto;">
+    </a>
     <!-- <span style="font-weight:700;font-size:1rem;">IS1C Портфолио</span> -->
     <span style="color:var(--text-muted);font-size:0.85rem;" id="headerSubtitle">— Обновление профиля</span>
   </div>
   <div class="form-header-actions" style="display:flex;align-items:center;gap:8px;">
-    <button id="myProjectsBtn" class="btn btn-ghost btn-sm hidden"><i class="fi fi-rr-folder-open"></i> Мои проекты</button>
     <button id="editModeBtn" class="btn btn-primary btn-sm hidden"><i class="fi fi-rr-pencil"></i> Редактировать</button>
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
   </div>

@@ -16,9 +16,10 @@ function setManagerSession(req, res, manager) {
       req.session.managerEmail = manager.email;
       req.session.managerLogin = manager.email;
       req.session.managerRole = manager.role || 'leader';
+      req.session.managerEmployeeId = manager.employee_id || null;
       req.session.save((saveError) => {
         if (saveError) return reject(saveError);
-        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader' } });
+        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader', employeeId: manager.employee_id || null } });
         resolve();
       });
     });
@@ -80,7 +81,7 @@ router.post('/login', async (req, res, next) => {
         if (manager.role !== adResult.role) {
           // Синхронизируем роль, если членство в группе AD изменилось
           await helpers.updateManagerRole(manager.id, adResult.role);
-          manager.role = adResult.role;
+          manager = await helpers.getManagerById(manager.id);
         }
 
         return await setManagerSession(req, res, manager);
@@ -114,6 +115,7 @@ router.get('/me', (req, res) => {
       name: req.session.managerName,
       email: req.session.managerEmail || req.session.managerLogin,
       role: req.session.managerRole || 'leader',
+      employeeId: req.session.managerEmployeeId || null,
     } : null,
   });
 });

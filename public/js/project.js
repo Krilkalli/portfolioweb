@@ -127,9 +127,9 @@ function setFormData(project) {
 }
 
 async function loadEmployees() {
-  const r = await fetch('/api/employees');
+  const r = await fetch('/api/project-employees');
   const d = await r.json();
-  employees = (d || []).filter(e => e.status !== 'archived');
+  employees = (d.employees || []).filter(e => e.status !== 'archived');
 }
 
 async function loadFunctionalBlocks() {
@@ -174,14 +174,7 @@ async function saveProject() {
   });
   const d = await r.json();
   if (r.ok) {
-    const notifications = d.notifications || {};
-    if (notifications.failed || notifications.skipped) {
-      toast(`Проект сохранён. Письма: отправлено ${notifications.sent || 0}, не отправлено ${(notifications.failed || 0) + (notifications.skipped || 0)}`, 'warning');
-    } else if (notifications.sent) {
-      toast(`Проект сохранён. Новым участникам отправлено писем: ${notifications.sent}`, 'success');
-    } else {
-      toast('Проект сохранён', 'success');
-    }
+    toast('Проект сохранён. Карточки участников обновлены автоматически', 'success');
     document.getElementById('result').innerHTML = '<span style="color:var(--success)">Сохранено</span>';
     setFormData(d.project);
   } else {
@@ -257,8 +250,14 @@ document.getElementById('end_present').addEventListener('change', (e) => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
-  if (auth.manager?.role !== 'admin') { location.href = '/index.html'; return; }
+  if (!['admin', 'leader'].includes(auth.manager?.role)) { location.href = '/index.html'; return; }
   currentManager = auth.manager;
+  const isAdmin = currentManager.role === 'admin';
+  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = isAdmin ? '' : 'none'; });
+  if (!isAdmin) {
+    document.getElementById('leader_employee_id').disabled = true;
+    document.querySelector('.page-subtitle').textContent = 'Редактирование закреплённого за вами проекта и состава команды.';
+  }
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await loadEmployees();

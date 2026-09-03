@@ -193,7 +193,7 @@ function renderTable(list) {
             ${e.is_rp ? '<span class="employee-rp-marker">РП</span>' : ''}
           </div>
           <div>
-            <div class="employee-name"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}" target="_blank" rel="noopener">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div class="employee-name"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
             ${matchHtml}
           </div>
@@ -248,8 +248,23 @@ function renderTable(list) {
   }).join('');
 }
 
-function copyToClipboard(text) {
-  navigator.clipboard.writeText(text).then(() => toast('Ссылка скопирована', 'success')).catch(() => {});
+async function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const input = document.createElement('textarea');
+      input.value = text;
+      input.style.cssText = 'position:fixed;left:-9999px;top:-9999px;';
+      document.body.appendChild(input);
+      input.focus(); input.select();
+      if (!document.execCommand('copy')) throw new Error('copy failed');
+      input.remove();
+    }
+    toast('Ссылка скопирована', 'success');
+  } catch {
+    toast('Не удалось скопировать ссылку', 'error');
+  }
 }
 
 function toggleResumeMenu(btn) {
