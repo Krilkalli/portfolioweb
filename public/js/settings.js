@@ -524,7 +524,7 @@ async function loadManagers() {
   } catch {}
 }
 
-const ROLE_LABELS = { admin: 'Администратор', scrum: 'Скрам-мастер', leader: 'Руководитель' };
+const ROLE_LABELS = { admin: 'Главный администратор', scrum: 'Скрам-мастер', leader: 'Руководитель' };
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -534,7 +534,12 @@ function renderManagers(managers) {
     return;
   }
   const isAdmin = currentManager?.role === 'admin';
-  list.innerHTML = managers.map(m => `
+  const adminCount = managers.filter(m => m.role === 'admin').length;
+  list.innerHTML = `
+    <div class="form-hint" style="margin-bottom:10px;">
+      Главных администраторов: <strong>${adminCount}</strong>
+    </div>
+  ` + managers.map(m => `
     <div class="position-item">
       <div>
         <div style="font-weight:600;font-size:0.9rem;">${escHtml(m.name)}</div>
@@ -546,7 +551,7 @@ function renderManagers(managers) {
         ${isAdmin && m.id !== currentManager?.id ? `
         <div style="margin-top:6px;">
           <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
-            <option value="admin" ${m.role==='admin'?'selected':''}>Администратор</option>
+            <option value="admin" ${m.role==='admin'?'selected':''}>Главный администратор</option>
             <option value="scrum" ${m.role==='scrum'?'selected':''}>Скрам-мастер</option>
             <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель</option>
           </select>
@@ -595,10 +600,11 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
       body: JSON.stringify({ name, email, password, role }),
     });
     if (r.ok) {
-      toast(`Менеджер «${name}» добавлен`, 'success');
+      toast(`${ROLE_LABELS[role] || 'Пользователь'} «${name}» добавлен`, 'success');
       document.getElementById('newManagerName').value = '';
       document.getElementById('newManagerEmail').value = '';
       document.getElementById('newManagerPass').value = '';
+      document.getElementById('newManagerRole').value = 'scrum';
       await loadManagers();
     } else {
       const d = await r.json();

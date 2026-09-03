@@ -1982,8 +1982,14 @@ const helpers = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
+      const target = await client.query('SELECT id, role FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
+      if (!target.rows[0]) throw new Error('Пользователь не найден');
       const count = await client.query('SELECT COUNT(*)::int cnt FROM managers');
       if (count.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего менеджера');
+      if (target.rows[0].role === 'admin') {
+        const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
+        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего главного администратора');
+      }
       await client.query('DELETE FROM managers WHERE id = $1', [Number(id)]);
       await client.query('COMMIT');
     } catch (err) {
@@ -2001,7 +2007,23 @@ const helpers = {
   async updateManagerRole(id, role) {
     const validRoles = ['admin', 'scrum', 'leader'];
     if (!validRoles.includes(role)) throw new Error('Неверная роль');
-    await _run('UPDATE managers SET role = $1 WHERE id = $2', [role, Number(id)]);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      const target = await client.query('SELECT id, role FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
+      if (!target.rows[0]) throw new Error('Пользователь не найден');
+      if (target.rows[0].role === 'admin' && role !== 'admin') {
+        const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
+        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя снять роль у последнего главного администратора');
+      }
+      await client.query('UPDATE managers SET role = $1 WHERE id = $2', [role, Number(id)]);
+      await client.query('COMMIT');
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
   },
 
   // ── Компетенции по должностям ──────────────────────────────────────────────

@@ -770,11 +770,13 @@ router.get('/managers', requireAdmin, async (req, res, next) => {
 router.post('/managers', requireAdmin, async (req, res, next) => {
   try {
     const { name, password, role } = req.body;
+    const validRoles = new Set(['admin', 'scrum', 'leader']);
     const email = normalizeEmail(req.body.email || req.body.login);
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
     if (!email) return res.status(400).json({ error: 'Почта обязательна' });
     if (!isEmail(email)) return res.status(400).json({ error: 'Введите корректный адрес электронной почты' });
     if (!password || password.length < 12) return res.status(400).json({ error: 'Пароль должен быть не менее 12 символов' });
+    if (!validRoles.has(role)) return res.status(400).json({ error: 'Выберите корректную роль пользователя' });
     const hash = require('bcryptjs').hashSync(password, 12);
     const manager = await helpers.createManager(name.trim(), email, hash, role);
     res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role } });
@@ -786,8 +788,12 @@ router.post('/managers', requireAdmin, async (req, res, next) => {
 router.put('/managers/:id/role', requireAdmin, async (req, res, next) => {
   try {
     const { role } = req.body;
+    const managerId = Number(req.params.id);
     if (!role) return res.status(400).json({ error: 'Укажите роль' });
-    await helpers.updateManagerRole(Number(req.params.id), role);
+    if (managerId === Number(req.session.managerId)) {
+      return res.status(400).json({ error: 'Нельзя изменить собственную роль' });
+    }
+    await helpers.updateManagerRole(managerId, role);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -796,7 +802,11 @@ router.put('/managers/:id/role', requireAdmin, async (req, res, next) => {
 
 router.delete('/managers/:id', requireAdmin, async (req, res, next) => {
   try {
-    await helpers.deleteManager(Number(req.params.id));
+    const managerId = Number(req.params.id);
+    if (managerId === Number(req.session.managerId)) {
+      return res.status(400).json({ error: 'Нельзя удалить собственную учётную запись' });
+    }
+    await helpers.deleteManager(managerId);
     res.json({ ok: true });
   } catch (e) {
     res.status(400).json({ error: e.message });

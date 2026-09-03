@@ -284,7 +284,9 @@
         <span class="card-title"><i class="fi fi-rr-users"></i> Управление менеджерами</span>
         <span class="collapse-icon">−</span>
       </div>
-      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">Список менеджеров, имеющих доступ к системе. Каждый входит по своему email и паролю.</p>
+      <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
+        Список пользователей панели. Можно назначить несколько главных администраторов — каждый входит по своей почте и паролю.
+      </p>
       <div id="managerList" style="margin-bottom:16px;"></div>
       <hr class="divider">
       <div style="display:flex;flex-direction:column;gap:12px;" data-role="admin">
@@ -296,7 +298,8 @@
           <option value="leader">Руководитель</option>
           <option value="admin">Главный администратор</option>
         </select>
-        <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить менеджера</button>
+        <div class="form-hint">Чтобы создать второго главного администратора, выберите роль «Главный администратор».</div>
+        <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить пользователя</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>
       </div>
     </div>
