@@ -6,6 +6,7 @@ const { composeProjectDescription } = require('./projectDescription');
 const { v4: uuidv4 } = require('uuid');
 const { Pool } = require('pg');
 const config = require('./config');
+const { normalizeForComparison } = require('./changeComparison');
 
 const SECRET_SETTING_KEYS = new Set(['smtp_pass', 'ai_api_key']);
 const settingsEncryptionKey = crypto.createHash('sha256').update(config.sessionSecret).digest();
@@ -186,6 +187,45 @@ const SCHEMA_SQL = `
 // ─── Нормализация имени для поиска дубликатов ──────────────────────────────
 function normalizeName(name) {
   return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+async function findEmployeeProfileForLeader(client, name, email, excludeManagerId = null) {
+  const normalizedName = normalizeName(name);
+  if (!normalizedName) throw new Error('Для роли РП укажите ФИО сотрудника');
+
+  const matches = await client.query(
+    'SELECT id, name, email, status FROM employees WHERE name_lower = $1 ORDER BY id',
+    [normalizedName]
+  );
+  if (!matches.rows.length) {
+    throw new Error(`Сотрудник «${String(name || '').trim()}» не найден. Укажите ФИО точно как в профиле сотрудника`);
+  }
+
+  const activeMatches = matches.rows.filter(employee => employee.status !== 'archived');
+  if (!activeMatches.length) throw new Error('Найденный профиль сотрудника находится в архиве');
+
+  let employee = activeMatches[0];
+  if (activeMatches.length > 1) {
+    const normalizedEmail = String(email || '').trim().toLowerCase();
+    const emailMatches = activeMatches.filter(item => String(item.email || '').trim().toLowerCase() === normalizedEmail);
+    if (emailMatches.length !== 1) {
+      throw new Error('Найдено несколько сотрудников с таким ФИО. Укажите email, совпадающий с профилем сотрудника');
+    }
+    [employee] = emailMatches;
+  }
+
+  const linkedManager = await client.query(
+    `SELECT id, name, email
+     FROM managers
+     WHERE employee_id = $1 AND ($2::int IS NULL OR id <> $2)
+     LIMIT 1`,
+    [employee.id, excludeManagerId ? Number(excludeManagerId) : null]
+  );
+  if (linkedManager.rows[0]) {
+    throw new Error(`Профиль сотрудника уже связан с учётной записью «${linkedManager.rows[0].name}»`);
+  }
+
+  return employee;
 }
 
 // ─── Безопасные поля для динамического UPDATE ────────────────────────────────
@@ -531,12 +571,19 @@ async function init() {
     SET employee_id = (
       SELECT e.id
       FROM employees e
-      WHERE LOWER(TRIM(e.email)) = LOWER(TRIM(m.email)) AND e.is_rp = TRUE
+      WHERE e.status <> 'archived'
+        AND e.name_lower = LOWER(REGEXP_REPLACE(TRIM(m.name), '[[:space:]]+', ' ', 'g'))
       ORDER BY e.id
       LIMIT 1
     )
     WHERE m.role = 'leader' AND m.employee_id IS NULL
   `).catch(() => {});
+  await _run(`
+    UPDATE employees e
+    SET is_rp = TRUE, updated_at = COALESCE(NULLIF(e.updated_at, ''), $1)
+    FROM managers m
+    WHERE m.role = 'leader' AND m.employee_id = e.id AND e.is_rp = FALSE
+  `, [new Date().toISOString()]).catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'Черновик'").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS customer TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS code_name TEXT DEFAULT ''").catch(() => {});
@@ -605,6 +652,19 @@ async function init() {
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader ON projects(leader_id)');
   await _run('CREATE INDEX IF NOT EXISTS idx_projects_leader_employee ON projects(leader_employee_id)');
   await _run('CREATE UNIQUE INDEX IF NOT EXISTS idx_managers_employee_unique ON managers(employee_id) WHERE employee_id IS NOT NULL');
+
+  // Очищаем ранее созданные ложные изменения, где различались только
+  // служебные или управляемые РП поля связанного проекта.
+  const pendingProjectChanges = await _all(
+    "SELECT id, old_value, new_value FROM pending_changes WHERE status = 'pending' AND field_name = 'project_experience'"
+  );
+  const noOpProjectChangeIds = pendingProjectChanges
+    .filter(change => normalizeForComparison('project_experience', change.old_value) === normalizeForComparison('project_experience', change.new_value))
+    .map(change => Number(change.id));
+  if (noOpProjectChangeIds.length) {
+    await _run('DELETE FROM pending_changes WHERE id = ANY($1::int[])', [noOpProjectChangeIds]);
+    console.log(`Удалены ложные изменения проектного опыта: ${noOpProjectChangeIds.length}`);
+  }
 
   // Настройки умолчания
   let settings = await loadSettings();
@@ -828,40 +888,6 @@ const helpers = {
     const pendingRows = await _all('SELECT DISTINCT employee_id FROM pending_changes WHERE status = $1', ['pending']);
     const pendingIds = new Set(pendingRows.map(r => r.employee_id));
     return employees.map(e => ({ ...e, pendingCount: pendingIds.has(e.id) ? 1 : 0 }));
-  },
-
-  async setEmployeesRp(ids, value = true) {
-    if (!Array.isArray(ids) || ids.length === 0) return 0;
-    const res = await _run('UPDATE employees SET is_rp = $1, updated_at = $2 WHERE id = ANY($3::int[])', [!!value, new Date().toISOString(), ids.map(Number)]);
-    return res ? res.rowCount : 0;
-  },
-
-  async removeEmployeesRp(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return { updated: 0, projectsUnassigned: 0 };
-    const employeeIds = [...new Set(ids.map(Number).filter(Boolean))];
-    if (!employeeIds.length) return { updated: 0, projectsUnassigned: 0 };
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      const now = new Date().toISOString();
-      const employeesResult = await client.query(
-        'UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = ANY($2::int[]) AND is_rp = TRUE',
-        [now, employeeIds]
-      );
-      const projectsResult = await client.query(
-        `UPDATE projects
-         SET leader_employee_id = NULL, leader_name = '', updated_at = $1
-         WHERE leader_employee_id = ANY($2::int[])`,
-        [now, employeeIds]
-      );
-      await client.query('COMMIT');
-      return { updated: employeesResult.rowCount, projectsUnassigned: projectsResult.rowCount };
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
-    }
   },
 
   async getEmployeesByIds(ids) {
@@ -2029,7 +2055,7 @@ const helpers = {
     return res ? res.rowCount : 0;
   },
 
-  async createManager(name, email, passwordHash, role, employeeId = null) {
+  async createManager(name, email, passwordHash, role) {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -2040,14 +2066,9 @@ const helpers = {
       const managerRole = validRoles.includes(role) ? role : 'scrum';
       let linkedEmployeeId = null;
       if (managerRole === 'leader') {
-        const requestedEmployeeId = Number(employeeId || 0);
-        const linked = requestedEmployeeId
-          ? await client.query("SELECT id, is_rp, status FROM employees WHERE id = $1", [requestedEmployeeId])
-          : await client.query("SELECT id, is_rp, status FROM employees WHERE LOWER(TRIM(email)) = $1 ORDER BY id LIMIT 1", [normalizedEmail]);
-        const employee = linked.rows[0];
-        if (!employee || employee.status === 'archived') throw new Error('Для роли РП выберите действующего сотрудника');
-        if (!employee.is_rp) throw new Error('Выбранный сотрудник не отмечен как РП');
+        const employee = await findEmployeeProfileForLeader(client, name, normalizedEmail);
         linkedEmployeeId = employee.id;
+        await client.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), linkedEmployeeId]);
       }
       const result = await client.query(
         'INSERT INTO managers (name, email, password_hash, role, employee_id, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -2071,7 +2092,7 @@ const helpers = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const target = await client.query('SELECT id, role FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
+      const target = await client.query('SELECT id, role, employee_id FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
       if (!target.rows[0]) throw new Error('Пользователь не найден');
       const count = await client.query('SELECT COUNT(*)::int cnt FROM managers');
       if (count.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего менеджера');
@@ -2080,6 +2101,9 @@ const helpers = {
         if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего главного администратора');
       }
       await client.query('DELETE FROM managers WHERE id = $1', [Number(id)]);
+      if (target.rows[0].role === 'leader' && target.rows[0].employee_id) {
+        await client.query('UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), target.rows[0].employee_id]);
+      }
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -2099,7 +2123,7 @@ const helpers = {
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
-      const target = await client.query('SELECT id, role, email, employee_id FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
+      const target = await client.query('SELECT id, name, role, email, employee_id FROM managers WHERE id = $1 FOR UPDATE', [Number(id)]);
       if (!target.rows[0]) throw new Error('Пользователь не найден');
       if (target.rows[0].role === 'admin' && role !== 'admin') {
         const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
@@ -2107,14 +2131,16 @@ const helpers = {
       }
       let employeeId = target.rows[0].employee_id;
       if (role === 'leader' && !employeeId) {
-        const linked = await client.query("SELECT id, is_rp, status FROM employees WHERE LOWER(TRIM(email)) = LOWER(TRIM($1)) ORDER BY id LIMIT 1", [target.rows[0].email]);
-        const employee = linked.rows[0];
-        if (!employee || employee.status === 'archived' || !employee.is_rp) {
-          throw new Error('Для роли РП нужна учётная запись с почтой сотрудника, отмеченного как РП');
-        }
+        const employee = await findEmployeeProfileForLeader(client, target.rows[0].name, target.rows[0].email, target.rows[0].id);
         employeeId = employee.id;
+        await client.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employeeId]);
       }
-      if (role !== 'leader') employeeId = null;
+      if (role !== 'leader') {
+        if (target.rows[0].role === 'leader' && employeeId) {
+          await client.query('UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employeeId]);
+        }
+        employeeId = null;
+      }
       await client.query('UPDATE managers SET role = $1, employee_id = $2 WHERE id = $3', [role, employeeId, Number(id)]);
       await client.query('COMMIT');
     } catch (err) {

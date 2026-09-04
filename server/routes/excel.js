@@ -35,7 +35,7 @@ function requireAdmin(req, res, next) {
 
 function requireCanEdit(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  if (!['admin', 'scrum'].includes(req.session.managerRole || 'leader')) {
+  if (!['admin', 'scrum', 'leader'].includes(req.session.managerRole || 'leader')) {
     return res.status(403).json({ error: 'Недостаточно прав' });
   }
   next();

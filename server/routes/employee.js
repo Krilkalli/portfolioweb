@@ -6,6 +6,7 @@ const fs      = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const { helpers } = require('../db');
 const { composeProjectDescription } = require('../projectDescription');
+const { normalizeForComparison } = require('../changeComparison');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
 const { getPublicBaseUrl } = require('../publicUrl');
 const https = require('https');
@@ -173,26 +174,6 @@ router.post('/:token/submit', async (req, res, next) => {
     if (certParts.length) submitFields.certification = 'Сертификация 1С:\n' + certParts.join('\n\n');
     else submitFields.certification = '';
 
-    function normalizeForComparison(fieldName, value) {
-      if (value == null) return '';
-      if (fieldName === 'certification') {
-        const parts = String(value).split(/\n\s*\n/);
-        const cert = parts[0]?.replace(/^Сертификация 1С:?\s*/i, '').trim() || '';
-        const courses = parts[1]?.replace(/^Обучающие курсы:?\s*/i, '').trim() || '';
-        return JSON.stringify({ certification: cert, courses });
-      }
-      if (typeof value === 'object') {
-        const trim = (v) => {
-          if (typeof v === 'string') return v.trim();
-          if (Array.isArray(v)) return v.map(trim);
-          if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, val]) => [k, trim(val)]));
-          return v;
-        };
-        return JSON.stringify(trim(value));
-      }
-      return String(value).trim();
-    }
-
     function storeValue(fieldName, value) {
       if (typeof value === 'object') return JSON.stringify(value);
       return String(value || '').trim();
@@ -214,7 +195,7 @@ router.post('/:token/submit', async (req, res, next) => {
 
     if (req.query.mode === 'manager') {
       const role = req.session?.managerRole || '';
-      if (!req.session?.isManager || !['admin', 'scrum'].includes(role)) {
+      if (!req.session?.isManager || !['admin', 'scrum', 'leader'].includes(role)) {
         return res.status(403).json({ error: 'Режим менеджера требует авторизации' });
       }
       const updates = {};

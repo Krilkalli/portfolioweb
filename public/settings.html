@@ -290,7 +290,7 @@
       <div id="managerList" style="margin-bottom:16px;"></div>
       <hr class="divider">
       <div style="display:flex;flex-direction:column;gap:12px;" data-role="admin">
-        <input type="text" class="form-control" id="newManagerName" placeholder="Имя менеджера">
+        <input type="text" class="form-control" id="newManagerName" placeholder="ФИО пользователя">
         <input type="email" class="form-control" id="newManagerEmail" placeholder="Почта менеджера" autocomplete="email" inputmode="email">
         <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 12 символов)">
         <select class="form-control" id="newManagerRole">
@@ -298,12 +298,7 @@
           <option value="leader">Руководитель проекта (РП)</option>
           <option value="admin">Главный администратор</option>
         </select>
-        <div id="newManagerEmployeeWrap" class="hidden">
-          <select class="form-control" id="newManagerEmployee">
-            <option value="">Выберите сотрудника-РП</option>
-          </select>
-          <div class="form-hint" style="margin-top:6px;">В кабинете РП будут видны только закреплённые за этим сотрудником проекты.</div>
-        </div>
+        <div class="form-hint">Для роли РП укажите ФИО точно как в профиле сотрудника. Система автоматически свяжет учётную запись с этим профилем.</div>
         <div class="form-hint">Чтобы создать второго главного администратора, выберите роль «Главный администратор».</div>
         <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить пользователя</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>

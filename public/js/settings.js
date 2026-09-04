@@ -525,34 +525,6 @@ async function loadManagers() {
 }
 
 const ROLE_LABELS = { admin: 'Главный администратор', scrum: 'Скрам-мастер', leader: 'Руководитель проекта (РП)' };
-let rpEmployees = [];
-
-async function loadRpEmployees() {
-  try {
-    const response = await fetch('/api/employees');
-    if (!response.ok) return;
-    const employees = await response.json();
-    rpEmployees = (employees || []).filter(employee => employee.is_rp && employee.status !== 'archived');
-    const select = document.getElementById('newManagerEmployee');
-    if (!select) return;
-    select.innerHTML = '<option value="">Выберите сотрудника-РП</option>' + rpEmployees.map(employee =>
-      `<option value="${employee.id}">${escHtml(employee.name)}${employee.email ? ` — ${escHtml(employee.email)}` : ''}</option>`
-    ).join('');
-  } catch {}
-}
-
-function syncManagerEmployeeField() {
-  const leaderRole = document.getElementById('newManagerRole')?.value === 'leader';
-  document.getElementById('newManagerEmployeeWrap')?.classList.toggle('hidden', !leaderRole);
-}
-
-document.getElementById('newManagerRole')?.addEventListener('change', syncManagerEmployeeField);
-document.getElementById('newManagerEmployee')?.addEventListener('change', event => {
-  const employee = rpEmployees.find(item => String(item.id) === String(event.target.value));
-  if (!employee) return;
-  document.getElementById('newManagerName').value = employee.name || '';
-  document.getElementById('newManagerEmail').value = employee.email || '';
-});
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -616,19 +588,17 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
   const email = document.getElementById('newManagerEmail').value.trim().toLowerCase();
   const password = document.getElementById('newManagerPass').value;
   const role = document.getElementById('newManagerRole')?.value || 'scrum';
-  const employeeId = role === 'leader' ? document.getElementById('newManagerEmployee')?.value : null;
 
-  if (!name) { toast('Введите имя менеджера', 'warning'); return; }
+  if (!name) { toast('Введите ФИО пользователя', 'warning'); return; }
   if (!email) { toast('Введите почту менеджера', 'warning'); return; }
   if (!/^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i.test(email)) { toast('Введите корректную почту менеджера', 'warning'); return; }
   if (password.length < 12) { toast('Пароль должен быть не менее 12 символов', 'warning'); return; }
-  if (role === 'leader' && !employeeId) { toast('Выберите сотрудника-РП', 'warning'); return; }
 
   try {
     const r = await fetch('/api/managers', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, role, employeeId }),
+      body: JSON.stringify({ name, email, password, role }),
     });
     if (r.ok) {
       toast(`${ROLE_LABELS[role] || 'Пользователь'} «${name}» добавлен`, 'success');
@@ -636,8 +606,6 @@ document.getElementById('addManagerBtn').addEventListener('click', async () => {
       document.getElementById('newManagerEmail').value = '';
       document.getElementById('newManagerPass').value = '';
       document.getElementById('newManagerRole').value = 'scrum';
-      document.getElementById('newManagerEmployee').value = '';
-      syncManagerEmployeeField();
       await loadManagers();
     } else {
       const d = await r.json();
@@ -731,24 +699,19 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
   initTheme();
   applyRoleUI(currentManager?.role);
-  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadRpEmployees(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
-  syncManagerEmployeeField();
+  await Promise.all([loadSettings(), loadPositions(), loadManagers(), loadTemplateInfo(), loadPositionCompetencies(), loadPositionAliases(), loadFeedback()]);
 })();
 
 function applyRoleUI(role) {
+  const effectiveRole = role === 'leader' ? 'scrum' : role;
   document.querySelectorAll('[data-role]').forEach(el => {
     const allowed = el.getAttribute('data-role').split(',').map(r => r.trim());
     if (role === 'admin') { el.style.display = ''; return; } // admin sees everything
-    if (allowed.includes(role)) { el.style.display = ''; return; }
-    // scrum: sees cards marked data-role="scrum"; leader: sees nothing marked
+    if (allowed.includes(role) || allowed.includes(effectiveRole)) { el.style.display = ''; return; }
     el.style.display = 'none';
   });
-  // leader also hides positions, import, template, managers management
-  if (role === 'leader') {
-    document.querySelectorAll('.collapsible').forEach(c => c.style.display = 'none');
-  }
-  // scrum: hide positions card, import, template, managers
-  if (role === 'scrum') {
+  // Скрам-мастер и РП имеют одинаковые права на настройки своего профиля.
+  if (role === 'scrum' || role === 'leader') {
     document.querySelectorAll('.collapsible').forEach(c => {
       const title = c.querySelector('.card-title')?.textContent || '';
       if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Обратная') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {

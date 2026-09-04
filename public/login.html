@@ -105,7 +105,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const data = await res.json();
 
     if (res.ok) {
-      window.location.href = data.manager?.role === 'leader' ? '/projects.html' : '/index.html';
+      window.location.href = '/index.html';
     } else {
       err.textContent = data.error || 'Неверный email или пароль';
       err.classList.remove('hidden');

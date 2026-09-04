@@ -489,6 +489,40 @@ function getProjectData() {
   })).filter(p => p.period || p.position || p.role || p.client || p.project_description);
 }
 
+function canonicalProjectDataForComparison(value) {
+  const normalizeText = raw => String(raw ?? '').trim().replace(/\r\n/g, '\n');
+  const normalizePeriod = raw => normalizeText(raw).replace(/\s*-\s*/g, ' - ');
+  return (Array.isArray(value) ? value : []).map(rawItem => {
+    const item = rawItem && typeof rawItem === 'object' ? rawItem : {};
+    const projectId = Number(item.project_id || 0) || null;
+    const personalFields = {
+      project_id: projectId,
+      period: normalizePeriod(item.period),
+      position: normalizeText(item.position),
+      role: normalizeText(item.role),
+    };
+    if (projectId) return personalFields;
+    return {
+      ...personalFields,
+      project_name: normalizeText(item.project_name),
+      team_size: normalizeText(item.team_size),
+      client: normalizeText(item.client),
+      project_description: normalizeText(item.project_description),
+      task_description: normalizeText(item.task_description),
+      functional_area: normalizeText(item.functional_area),
+      technologies: normalizeText(item.technologies),
+    };
+  }).filter(item => item.project_id || Object.entries(item).some(([key, fieldValue]) => {
+    if (key === 'project_id') return false;
+    return Boolean(fieldValue);
+  }));
+}
+
+function projectDataChanged() {
+  return JSON.stringify(canonicalProjectDataForComparison(getProjectData())) !==
+    JSON.stringify(canonicalProjectDataForComparison(originalValues._projectParsed || []));
+}
+
 // ─── Load Employee ─────────────────────────────────────────────────────────
 async function loadEmployee() {
   token = new URLSearchParams(location.search).get('token');
@@ -718,7 +752,7 @@ function trackChanges() {
   const certEl = document.getElementById('f_certification');
   if (certEl) certEl.classList.toggle('changed', certChanged);
   if (certChanged) changedFields.push(FIELD_NAMES.certification);
-  if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
+  if (projectDataChanged()) changedFields.push(FIELD_NAMES.project_experience);
 
   const badge = document.getElementById('changedFieldsBadge');
   const summary = document.getElementById('changesSummary');
@@ -756,7 +790,7 @@ function getChangedFieldNames() {
   if (JSON.stringify(getEducationData()) !== JSON.stringify(originalValues._educationParsed || [])) changedFields.push(FIELD_NAMES.education);
   if (JSON.stringify(getJobData().jobs || []) !== JSON.stringify(originalValues._experienceParsed?.jobs || [])) changedFields.push(FIELD_NAMES.experience);
   if (serializeCertification() !== (originalValues._certSerialized || '')) changedFields.push(FIELD_NAMES.certification);
-  if (JSON.stringify(getProjectData()) !== JSON.stringify(originalValues._projectParsed || [])) changedFields.push(FIELD_NAMES.project_experience);
+  if (projectDataChanged()) changedFields.push(FIELD_NAMES.project_experience);
   return changedFields;
 }
 
@@ -786,7 +820,7 @@ async function performSubmit(fields) {
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';
 
   // Если менеджер открыл форму через дашборд (?as=manager) — применяем напрямую
-  if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
+  if (asManager && managerUser && ['admin', 'scrum', 'leader'].includes(managerUser.role)) {
     try {
       const empId = employee.id;
       const payload = {};
@@ -1131,7 +1165,7 @@ async function initForm() {
 
   // If manager opened via dashboard, update submit button text
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';
-  if (asManager && managerUser && (managerUser.role === 'admin' || managerUser.role === 'scrum')) {
+  if (asManager && managerUser && ['admin', 'scrum', 'leader'].includes(managerUser.role)) {
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.innerHTML = 'Сохранить';
     // Hide feedback section for managers

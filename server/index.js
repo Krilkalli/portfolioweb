@@ -85,9 +85,6 @@ app.use((req, res, next) => {
   if (PROTECTED_PAGES.includes(req.path) && !req.session.isManager) {
     return res.redirect('/login.html');
   }
-  if (req.path === '/index.html' && req.session.isManager && req.session.managerRole === 'leader') {
-    return res.redirect('/projects.html');
-  }
   if (PROJECT_PAGES.includes(req.path)) {
     if (!req.session.isManager) return res.redirect('/login.html');
     if (!['admin', 'leader'].includes(req.session.managerRole)) return res.redirect('/index.html');
@@ -100,7 +97,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/', (req, res) => {
-  if (req.session.isManager) return res.redirect(req.session.managerRole === 'leader' ? '/projects.html' : '/index.html');
+  if (req.session.isManager) return res.redirect('/index.html');
   res.redirect('/login.html');
 });
 

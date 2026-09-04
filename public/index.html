@@ -205,6 +205,7 @@
       <i class="fi fi-rr-bolt"></i> Проверить изменения <span id="pendingBadge" class="hidden">0</span>
     </a>
     <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="admin">Проекты</a>
+    <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="leader">Мои проекты</a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -282,10 +283,8 @@
       </div>
     </div>
     <button id="addEmployeeBtn" class="btn btn-primary btn-sm dashboard-action"><i class="fi fi-rr-plus"></i> Сотрудника</button>
-    <button id="assignRpBtn" class="btn btn-ghost btn-sm dashboard-action" data-role="admin"><i class="fi fi-rr-user-star"></i> Назначить РП</button>
-    <button id="removeRpBtn" class="btn btn-ghost btn-sm dashboard-action" data-role="admin"><i class="fi fi-rr-user-minus"></i> Снять РП</button>
     <!-- <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum"><i class="fi fi-rr-download"></i> Импорт Excel</button> -->
-    <button id="massMailBtn" class="btn btn-primary btn-sm dashboard-action" data-role="admin,scrum"><i class="fi fi-rr-envelope"></i> Рассылка</button>
+    <button id="massMailBtn" class="btn btn-primary btn-sm dashboard-action" data-role="admin,scrum,leader"><i class="fi fi-rr-envelope"></i> Рассылка</button>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm dashboard-action"><i class="fi fi-rr-upload"></i> Экспорт Excel</a>
   </div>
 

@@ -358,7 +358,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const auth = await fetch('/api/auth/me').then(response => response.json()).catch(() => ({ authenticated:false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
   if (auth.manager) document.getElementById('navbarManager').textContent = `${auth.manager.name} — ${auth.manager.email}`;
-  canRevertHistory = ['admin', 'scrum'].includes(auth.manager?.role);
+  canRevertHistory = ['admin', 'scrum', 'leader'].includes(auth.manager?.role);
   initTheme();
   await loadHistory();
 })();

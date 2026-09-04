@@ -82,14 +82,14 @@ function canAccessProject(req, project) {
 function requireCanReview(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
   const role = req.session.managerRole || 'leader';
-  if (role !== 'admin' && role !== 'scrum') return res.status(403).json({ error: 'Недостаточно прав для проверки изменений' });
+  if (!['admin', 'scrum', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для проверки изменений' });
   next();
 }
 
 function requireCanEdit(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
   const role = req.session.managerRole || 'leader';
-  if (role === 'leader') return res.status(403).json({ error: 'Руководитель не может редактировать данные' });
+  if (!['admin', 'scrum', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для редактирования данных' });
   next();
 }
 
@@ -294,17 +294,6 @@ router.post('/employees', requireCanEdit, async (req, res, next) => {
     const emp = await helpers.createEmployee(req.body);
     const base = getPublicBaseUrl(req);
     res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
-  } catch (err) { next(err); }
-});
-
-router.post('/employees/assign-rp', requireAdmin, async (req, res, next) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Выберите сотрудников' });
-    }
-    const updated = await helpers.setEmployeesRp(ids, true);
-    res.json({ ok: true, updated });
   } catch (err) { next(err); }
 });
 
@@ -519,17 +508,6 @@ router.get('/projects', requireProjectAccess, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/employees/remove-rp', requireAdmin, async (req, res, next) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Выберите сотрудников' });
-    }
-    const result = await helpers.removeEmployeesRp(ids);
-    res.json({ ok: true, ...result });
-  } catch (err) { next(err); }
-});
-
 router.get('/projects/functional-blocks', requireProjectAccess, async (req, res, next) => {
   try {
     res.json({ blocks: await helpers.getProjectFunctionalBlocks() });
@@ -717,7 +695,7 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     };
     if (role === 'admin') {
       for (const k of [...adminOnly, ...canEdit]) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
-    } else if (role === 'scrum') {
+    } else if (role === 'scrum' || role === 'leader') {
       for (const k of canEdit) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
     } else {
       return res.status(403).json({ error: 'Недостаточно прав для изменения настроек' });
@@ -751,7 +729,7 @@ router.get('/managers', requireAdmin, async (req, res, next) => {
 
 router.post('/managers', requireAdmin, async (req, res, next) => {
   try {
-    const { name, password, role, employeeId } = req.body;
+    const { name, password, role } = req.body;
     const validRoles = new Set(['admin', 'scrum', 'leader']);
     const email = normalizeEmail(req.body.email || req.body.login);
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
@@ -760,8 +738,7 @@ router.post('/managers', requireAdmin, async (req, res, next) => {
     if (!password || password.length < 12) return res.status(400).json({ error: 'Пароль должен быть не менее 12 символов' });
     if (!validRoles.has(role)) return res.status(400).json({ error: 'Выберите корректную роль пользователя' });
     const hash = require('bcryptjs').hashSync(password, 12);
-    if (role === 'leader' && !Number(employeeId || 0)) return res.status(400).json({ error: 'Для роли РП выберите сотрудника' });
-    const manager = await helpers.createManager(name.trim(), email, hash, role, employeeId);
+    const manager = await helpers.createManager(name.trim(), email, hash, role);
     res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role, employeeId: manager.employee_id } });
   } catch (e) {
     res.status(400).json({ error: e.message });

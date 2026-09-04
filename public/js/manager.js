@@ -412,55 +412,6 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
   btn.innerHTML = '<i class="fi fi-rr-plus"></i> Добавить и скопировать ссылку';
 });
 
-document.getElementById('assignRpBtn').addEventListener('click', async () => {
-  if (selectedIds.size === 0) {
-    toast('Сначала выберите сотрудников', 'warning');
-    return;
-  }
-  if (!confirm(`Назначить РП для ${selectedIds.size} сотрудников?`)) return;
-  try {
-    const r = await fetch('/api/employees/assign-rp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedIds) }),
-    });
-    const d = await r.json();
-    if (r.ok) {
-      toast(`Назначено РП: ${d.updated}`, 'success');
-      await loadEmployees();
-    } else {
-      toast(d.error || 'Ошибка назначения РП', 'error');
-    }
-  } catch {
-    toast('Ошибка соединения', 'error');
-  }
-});
-
-document.getElementById('removeRpBtn').addEventListener('click', async () => {
-  if (selectedIds.size === 0) {
-    toast('Сначала выберите сотрудников', 'warning');
-    return;
-  }
-  if (!confirm(`Снять роль РП у ${selectedIds.size} сотрудников? Закреплённые за ними проекты останутся без руководителя.`)) return;
-  try {
-    const r = await fetch('/api/employees/remove-rp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedIds) }),
-    });
-    const d = await r.json();
-    if (r.ok) {
-      const projectNote = d.projectsUnassigned ? ` Проектов без руководителя: ${d.projectsUnassigned}.` : '';
-      toast(`Роль РП снята: ${d.updated}.${projectNote}`, 'success');
-      await loadEmployees();
-    } else {
-      toast(d.error || 'Ошибка снятия роли РП', 'error');
-    }
-  } catch {
-    toast('Ошибка соединения', 'error');
-  }
-});
-
 // ─── Search & Filter ──────────────────────────────────────────────────────────
 let showArchived = true;
 

@@ -4,7 +4,7 @@ const { enhanceText, reviewText } = require('../ai');
 
 // Middleware to check if user is manager (employees cannot use AI)
 function requireAuth(req, res, next) {
-  if (!req.session.isManager || !['admin', 'scrum'].includes(req.session.managerRole || 'leader')) {
+  if (!req.session.isManager || !['admin', 'scrum', 'leader'].includes(req.session.managerRole || 'leader')) {
     return res.status(403).json({ error: 'Использование ИИ доступно только менеджерам' });
   }
   next();
