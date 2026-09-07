@@ -19,6 +19,11 @@ RUN npm ci --omit=dev
 # Копируем весь код
 COPY --chown=node:node . .
 
+# Каталоги нужны и при запуске без bind-mount. В Docker Compose права на
+# смонтированные каталоги дополнительно исправляет сервис storage-init.
+RUN mkdir -p /app/data /app/uploads \
+ && chown -R node:node /app/data /app/uploads
+
 USER node
 
 EXPOSE 3000

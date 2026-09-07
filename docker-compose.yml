@@ -1,4 +1,16 @@
 services:
+  storage-init:
+    image: alpine:3.22
+    user: "0:0"
+    command: >-
+      /bin/sh -c "mkdir -p /app-data /app-uploads;
+      chown -R 1000:1000 /app-data /app-uploads 2>/dev/null || true;
+      chmod -R u+rwX /app-data /app-uploads 2>/dev/null || true"
+    volumes:
+      - ./data:/app-data
+      - ./uploads:/app-uploads
+    restart: "no"
+
   secrets-init:
     image: alpine:3.22
     command: >-
@@ -26,7 +38,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - secrets_data:/run/portfolio-secrets:ro
-      - ./portfolio_backup.dump:/docker-entrypoint-initdb.d/portfolio_backup.dump:ro
+      - ./docker/postgres/seed:/portfolio-seed:ro
       - ./docker/postgres/10-restore-portfolio-backup.sh:/docker-entrypoint-initdb.d/10-restore-portfolio-backup.sh:ro
     networks:
       - portfolio-network
@@ -82,6 +94,8 @@ services:
       - ALL
     init: true
     depends_on:
+      storage-init:
+        condition: service_completed_successfully
       secrets-init:
         condition: service_completed_successfully
       postgres:

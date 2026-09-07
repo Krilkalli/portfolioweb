@@ -97,8 +97,7 @@ PostgreSQL не публикует порт `5432` наружу. Приложе�
 - Docker Desktop с Docker Compose;
 - PowerShell;
 - не менее 4 ГБ свободной оперативной памяти;
-- свободный TCP-порт `3000`;
-- актуальный файл дампа `portfolio_backup.dump` для первого запуска новой Docker-базы.
+- свободный TCP-порт `3000`.
 
 Проверка установленного программного обеспечения:
 
@@ -123,13 +122,7 @@ Set-Location .\portfolio-system
 
 Если проект уже скопирован на компьютер, просто откройте PowerShell в его корневой папке.
 
-### 2. Создать локальные каталоги
-
-```powershell
-New-Item -ItemType Directory -Force -Path .\data, .\uploads, .\backups, .\certs
-```
-
-### 3. Создать `.env`
+### 2. Создать `.env`
 
 ```powershell
 Copy-Item .\.env.example .\.env
@@ -150,33 +143,39 @@ PUBLIC_BASE_URL=http://192.168.1.100:3000
 ipconfig
 ```
 
-### 4. Положить дамп в корень проекта
+### 3. При необходимости добавить исходный дамп
 
-При первом запуске новой Docker-базы требуется непустой дамп с точным именем:
+Этот шаг необязателен. Без дампа приложение создаст пустую структуру PostgreSQL, начальные справочники и первую учётную запись администратора.
+
+Чтобы сразу развернуть существующие данные, до первого запуска положите дамп по точному пути:
 
 ```text
-portfolio_backup.dump
+docker/postgres/seed/portfolio_backup.dump
 ```
 
 Пример копирования:
 
 ```powershell
-Copy-Item 'C:\Users\User\Desktop\dumps\portfolio_backup.dump' '.\portfolio_backup.dump'
+Copy-Item 'C:\Users\User\Desktop\dumps\portfolio_backup.dump' '.\docker\postgres\seed\portfolio_backup.dump'
 ```
 
 Проверьте наличие и размер:
 
 ```powershell
-Get-Item .\portfolio_backup.dump | Select-Object FullName, Length, LastWriteTime
+Get-Item .\docker\postgres\seed\portfolio_backup.dump | Select-Object FullName, Length, LastWriteTime
 ```
 
-### 5. Собрать и запустить систему
+Файл дампа исключён из Git. Если том `postgres_data` уже создавался, PostgreSQL не загружает начальный дамп повторно — используйте сценарий восстановления работающей базы ниже.
+
+### 4. Собрать и запустить систему
 
 ```powershell
 docker compose up -d --build
 ```
 
-### 6. Проверить состояние
+Каталоги `data/` и `uploads/` создаются автоматически. Служебный контейнер `storage-init` назначает права, необходимые пользователю Node.js внутри контейнера.
+
+### 5. Проверить состояние
 
 ```powershell
 docker compose ps
@@ -191,7 +190,7 @@ docker compose logs --tail 100 app
 - сайт открывается по адресу `http://localhost:3000`;
 - с другого компьютера сайт открывается по адресу из `PUBLIC_BASE_URL`.
 
-### 7. Разрешить входящие подключения в Windows
+### 6. Разрешить входящие подключения в Windows
 
 Запустите PowerShell от имени администратора:
 
@@ -315,8 +314,8 @@ docker compose exec -T postgres pg_restore --list /tmp/portfolio-check.dump
 
 Этот способ применяется, только когда Docker-том `postgres_data` ещё не создавался.
 
-1. Положите нужный дамп в корень проекта под именем `portfolio_backup.dump`.
-2. Создайте `.env`, `data/`, `uploads/` и `certs/`.
+1. Положите нужный дамп по пути `docker/postgres/seed/portfolio_backup.dump`.
+2. Создайте `.env`.
 3. Выполните:
 
 ```powershell
@@ -325,7 +324,7 @@ docker compose up -d --build
 
 Скрипт `docker/postgres/10-restore-portfolio-backup.sh` автоматически выполнит `pg_restore` только при первоначальном создании PostgreSQL.
 
-> Если база уже запускалась, замена `portfolio_backup.dump` не меняет рабочие данные. Используйте сценарий B.
+> Если база уже запускалась, замена файла в `docker/postgres/seed/` не меняет рабочие данные. Используйте сценарий B.
 
 ### Сценарий B: заменить уже работающую базу
 
@@ -376,13 +375,13 @@ docker compose exec -T postgres psql -U portfolio -d portfolio -c "SELECT COUNT(
 
 После восстановления используются пользователи и пароли из загруженного дампа.
 
-### Если первый запуск был выполнен без корректного дампа
+### Если пустая база уже была создана, а нужен исходный дамп
 
-Скрипт первоначальной загрузки завершится ошибкой. Если это точно новая установка и в ней ещё нет нужных данных, можно удалить созданные тома и повторить запуск:
+Без дампа первый запуск теперь завершается успешно и приложение создаёт новую базу. Для новой тестовой установки без нужных данных её можно пересоздать из дампа:
 
 ```powershell
 docker compose down -v
-Copy-Item 'C:\Users\User\Desktop\dumps\portfolio_backup.dump' '.\portfolio_backup.dump' -Force
+Copy-Item 'C:\Users\User\Desktop\dumps\portfolio_backup.dump' '.\docker\postgres\seed\portfolio_backup.dump' -Force
 docker compose up -d --build
 ```
 
@@ -436,7 +435,7 @@ certs/                    если используются
 ```powershell
 git clone https://github.com/ORGANIZATION/portfolio-system.git
 Set-Location .\portfolio-system
-New-Item -ItemType Directory -Force -Path .\data, .\uploads, .\backups, .\certs
+New-Item -ItemType Directory -Force -Path .\data, .\uploads, .\certs
 ```
 
 Далее:
@@ -444,7 +443,7 @@ New-Item -ItemType Directory -Force -Path .\data, .\uploads, .\backups, .\certs
 1. Скопируйте старый `data/.session-secret` в новую папку `data`.
 2. Скопируйте содержимое `uploads/`.
 3. Создайте или перенесите `.env` и измените `PUBLIC_BASE_URL` для нового адреса.
-4. Положите дамп в корень с именем `portfolio_backup.dump`.
+4. Положите дамп по пути `docker/postgres/seed/portfolio_backup.dump`.
 5. Запустите систему:
 
 ```powershell
@@ -699,9 +698,9 @@ docker compose exec postgres sh -c "cat /run/portfolio-secrets/postgres_password
 ```
 ## Типичные проблемы
 
-### `portfolio_backup.dump` отсутствует или пустой
+### `portfolio_backup.dump` отсутствует
 
-При первом создании Docker-базы файл обязателен. Положите корректный дамп в корень проекта и, только если это новая установка без ценных данных, пересоздайте тома по инструкции выше.
+Это не ошибка: PostgreSQL стартует пустым, а приложение само создаёт схему и начальные данные. Если нужны существующие сотрудники и проекты, положите дамп в `docker/postgres/seed/portfolio_backup.dump` до первого запуска либо используйте [сценарий B](#сценарий-b-заменить-уже-работающую-базу).
 
 ### Замена файла дампа не изменила данные
 

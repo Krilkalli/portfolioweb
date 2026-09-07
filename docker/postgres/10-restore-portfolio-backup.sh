@@ -1,11 +1,11 @@
 #!/bin/sh
 set -eu
 
-BACKUP_FILE="/docker-entrypoint-initdb.d/portfolio_backup.dump"
+BACKUP_FILE="/portfolio-seed/portfolio_backup.dump"
 
-if [ ! -s "$BACKUP_FILE" ]; then
-  echo "ERROR: PostgreSQL backup is missing or empty: $BACKUP_FILE" >&2
-  exit 1
+if [ ! -f "$BACKUP_FILE" ] || [ ! -s "$BACKUP_FILE" ]; then
+  echo "Initial backup was not provided. PostgreSQL will start empty; the application will create its schema and initial data."
+  exit 0
 fi
 
 echo "Restoring the initial portfolio database from portfolio_backup.dump..."
