@@ -25,6 +25,17 @@ function initials(name) {
   return name.split(' ').slice(0, 2).map(w => w[0]).join('').toUpperCase();
 }
 
+function managerProfileLink(link) {
+  try {
+    const url = new URL(link, window.location.origin);
+    url.searchParams.set('as', 'manager');
+    url.searchParams.set('mode', 'view');
+    return url.toString();
+  } catch {
+    return link;
+  }
+}
+
 function formatDate(str) {
   if (!str) return '—';
   return new Date(str).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -193,7 +204,7 @@ function renderTable(list) {
             ${e.is_rp ? '<span class="employee-rp-marker">РП</span>' : ''}
           </div>
           <div>
-            <div class="employee-name"><a href="${escHtml(e.link).includes('?') ? escHtml(e.link) + '&mode=view' : escHtml(e.link) + '?mode=view'}">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div class="employee-name"><a href="${escHtml(managerProfileLink(e.link))}">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
             ${matchHtml}
           </div>

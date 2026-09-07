@@ -93,6 +93,14 @@ app.use((req, res, next) => {
 });
 
 // ─── Static files ─────────────────────────────────────────────────────────────
+app.use('/vendor/cropperjs', express.static(path.join(__dirname, '..', 'node_modules', 'cropperjs', 'dist'), {
+  immutable: true,
+  maxAge: '1y',
+}));
+app.use('/vendor/uicons', express.static(path.join(__dirname, '..', 'node_modules', '@flaticon', 'flaticon-uicons', 'css'), {
+  immutable: true,
+  maxAge: '1y',
+}));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 

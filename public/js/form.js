@@ -1043,12 +1043,17 @@ let cropper = null;
 function handlePhotoUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
-  if (!file.type.startsWith('image/')) {
-    toast('Выберите изображение', 'error');
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(file.type)) {
+    toast('Выберите изображение JPG, PNG или WebP', 'error');
     return;
   }
   if (file.size > 5 * 1024 * 1024) {
     toast('Файл слишком большой (макс. 5 МБ)', 'error');
+    return;
+  }
+  if (typeof Cropper !== 'function') {
+    toast('Редактор фотографии не загрузился. Обновите страницу', 'error');
     return;
   }
   const reader = new FileReader();

@@ -7,8 +7,8 @@
   <meta name="description" content="Форма обновления профиля сотрудника IS1C">
   <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.css">
-  <link rel='stylesheet' href='https://cdn-uicons.flaticon.com/2.6.0/uicons-regular-rounded/css/uicons-regular-rounded.css'>
+  <link rel="stylesheet" href="/vendor/cropperjs/cropper.min.css">
+  <link rel="stylesheet" href="/vendor/uicons/regular/rounded.css">
   <style>
     .form-page {
       min-height: 100vh;
@@ -267,7 +267,7 @@
 </div>
 
 <div id="errorState" class="error-screen hidden">
-  <div style="font-size:3rem;margin-bottom:16px;"><i class="fi fi-rr-link-broken"></i></div>
+  <div style="font-size:3rem;margin-bottom:16px;"><i class="fi fi-rr-broken-chain-link-wrong"></i></div>
   <h2 style="color:var(--text-secondary);margin-bottom:8px;">Ссылка недействительна</h2>
   <p>Обратитесь к менеджеру для получения актуальной ссылки.</p>
   <div id="backToDashError" style="margin-top:20px;display:none;">
@@ -310,9 +310,9 @@
         <div style="flex: 1; min-width: 200px;">
           <label class="btn btn-primary" style="cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
             <i class="fi fi-rr-folder-open"></i> Выбрать фото
-            <input type="file" id="photoInput" accept="image/*" style="display: none;" onchange="handlePhotoUpload(event)">
+            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" style="display: none;" onchange="handlePhotoUpload(event)">
           </label>
-          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Рекомендуемый формат: квадратное фото (JPG, PNG до 5 МБ)</p>
+          <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 8px;">Поддерживаются JPG, PNG и WebP до 5 МБ</p>
         </div>
       </div>
       <input type="hidden" id="f_photo" name="photo" value="">
@@ -537,7 +537,7 @@
 </div>
 
 <div class="toast-container" id="toastContainer"></div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.2/cropper.min.js"></script>
+<script src="/vendor/cropperjs/cropper.min.js"></script>
 <script src="/js/form.js?v=5"></script>
 <script src="/js/navbar.js"></script>
 </body>

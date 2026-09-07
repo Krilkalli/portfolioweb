@@ -114,7 +114,7 @@ router.get('/employees', requireCanReview, async (req, res, next) => {
     const base = getPublicBaseUrl(req);
     const list = (await helpers.getAllEmployees()).map(e => ({
       ...e,
-      link: `${base}/form.html?token=${e.token}&as`,
+      link: `${base}/form.html?token=${e.token}`,
     }));
     res.json(list);
   } catch (err) { next(err); }
@@ -128,7 +128,7 @@ router.get('/employees/:id', requireCanReview, async (req, res, next) => {
     res.json({
       ...emp,
       pendingChanges: await helpers.getPendingByEmployee(emp.id),
-      link: `${base}/form.html?token=${emp.token}&as`,
+      link: `${base}/form.html?token=${emp.token}`,
     });
   } catch (err) { next(err); }
 });
@@ -176,7 +176,7 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
     const emp = await helpers.regenerateToken(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
     const base = getPublicBaseUrl(req);
-    res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}&as`, employee: emp });
+    res.json({ token: emp.token, link: `${base}/form.html?token=${emp.token}`, employee: emp });
   } catch (err) { next(err); }
 });
 
@@ -293,7 +293,7 @@ router.post('/employees', requireCanEdit, async (req, res, next) => {
   try {
     const emp = await helpers.createEmployee(req.body);
     const base = getPublicBaseUrl(req);
-    res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}&as` } });
+    res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}` } });
   } catch (err) { next(err); }
 });
 
@@ -671,7 +671,11 @@ router.post('/projects/restore', requireAdmin, async (req, res, next) => {
 
 router.get('/settings', requireAuth, async (req, res, next) => {
   try {
-    const keys = ['smtp_host','smtp_port','smtp_user','smtp_from','manager_email', 'positions'];
+    const keys = [
+      'smtp_host', 'smtp_port', 'smtp_user', 'smtp_from', 'manager_email', 'positions',
+      'ai_provider', 'ai_folder_id', 'ai_base_url', 'ai_model_name',
+      'ai_prompt_fill', 'ai_prompt_review', 'ai_prompt_summarize',
+    ];
     const out  = {};
     for (const k of keys) out[k] = await helpers.getSetting(k);
     out.current_manager_email = req.session.managerEmail || req.session.managerLogin || '';
@@ -685,7 +689,7 @@ router.put('/settings', requireAuth, async (req, res, next) => {
     const role = req.session.managerRole || 'admin';
     const managerEmail = normalizeEmail(req.session.managerEmail || req.session.managerLogin);
     if (!isEmail(managerEmail)) return res.status(400).json({ error: 'Войдите в систему по электронной почте повторно' });
-    const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review'];
+    const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review', 'ai_prompt_summarize'];
     const canEdit = ['manager_email'];
     const payload = {
       ...req.body,

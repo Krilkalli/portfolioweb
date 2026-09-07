@@ -19,8 +19,8 @@ function securityHeaders(req, res, next) {
       "frame-ancestors 'none'",
       "form-action 'self'",
       "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline' https://cdn-uicons.flaticon.com",
-      "font-src 'self' data: https://cdn-uicons.flaticon.com",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data:",
       "img-src 'self' data: blob:",
       "connect-src 'self'",
     ].join('; ')
