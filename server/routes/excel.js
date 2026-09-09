@@ -6,6 +6,7 @@ const path    = require('path');
 const fs      = require('fs');
 const { helpers } = require('../db');
 const { getPublicBaseUrl } = require('../publicUrl');
+const { composeProjectDescription, normalizeFunctionalBlocks } = require('../projectDescription');
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -45,7 +46,10 @@ function parseBlockArrayFlexible(raw, labelsMap) {
   
   const labelKeys = Object.keys(labelsMap);
   const escapedLabels = labelKeys.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp('(' + escapedLabels.join('|') + ')\\s*:\\s*', 'gi');
+  // Экспорт системы размещает названия полей в начале строки. Привязка к
+  // началу строки не даёт словам вроде «роль:» внутри описания создать
+  // ложную новую запись проекта.
+  const regex = new RegExp('^[ \\t]*(' + escapedLabels.join('|') + ')[ \\t]*:[ \\t]*', 'gim');
   
   const tokens = [];
   let lastIndex = 0;
@@ -128,7 +132,7 @@ function parseExperience(raw) {
   
   const labelKeys = Object.keys(labelsMap);
   const escapedLabels = labelKeys.map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  const regex = new RegExp('(' + escapedLabels.join('|') + ')\\s*:\\s*', 'gi');
+  const regex = new RegExp('^[ \\t]*(' + escapedLabels.join('|') + ')[ \\t]*:[ \\t]*', 'gim');
   
   const tokens = [];
   let lastIndex = 0;
@@ -173,30 +177,61 @@ function parseExperience(raw) {
 
 function parseProjects(raw) {
   const map = {
+    'название проекта': 'project_name',
     'период работы': 'period',
     'должность': 'position',
     'роль': 'role',
+    'количество участников команды': 'team_size',
     'размер команды': 'team_size',
     'заказчик': 'client',
     'описание проекта': 'project_description',
+    'функциональные блоки': 'functional_blocks',
     'функциональная область': 'functional_area',
     'задача, реализованная сотрудником': 'task_description',
     'задача': 'task_description',
     'программные продукты / технологии': 'technologies',
     'программные продукты': 'technologies'
   };
-  const entries = parseBlockArrayFlexible(raw, map);
-  return entries.map(e => ({
-    period: e.period || '',
-    position: e.position || '',
-    role: e.role || '',
-    team_size: e.team_size || '',
-    client: e.client || '',
-    project_description: e.project_description || '',
-    task_description: e.task_description || '',
-    functional_area: e.functional_area || '',
-    technologies: e.technologies || ''
-  }));
+  const escapedLabels = Object.keys(map).map(label => label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+  const projectSeparator = new RegExp(
+    '\\n[ \\t]*\\n(?=[ \\t]*(?:' + escapedLabels.join('|') + ')[ \\t]*:)',
+    'gi'
+  );
+  // Экспорт разделяет проекты пустой строкой. Разбираем каждый блок отдельно,
+  // иначе проект, у которого заполнено только одно поле, может приклеиться к
+  // предыдущему проекту.
+  const entries = String(raw || '')
+    .replace(/\r/g, '')
+    .split(projectSeparator)
+    .flatMap(block => parseBlockArrayFlexible(block, map));
+  return entries.map(e => {
+    const description = String(e.project_description || '');
+    const embeddedBlocks = [];
+    for (const match of description.matchAll(/(?:^|\n)[ \t]*Функциональные блоки:[ \t]*([^\n]*)/gi)) {
+      embeddedBlocks.push(...String(match[1] || '').split(/;|,\s*/));
+    }
+    const functionalBlocks = normalizeFunctionalBlocks(
+      [
+        ...String(e.functional_blocks || '').split(/\r?\n|;|,\s*/),
+        ...embeddedBlocks,
+      ]
+    );
+    return {
+      project_name: e.project_name || '',
+      period: e.period || '',
+      position: e.position || '',
+      role: e.role || '',
+      team_size: e.team_size || '',
+      client: e.client || '',
+      project_description: functionalBlocks.length
+        ? composeProjectDescription(description, functionalBlocks)
+        : description,
+      task_description: e.task_description || '',
+      functional_area: e.functional_area || '',
+      functional_blocks: functionalBlocks,
+      technologies: e.technologies || ''
+    };
+  });
 }
 
 function parseAbout(raw) {
