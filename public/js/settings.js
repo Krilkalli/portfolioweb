@@ -524,7 +524,7 @@ async function loadManagers() {
   } catch {}
 }
 
-const ROLE_LABELS = { admin: 'Главный администратор', scrum: 'Скрам-мастер', leader: 'Руководитель проекта (РП)' };
+const ROLE_LABELS = { admin: 'ГСМ', scrum: 'СМ', leader: 'РП' };
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -533,11 +533,11 @@ function renderManagers(managers) {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет менеджеров</p>';
     return;
   }
-  const isAdmin = currentManager?.role === 'admin';
+  const isAdmin = true;
   const adminCount = managers.filter(m => m.role === 'admin').length;
   list.innerHTML = `
     <div class="form-hint" style="margin-bottom:10px;">
-      Главных администраторов: <strong>${adminCount}</strong>
+      Пользователей с ролью ГСМ: <strong>${adminCount}</strong>
     </div>
   ` + managers.map(m => `
     <div class="position-item">
@@ -552,9 +552,9 @@ function renderManagers(managers) {
         ${isAdmin && m.id !== currentManager?.id ? `
         <div style="margin-top:6px;">
           <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
-            <option value="admin" ${m.role==='admin'?'selected':''}>Главный администратор</option>
-            <option value="scrum" ${m.role==='scrum'?'selected':''}>Скрам-мастер</option>
-            <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель проекта (РП)</option>
+            <option value="admin" ${m.role==='admin'?'selected':''}>ГСМ</option>
+            <option value="scrum" ${m.role==='scrum'?'selected':''}>СМ</option>
+            <option value="leader" ${m.role==='leader'?'selected':''}>РП</option>
           </select>
         </div>` : ''}
       </div>
@@ -703,22 +703,9 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 })();
 
 function applyRoleUI(role) {
-  const effectiveRole = role === 'leader' ? 'scrum' : role;
   document.querySelectorAll('[data-role]').forEach(el => {
-    const allowed = el.getAttribute('data-role').split(',').map(r => r.trim());
-    if (role === 'admin') { el.style.display = ''; return; } // admin sees everything
-    if (allowed.includes(role) || allowed.includes(effectiveRole)) { el.style.display = ''; return; }
-    el.style.display = 'none';
+    el.style.display = '';
   });
-  // Скрам-мастер и РП имеют одинаковые права на настройки своего профиля.
-  if (role === 'scrum' || role === 'leader') {
-    document.querySelectorAll('.collapsible').forEach(c => {
-      const title = c.querySelector('.card-title')?.textContent || '';
-      if (title.includes('Должности') || title.includes('Аналоги') || title.includes('Обратная') || title.includes('Шаблон') || title.includes('менеджер') || title.includes('Импорт')) {
-        c.style.display = 'none';
-      }
-    });
-  }
 }
 
 // ─── Role change on manager list ────────────────────────────────────────────

@@ -28,9 +28,7 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  if (req.session.managerRole !== 'admin') return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
-  next();
+  return requireAuth(req, res, next);
 }
 
 function requireCanEdit(req, res, next) {
@@ -254,11 +252,6 @@ router.post('/import', requireCanEdit, upload.single('file'), async (req, res, n
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const mode = req.body.mode || 'add';
-    if (mode === 'replace' && req.session.managerRole !== 'admin') {
-      if (req.file && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
-      return res.status(403).json({ error: 'Только главный администратор может выполнять полную замену данных' });
-    }
-
     const wb   = XLSX.readFile(req.file.path);
     const ws   = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', blankrows: false });

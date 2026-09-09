@@ -201,11 +201,8 @@
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
-    <a href="/review.html" class="btn btn-warning btn-sm" id="reviewBtn">
-      <i class="fi fi-rr-bolt"></i> Проверить изменения <span id="pendingBadge" class="hidden">0</span>
-    </a>
-    <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="admin">Проекты</a>
-    <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="leader">Мои проекты</a>
+    <a href="/projects.html" class="btn btn-ghost btn-sm">Проекты</a>
+    <a href="/archive.html" class="btn btn-ghost btn-sm">Архив</a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -273,9 +270,6 @@
               <button class="btn btn-ghost btn-sm" id="certClearAll" style="font-size:0.78rem;">Снять</button>
             </div>
           </div>
-          <label class="filter-label" style="margin-top:4px;">
-            <input type="checkbox" id="filterArchived" checked> Показывать архив
-          </label>
           <div style="display:flex;gap:6px;justify-content:flex-end;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
             <button class="btn btn-ghost btn-sm" id="filterResetBtn">Сбросить</button>
           </div>
@@ -368,6 +362,10 @@
           <input type="text" class="form-control" id="new_city" placeholder="Москва">
         </div>
       </div>
+      <label class="filter-label" style="margin:0 0 16px;">
+        <input type="checkbox" id="new_is_rp"> Назначить сотруднику роль РП
+      </label>
+      <div class="form-hint" style="margin-top:-10px;margin-bottom:16px;">Роль РП назначается отдельно и не зависит от выбранной должности.</div>
       <div id="addResult" style="margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-ghost" id="cancelAdd">Отмена</button>

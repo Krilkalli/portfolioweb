@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Архив проектов — Портфолио IS1C</title>
+  <script src="/js/theme-init.js"></script>
+  <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/vendor/uicons/regular/rounded.css">
+  <style>
+    .archive-main { padding:32px 0 56px; flex:1; }
+    .archive-hero { display:flex; align-items:flex-end; justify-content:space-between; gap:20px; margin-bottom:24px; flex-wrap:wrap; }
+    .archive-title { display:flex; align-items:center; gap:12px; font-size:1.55rem; font-weight:750; }
+    .archive-title-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:13px; color:var(--accent-light); background:var(--accent-glow); border:1px solid var(--border-accent); }
+    .archive-subtitle { color:var(--text-muted); font-size:.9rem; margin-top:7px; }
+    .archive-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
+    .archive-search { position:relative; width:min(460px,100%); }
+    .archive-search i { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none; }
+    .archive-search input { padding-left:39px; }
+    .archive-count { min-width:30px; padding:3px 9px; border-radius:999px; text-align:center; font-size:.78rem; color:var(--text-secondary); background:var(--bg-card-hover); border:1px solid var(--border); }
+    .archive-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+    .archive-item { position:relative; display:flex; flex-direction:column; min-height:190px; padding:20px; overflow:hidden; }
+    .archive-item::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:linear-gradient(var(--accent),transparent); opacity:.75; }
+    .archive-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+    .archive-item-title { color:var(--text-primary); font-size:1rem; font-weight:680; line-height:1.4; overflow-wrap:anywhere; }
+    .archive-item-meta { display:grid; gap:7px; margin:13px 0 18px; color:var(--text-muted); font-size:.82rem; }
+    .archive-item-meta span { display:flex; align-items:center; gap:8px; min-width:0; }
+    .archive-item-meta i { color:var(--accent-light); width:16px; flex:0 0 auto; }
+    .archive-item-actions { display:flex; gap:8px; margin-top:auto; }
+    .archive-empty { grid-column:1/-1; padding:58px 20px; text-align:center; color:var(--text-muted); border:1px dashed var(--border); border-radius:var(--radius-lg); background:var(--bg-card); }
+    .archive-empty i { display:block; margin-bottom:10px; color:var(--accent-light); font-size:2rem; }
+    @media (max-width:620px) {
+      .archive-grid { grid-template-columns:1fr; }
+      .archive-toolbar .btn { width:100%; justify-content:center; }
+    }
+  </style>
+</head>
+<body class="page-wrapper">
+<nav class="navbar">
+  <div class="navbar-brand">
+    <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
+      <img src="/infosoft-dark.png" alt="ИнфоСофт" class="navbar-logo logo-dark" height="50">
+      <img src="/infosoft-light.png" alt="ИнфоСофт" class="navbar-logo logo-light" height="60">
+    </a>
+  </div>
+  <div class="navbar-actions">
+    <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
+    <span id="navbarManager" style="font-size:.75rem;color:var(--text-muted);padding:0 4px;"></span>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
+  </div>
+</nav>
+
+<main class="archive-main container">
+  <header class="archive-hero">
+    <div>
+      <h1 class="archive-title"><span class="archive-title-icon"><i class="fi fi-rr-briefcase"></i></span> Архив проектов</h1>
+      <p class="archive-subtitle">Архивные проекты хранятся отдельно от рабочего реестра и восстанавливаются вместе с участниками.</p>
+    </div>
+    <a href="/projects.html" class="btn btn-ghost btn-sm"><i class="fi fi-rr-arrow-left"></i> К проектам</a>
+  </header>
+
+  <div class="archive-toolbar">
+    <div class="archive-search">
+      <i class="fi fi-rr-search"></i>
+      <input id="archiveSearch" class="form-control" type="search" placeholder="Поиск по проектам..." aria-label="Поиск в архиве проектов">
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span class="archive-count" id="projectArchiveCount">0</span>
+      <button id="restoreAllVisible" class="btn btn-primary btn-sm" type="button"><i class="fi fi-rr-refresh"></i> Восстановить все найденные</button>
+    </div>
+  </div>
+
+  <section id="archiveGrid" class="archive-grid" aria-live="polite">
+    <div class="archive-empty"><span class="spinner"></span></div>
+  </section>
+</main>
+
+<div id="toastContainer" class="toast-container"></div>
+<script src="/js/projects-archive.js"></script>
+<script src="/js/navbar.js"></script>
+</body>
+</html>

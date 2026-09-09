@@ -170,7 +170,25 @@ body.light-theme .logo-dark,
 html.theme-light-preload .logo-dark { display: inline-block; }
 body.light-theme .logo-light,
 html.theme-light-preload .logo-light { display: none; }
-.navbar-actions { display: flex; align-items: center; gap: 8px; }
+.navbar-actions { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.navbar-nav-links { display:flex; align-items:center; gap:6px; min-width:0; }
+
+@media (max-width: 1180px) {
+  .navbar { padding-inline:16px; }
+  .navbar-actions { gap:6px; }
+  .navbar-nav-links { overflow-x:auto; padding:4px 0; scrollbar-width:none; }
+  .navbar-nav-links::-webkit-scrollbar { display:none; }
+  #navbarManager { display:none; }
+}
+
+@media (max-width: 760px) {
+  .navbar { align-items:center; gap:10px; }
+  .navbar-brand { flex:0 0 auto; }
+  .navbar-logo { max-width:112px; object-fit:contain; }
+  .navbar-actions { flex:1 1 auto; overflow:hidden; }
+  .navbar-nav-links { flex:1 1 auto; }
+  .navbar-nav-links .btn { padding-inline:10px; }
+}
 
 /* ─── Cards ──────────────────────────────────────────────────────────────── */
 .card {

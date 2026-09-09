@@ -74,8 +74,10 @@ async function loadStats() {
     document.getElementById('statApproved').textContent = s.approved;
 
     const badge = document.getElementById('pendingBadge');
-    if (s.pending > 0) { badge.textContent = s.pending; badge.classList.remove('hidden'); }
-    else { badge.classList.add('hidden'); }
+    if (badge) {
+      if (s.pending > 0) { badge.textContent = s.pending; badge.classList.remove('hidden'); }
+      else { badge.classList.add('hidden'); }
+    }
   } catch {}
 }
 
@@ -83,11 +85,7 @@ async function loadEmployees() {
   try {
     const r = await fetch('/api/employees');
     if (r.status === 401) { location.href = '/login.html'; return; }
-    employees = await r.json();
-    // Снимаем выделение с сотрудников, которые оказались в архиве
-    // (например, если сотрудника архивировали, пока чекбокс был отмечен)
-    const archivedIds = new Set(employees.filter(e => e.status === 'archived').map(e => e.id));
-    selectedIds.forEach(id => { if (archivedIds.has(id)) selectedIds.delete(id); });
+    employees = (await r.json()).filter(e => e.status !== 'archived');
     applyFilter();
     updateSelectionUI();
   } catch (e) {
@@ -249,6 +247,7 @@ function renderTable(list) {
                <button class="btn btn-icon" style="width:32px;height:32px;background:rgba(239,68,68,0.15);color:var(--danger);margin-left:6px;" onclick="deleteEmployeePermanently(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Удалить безвозвратно"><i class="fi fi-rr-trash"></i></button>`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" title="Действия"><span class="desktop-only" style="font-size:1.2rem;line-height:1;letter-spacing:2px;">⋮</span><span class="mobile-only">Действия</span></button>
                <div class="action-dropdown">
+                 <button class="action-dropdown-item" onclick="setProjectRole(${e.id}, ${e.is_rp ? 'false' : 'true'})"><i class="fi fi-rr-user-add"></i> ${e.is_rp ? 'Снять роль РП' : 'Назначить роль РП'}</button>
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>
                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-box"></i> Архив</button>
                </div>`}
@@ -338,6 +337,22 @@ async function restoreEmployee(id, name) {
   } catch { toast('Ошибка соединения', 'error'); }
 }
 
+async function setProjectRole(id, isRp) {
+  try {
+    const r = await fetch(`/api/employees/${id}/project-role`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isRp }),
+    });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) return toast(d.error || 'Не удалось изменить роль', 'error');
+    toast(isRp ? 'Роль РП назначена' : 'Роль РП снята', 'success');
+    await loadEmployees();
+  } catch {
+    toast('Ошибка соединения', 'error');
+  }
+}
+
 async function deleteEmployeePermanently(id, name) {
   if (!confirm(`Удалить сотрудника «${name}» БЕЗВОЗВРАТНО?\n\nВсе данные (профиль, образование, стаж, проекты) будут удалены навсегда. Это действие невозможно отменить.`)) return;
   const typed = prompt(`Для подтверждения введите имя сотрудника точно как показано:\n«${name}»`);
@@ -388,6 +403,7 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
     position: document.getElementById('new_position').value,
     email: document.getElementById('new_email').value.trim(),
     city: document.getElementById('new_city').value.trim(),
+    is_rp: document.getElementById('new_is_rp').checked,
   };
 
   if (!payload.name) {
@@ -424,13 +440,6 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
 });
 
 // ─── Search & Filter ──────────────────────────────────────────────────────────
-let showArchived = true;
-
-document.getElementById('filterArchived').addEventListener('change', (e) => {
-  showArchived = e.target.checked;
-  applyFilter();
-});
-
 document.getElementById('searchInput').addEventListener('input', () => { applyFilter(); });
 document.getElementById('filterPosition').addEventListener('change', () => { applyFilter(); });
 document.getElementById('filterCity').addEventListener('change', () => { applyFilter(); });
@@ -454,8 +463,6 @@ document.getElementById('filterResetBtn').addEventListener('click', () => {
   document.querySelectorAll('#certFilterList input[type="checkbox"]').forEach(cb => cb.checked = false);
   document.getElementById('certSearchInput').value = '';
   document.getElementById('searchInput').value = '';
-  showArchived = true;
-  document.getElementById('filterArchived').checked = true;
   applyFilter();
   document.getElementById('filterMenu').classList.remove('show');
 });
@@ -481,8 +488,7 @@ function applyFilter() {
   const pos = document.getElementById('filterPosition').value;
   const city = document.getElementById('filterCity').value;
   const rp = document.getElementById('filterRp').value;
-  let list = employees;
-  if (!showArchived) list = list.filter(e => e.status !== 'archived');
+  let list = employees.filter(e => e.status !== 'archived');
   if (pos) list = list.filter(e => e.position === pos);
   if (city) list = list.filter(e => e.city === city);
   if (rp === 'rp') list = list.filter(e => Boolean(e.is_rp));
@@ -495,7 +501,7 @@ function applyFilter() {
   }
   if (q) list = list.filter(emp => window.EmployeeSearch?.matchesEmployee(emp, q));
   const count = document.getElementById('searchResultCount');
-  if (count) count.textContent = (q || pos || city || rp || selectedCerts.size > 0 || !showArchived) ? `Найдено: ${list.length}` : '';
+  if (count) count.textContent = (q || pos || city || rp || selectedCerts.size > 0) ? `Найдено: ${list.length}` : '';
   renderTable(list);
 }
 
@@ -773,10 +779,7 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {
-    const allowed = el.dataset.role.split(',').map(r => r.trim());
-    if (!allowed.includes(role)) {
-      el.style.display = 'none';
-    }
+    el.style.display = '';
   });
 }
 

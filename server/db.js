@@ -1083,6 +1083,13 @@ const helpers = {
     return true;
   },
 
+  async setEmployeeProjectLeaderRole(id, isRp) {
+    const emp = await _get('SELECT * FROM employees WHERE id = $1', [Number(id)]);
+    if (!emp) return null;
+    await _run('UPDATE employees SET is_rp = $1, updated_at = $2 WHERE id = $3', [Boolean(isRp), new Date().toISOString(), Number(id)]);
+    return _get('SELECT * FROM employees WHERE id = $1', [Number(id)]).then(castEmployee);
+  },
+
   // Безвозвратное удаление сотрудника. Разрешено только для уже архивированных
   // записей — защита от случайного удаления активного сотрудника мимо архива.
   // pending_changes и employee_feedback удаляются автоматически (ON DELETE CASCADE).

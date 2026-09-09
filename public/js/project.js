@@ -250,14 +250,8 @@ document.getElementById('end_present').addEventListener('change', (e) => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
-  if (!['admin', 'leader'].includes(auth.manager?.role)) { location.href = '/index.html'; return; }
   currentManager = auth.manager;
-  const isAdmin = currentManager.role === 'admin';
-  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = isAdmin ? '' : 'none'; });
-  if (!isAdmin) {
-    document.getElementById('leader_employee_id').disabled = true;
-    document.querySelector('.page-subtitle').textContent = 'Редактирование закреплённого за вами проекта и состава команды.';
-  }
+  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = ''; });
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await loadEmployees();

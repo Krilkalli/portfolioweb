@@ -39,7 +39,8 @@
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
     <a href="/index.html" class="btn btn-ghost btn-sm">Дашборд</a>
-    <a href="/settings.html" class="btn btn-ghost btn-sm" data-role="admin">⚙ Настройки</a>
+    <a href="/projects-archive.html" class="btn btn-ghost btn-sm">Архив проектов</a>
+    <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
   </div>
@@ -60,7 +61,6 @@
     </div>
     <div class="projects-toolbar-right">
       <button id="archiveProjectsBtn" class="btn btn-danger btn-sm" data-admin-only><i class="fi fi-rr-box"></i> Архив</button>
-      <button id="restoreProjectsBtn" class="btn btn-primary btn-sm" data-admin-only style="display:none;"><i class="fi fi-rr-refresh"></i> Восстановить из архива</button>
     </div>
   </div>
   <div id="projectImportResult" class="card" style="display:none;padding:14px;margin-bottom:16px;"></div>
@@ -83,9 +83,6 @@
         <option value="oldest">От поздних к новым</option>
       </select>
     </div>
-    <label class="filter-label" style="margin:0;">
-      <input type="checkbox" id="showArchivedProjects"> Показать архив
-    </label>
   </div>
 
   <div class="card projects-card">

@@ -58,25 +58,15 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  if (req.session.managerRole !== 'admin') return res.status(403).json({ error: 'Только главный администратор может выполнять это действие' });
-  next();
+  return requireAuth(req, res, next);
 }
 
 function requireProjectAccess(req, res, next) {
-  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  const role = req.session.managerRole || '';
-  if (!['admin', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для работы с проектами' });
-  if (role === 'leader' && !req.session.managerEmployeeId) {
-    return res.status(403).json({ error: 'Учётная запись РП не связана с сотрудником' });
-  }
-  next();
+  return requireAuth(req, res, next);
 }
 
 function canAccessProject(req, project) {
-  if (req.session.managerRole === 'admin') return true;
-  return req.session.managerRole === 'leader'
-    && Number(project?.leader_employee_id) === Number(req.session.managerEmployeeId);
+  return Boolean(req.session.isManager && project);
 }
 
 function requireCanReview(req, res, next) {
@@ -154,6 +144,15 @@ router.post('/employees/:id/restore', requireCanEdit, async (req, res, next) => 
     const ok = await helpers.restoreEmployee(Number(req.params.id));
     if (!ok) return res.status(404).json({ error: 'Сотрудник не найден' });
     res.json({ ok: true, status: 'active' });
+  } catch (err) { next(err); }
+});
+
+router.put('/employees/:id/project-role', requireCanEdit, async (req, res, next) => {
+  try {
+    const isRp = req.body?.isRp === true || req.body?.isRp === 'true';
+    const employee = await helpers.setEmployeeProjectLeaderRole(Number(req.params.id), isRp);
+    if (!employee) return res.status(404).json({ error: 'Сотрудник не найден' });
+    res.json({ ok: true, employee });
   } catch (err) { next(err); }
 });
 
@@ -291,7 +290,8 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res, next
 
 router.post('/employees', requireCanEdit, async (req, res, next) => {
   try {
-    const emp = await helpers.createEmployee(req.body);
+    let emp = await helpers.createEmployee(req.body);
+    if (req.body?.is_rp === true) emp = await helpers.setEmployeeProjectLeaderRole(emp.id, true);
     const base = getPublicBaseUrl(req);
     res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}` } });
   } catch (err) { next(err); }
@@ -501,9 +501,7 @@ router.post('/employees/export-excel', requireCanReview, async (req, res, next) 
 
 router.get('/projects', requireProjectAccess, async (req, res, next) => {
   try {
-    const projects = req.session.managerRole === 'admin'
-      ? await helpers.getAllProjects()
-      : await helpers.getProjectsForLeaderEmployee(req.session.managerEmployeeId);
+    const projects = await helpers.getAllProjects();
     res.json({ projects });
   } catch (err) { next(err); }
 });
@@ -614,11 +612,6 @@ router.put('/projects/:id', requireProjectAccess, async (req, res, next) => {
     if (!previousProject) return res.status(404).json({ error: 'Проект не найден' });
     if (!canAccessProject(req, previousProject)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
     const fields = { ...(req.body || {}) };
-    if (req.session.managerRole === 'leader') {
-      delete fields.leader_employee_id;
-      delete fields.leader_name;
-      delete fields.status;
-    }
     const project = await helpers.updateProject(Number(req.params.id), fields);
     await helpers.syncProjectTeamMembers(project);
     res.json({ ok: true, project });
@@ -686,7 +679,6 @@ router.get('/settings', requireAuth, async (req, res, next) => {
 
 router.put('/settings', requireAuth, async (req, res, next) => {
   try {
-    const role = req.session.managerRole || 'admin';
     const managerEmail = normalizeEmail(req.session.managerEmail || req.session.managerLogin);
     if (!isEmail(managerEmail)) return res.status(400).json({ error: 'Войдите в систему по электронной почте повторно' });
     const adminOnly = ['smtp_host','smtp_port','smtp_user','smtp_pass','smtp_from', 'ai_provider', 'ai_api_key', 'ai_folder_id', 'ai_base_url', 'ai_model_name', 'ai_prompt_fill', 'ai_prompt_review', 'ai_prompt_summarize'];
@@ -697,13 +689,7 @@ router.put('/settings', requireAuth, async (req, res, next) => {
       smtp_from: senderWithEmail(req.body.smtp_from, managerEmail),
       manager_email: managerEmail,
     };
-    if (role === 'admin') {
-      for (const k of [...adminOnly, ...canEdit]) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
-    } else if (role === 'scrum' || role === 'leader') {
-      for (const k of canEdit) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
-    } else {
-      return res.status(403).json({ error: 'Недостаточно прав для изменения настроек' });
-    }
+    for (const k of [...adminOnly, ...canEdit]) if (payload[k] !== undefined) await helpers.setSetting(k, payload[k]);
     res.json({ ok: true });
   } catch (err) { next(err); }
 
