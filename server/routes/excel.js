@@ -7,6 +7,7 @@ const fs      = require('fs');
 const { helpers } = require('../db');
 const { getPublicBaseUrl } = require('../publicUrl');
 const { composeProjectDescription, normalizeFunctionalBlocks } = require('../projectDescription');
+const { canView, isAdmin } = require('../permissions');
 
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -29,14 +30,14 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  return requireAuth(req, res, next);
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (!isAdmin(req.session.managerRole)) return res.status(403).json({ error: 'Действие доступно только администратору департамента' });
+  next();
 }
 
-function requireCanEdit(req, res, next) {
+function requireCanView(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  if (!['admin', 'scrum', 'leader'].includes(req.session.managerRole || 'leader')) {
-    return res.status(403).json({ error: 'Недостаточно прав' });
-  }
+  if (!canView(req.session.managerRole)) return res.status(403).json({ error: 'Недостаточно прав' });
   next();
 }
 
@@ -283,7 +284,7 @@ function resolveColumns(headerRow) {
   return idx;
 }
 
-router.post('/import', requireCanEdit, upload.single('file'), async (req, res, next) => {
+router.post('/import', requireAdmin, upload.single('file'), async (req, res, next) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Файл не загружен' });
     const mode = req.body.mode || 'add';
@@ -339,7 +340,7 @@ router.post('/import', requireCanEdit, upload.single('file'), async (req, res, n
   }
 });
 
-router.get('/export', requireCanEdit, async (req, res, next) => {
+router.get('/export', requireCanView, async (req, res, next) => {
   try {
     const base = getPublicBaseUrl(req);
     function fmtEducation(edu) {

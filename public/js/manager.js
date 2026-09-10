@@ -65,6 +65,14 @@ let selectedIds = new Set();
 let currentManager = null;
 let selectedCerts = new Set();
 
+function canManageEmployees() {
+  return ['chief_scrum', 'scrum', 'leader', 'admin'].includes(currentManager?.role);
+}
+
+function isDepartmentAdmin() {
+  return currentManager?.role === 'admin';
+}
+
 async function loadStats() {
   try {
     const r = await fetch('/api/stats');
@@ -202,7 +210,7 @@ function renderTable(list) {
             ${e.is_rp ? '<span class="employee-rp-marker">РП</span>' : ''}
           </div>
           <div>
-            <div class="employee-name"><a href="${escHtml(managerProfileLink(e.link))}">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
+            <div class="employee-name"><a href="${escHtml(e.manager_link || managerProfileLink(e.link))}">${escHtml(e.name)}</a>${e.status === 'archived' ? ' <i class="fi fi-rr-box" style="font-size:0.7rem;color:var(--text-muted)"></i>' : ''}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);" title="${escHtml(e.email || '')}">${e.email ? (e.email.length > 12 ? escHtml(e.email.substring(0, 12)) + '...' : escHtml(e.email)) : '—'}</div>
             ${matchHtml}
           </div>
@@ -225,7 +233,7 @@ function renderTable(list) {
         </div>
       </td>
       <td class="col-link" data-label="Ссылка" style="text-align:center;">
-        ${e.status !== 'archived'
+        ${e.status !== 'archived' && canManageEmployees()
           ? `<button class="btn btn-ghost btn-icon copy-link-btn" onclick="copyToClipboard('${e.link}')" title="Скопировать персональную ссылку" aria-label="Скопировать персональную ссылку"><i class="fi fi-rr-clipboard"></i></button>`
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
@@ -241,17 +249,16 @@ function renderTable(list) {
           : '<span style="font-size:0.82rem;color:var(--text-muted)">—</span>'}
       </td>
       <td class="col-actions" data-label="Действия" style="text-align:center;">
-        <div class="action-menu" style="position:relative;display:inline-flex;">
+        ${canManageEmployees() ? `<div class="action-menu" style="position:relative;display:inline-flex;">
           ${e.status === 'archived'
             ? `<button class="btn btn-primary btn-icon" style="width:32px;height:32px;" onclick="restoreEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Восстановить"><i class="fi fi-rr-undo"></i></button>
-               <button class="btn btn-icon" style="width:32px;height:32px;background:rgba(239,68,68,0.15);color:var(--danger);margin-left:6px;" onclick="deleteEmployeePermanently(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Удалить безвозвратно"><i class="fi fi-rr-trash"></i></button>`
+               ${isDepartmentAdmin() ? `<button class="btn btn-icon" style="width:32px;height:32px;background:rgba(239,68,68,0.15);color:var(--danger);margin-left:6px;" onclick="deleteEmployeePermanently(${e.id}, '${e.name.replace(/'/g, "\\'")}')" title="Удалить безвозвратно"><i class="fi fi-rr-trash"></i></button>` : ''}`
             : `<button class="btn btn-ghost btn-sm action-menu-btn" onclick="toggleActionMenu(this)" title="Действия"><span class="desktop-only" style="font-size:1.2rem;line-height:1;letter-spacing:2px;">⋮</span><span class="mobile-only">Действия</span></button>
                <div class="action-dropdown">
-                 <button class="action-dropdown-item" onclick="setProjectRole(${e.id}, ${e.is_rp ? 'false' : 'true'})"><i class="fi fi-rr-user-add"></i> ${e.is_rp ? 'Снять роль РП' : 'Назначить роль РП'}</button>
                  <button class="action-dropdown-item" onclick="regenerateToken(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-refresh"></i> Новая ссылка</button>
                  <button class="action-dropdown-item" onclick="archiveEmployee(${e.id}, '${e.name.replace(/'/g, "\\'")}')"><i class="fi fi-rr-box"></i> Архив</button>
                </div>`}
-        </div>
+        </div>` : '<span style="color:var(--text-muted)">—</span>'}
       </td>
     </tr>
   `;
@@ -337,22 +344,6 @@ async function restoreEmployee(id, name) {
   } catch { toast('Ошибка соединения', 'error'); }
 }
 
-async function setProjectRole(id, isRp) {
-  try {
-    const r = await fetch(`/api/employees/${id}/project-role`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isRp }),
-    });
-    const d = await r.json().catch(() => ({}));
-    if (!r.ok) return toast(d.error || 'Не удалось изменить роль', 'error');
-    toast(isRp ? 'Роль РП назначена' : 'Роль РП снята', 'success');
-    await loadEmployees();
-  } catch {
-    toast('Ошибка соединения', 'error');
-  }
-}
-
 async function deleteEmployeePermanently(id, name) {
   if (!confirm(`Удалить сотрудника «${name}» БЕЗВОЗВРАТНО?\n\nВсе данные (профиль, образование, стаж, проекты) будут удалены навсегда. Это действие невозможно отменить.`)) return;
   const typed = prompt(`Для подтверждения введите имя сотрудника точно как показано:\n«${name}»`);
@@ -403,7 +394,6 @@ document.getElementById('addEmployeeForm').addEventListener('submit', async (e) 
     position: document.getElementById('new_position').value,
     email: document.getElementById('new_email').value.trim(),
     city: document.getElementById('new_city').value.trim(),
-    is_rp: document.getElementById('new_is_rp').checked,
   };
 
   if (!payload.name) {
@@ -779,7 +769,8 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {
-    el.style.display = '';
+    const allowed = el.dataset.role.split(',').map(value => value.trim());
+    el.style.display = allowed.includes(role) ? '' : 'none';
   });
 }
 

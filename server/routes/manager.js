@@ -14,6 +14,15 @@ const fs      = require('fs');
 const { notifyEmployeeApproved, notifyEmployeeRejected, notifyEmployeeReviewCompleted, testConnection, sendMail } = require('../mailer');
 const { parseProjectExperienceFile } = require('../projectExperienceImport');
 const { getPublicBaseUrl } = require('../publicUrl');
+const {
+  ROLES,
+  VALID_ROLES,
+  canView,
+  canOperate,
+  isAdmin,
+  canViewProject,
+  canEditProject,
+} = require('../permissions');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
 if (!fs.existsSync(templatesDir)) fs.mkdirSync(templatesDir, { recursive: true });
@@ -58,28 +67,43 @@ function requireAuth(req, res, next) {
 }
 
 function requireAdmin(req, res, next) {
-  return requireAuth(req, res, next);
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (!isAdmin(req.session.managerRole)) return res.status(403).json({ error: 'Действие доступно только администратору департамента' });
+  next();
 }
 
 function requireProjectAccess(req, res, next) {
-  return requireAuth(req, res, next);
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (!canView(req.session.managerRole)) return res.status(403).json({ error: 'Недостаточно прав для просмотра проектов' });
+  if (req.session.managerRole === ROLES.PROJECT_LEADER && !req.session.managerEmployeeId) {
+    return res.status(403).json({ error: 'Учётная запись РП не связана с профилем сотрудника' });
+  }
+  next();
 }
 
 function canAccessProject(req, project) {
-  return Boolean(req.session.isManager && project);
+  return Boolean(req.session.isManager) && canViewProject(
+    req.session.managerRole,
+    project,
+    req.session.managerEmployeeId,
+  );
+}
+
+function requireCanView(req, res, next) {
+  if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
+  if (!canView(req.session.managerRole)) return res.status(403).json({ error: 'Недостаточно прав для просмотра данных' });
+  next();
 }
 
 function requireCanReview(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  const role = req.session.managerRole || 'leader';
-  if (!['admin', 'scrum', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для проверки изменений' });
+  if (!canOperate(req.session.managerRole)) return res.status(403).json({ error: 'Для вашей роли доступен только просмотр изменений' });
   next();
 }
 
 function requireCanEdit(req, res, next) {
   if (!req.session.isManager) return res.status(401).json({ error: 'Требуется авторизация' });
-  const role = req.session.managerRole || 'leader';
-  if (!['admin', 'scrum', 'leader'].includes(role)) return res.status(403).json({ error: 'Недостаточно прав для редактирования данных' });
+  if (!canOperate(req.session.managerRole)) return res.status(403).json({ error: 'Для вашей роли доступен только просмотр данных' });
   next();
 }
 
@@ -98,28 +122,38 @@ function senderWithEmail(value, email) {
   return `${displayName} <${email}>`;
 }
 
-router.get('/employees', requireCanReview, async (req, res, next) => {
+function employeeForManager(req, employee, base) {
+  if (!employee) return employee;
+  const { token, ...safeEmployee } = employee;
+  const result = {
+    ...safeEmployee,
+    manager_link: `${base}/form.html?employeeId=${employee.id}&as=manager&mode=view`,
+  };
+  if (canOperate(req.session.managerRole)) {
+    result.token = token;
+    result.link = `${base}/form.html?token=${token}`;
+  }
+  return result;
+}
+
+router.get('/employees', requireCanView, async (req, res, next) => {
 
   try {
     const base = getPublicBaseUrl(req);
-    const list = (await helpers.getAllEmployees()).map(e => ({
-      ...e,
-      link: `${base}/form.html?token=${e.token}`,
-    }));
+    const list = (await helpers.getAllEmployees()).map(employee => employeeForManager(req, employee, base));
     res.json(list);
   } catch (err) { next(err); }
 });
 
-router.get('/employees/:id', requireCanReview, async (req, res, next) => {
+router.get('/employees/:id', requireCanView, async (req, res, next) => {
   try {
     const emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
     const base = getPublicBaseUrl(req);
-    res.json({
+    res.json(employeeForManager(req, {
       ...emp,
       pendingChanges: await helpers.getPendingByEmployee(emp.id),
-      link: `${base}/form.html?token=${emp.token}`,
-    });
+    }, base));
   } catch (err) { next(err); }
 });
 
@@ -147,15 +181,6 @@ router.post('/employees/:id/restore', requireCanEdit, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-router.put('/employees/:id/project-role', requireCanEdit, async (req, res, next) => {
-  try {
-    const isRp = req.body?.isRp === true || req.body?.isRp === 'true';
-    const employee = await helpers.setEmployeeProjectLeaderRole(Number(req.params.id), isRp);
-    if (!employee) return res.status(404).json({ error: 'Сотрудник не найден' });
-    res.json({ ok: true, employee });
-  } catch (err) { next(err); }
-});
-
 // Безвозвратное удаление — только для админа и только из архива.
 router.delete('/employees/:id/permanent', requireAdmin, async (req, res, next) => {
   try {
@@ -179,13 +204,13 @@ router.post('/employees/:id/new-token', requireCanEdit, async (req, res, next) =
   } catch (err) { next(err); }
 });
 
-router.get('/pending', requireCanReview, async (req, res, next) => {
+router.get('/pending', requireCanView, async (req, res, next) => {
   try {
     res.json(await helpers.getPendingGrouped());
   } catch (err) { next(err); }
 });
 
-router.get('/approval-history', requireCanReview, async (req, res, next) => {
+router.get('/approval-history', requireCanView, async (req, res, next) => {
   try {
     const history = await helpers.getApprovalHistory(req.query.limit);
     res.json({
@@ -290,10 +315,9 @@ router.post('/employees/:id/reject-all', requireCanReview, async (req, res, next
 
 router.post('/employees', requireCanEdit, async (req, res, next) => {
   try {
-    let emp = await helpers.createEmployee(req.body);
-    if (req.body?.is_rp === true) emp = await helpers.setEmployeeProjectLeaderRole(emp.id, true);
+    const emp = await helpers.createEmployee({ ...(req.body || {}), is_rp: false });
     const base = getPublicBaseUrl(req);
-    res.json({ ok: true, employee: { ...emp, link: `${base}/form.html?token=${emp.token}` } });
+    res.json({ ok: true, employee: employeeForManager(req, emp, base) });
   } catch (err) { next(err); }
 });
 
@@ -303,7 +327,7 @@ router.get('/positions', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/positions', requireCanEdit, async (req, res, next) => {
+router.post('/positions', requireAdmin, async (req, res, next) => {
   try {
     const { name } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Название должности обязательно' });
@@ -312,7 +336,7 @@ router.post('/positions', requireCanEdit, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.delete('/positions/:name', requireCanEdit, async (req, res, next) => {
+router.delete('/positions/:name', requireAdmin, async (req, res, next) => {
   try {
     const positions = await helpers.removePosition(decodeURIComponent(req.params.name));
     res.json({ ok: true, positions });
@@ -341,7 +365,7 @@ router.get('/position-aliases', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/position-aliases', requireCanEdit, async (req, res, next) => {
+router.put('/position-aliases', requireAdmin, async (req, res, next) => {
   try {
     const { aliases, useAliases } = req.body;
     await helpers.setSetting('position_aliases', JSON.stringify({ aliases: aliases || {}, useAliases: !!useAliases }));
@@ -349,7 +373,7 @@ router.put('/position-aliases', requireCanEdit, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/employees/:id/resume', requireCanReview, async (req, res, next) => {
+router.get('/employees/:id/resume', requireCanView, async (req, res, next) => {
   try {
     let emp = await helpers.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ error: 'Сотрудник не найден' });
@@ -374,7 +398,7 @@ router.get('/employees/:id/resume', requireCanReview, async (req, res, next) => 
   }
 });
 
-router.post('/employees/export', requireCanReview, async (req, res, next) => {
+router.post('/employees/export', requireCanView, async (req, res, next) => {
   try {
     const { ids, format } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
@@ -408,7 +432,7 @@ router.post('/employees/export', requireCanReview, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/employees/export-excel', requireCanReview, async (req, res, next) => {
+router.post('/employees/export-excel', requireCanView, async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Не выбраны сотрудники' });
@@ -501,7 +525,9 @@ router.post('/employees/export-excel', requireCanReview, async (req, res, next) 
 
 router.get('/projects', requireProjectAccess, async (req, res, next) => {
   try {
-    const projects = await helpers.getAllProjects();
+    const projects = req.session.managerRole === ROLES.PROJECT_LEADER
+      ? await helpers.getProjectsForLeaderEmployee(req.session.managerEmployeeId)
+      : await helpers.getAllProjects();
     res.json({ projects });
   } catch (err) { next(err); }
 });
@@ -528,9 +554,11 @@ router.get('/project-employees', requireProjectAccess, async (req, res, next) =>
   } catch (err) { next(err); }
 });
 
-router.get('/projects/export-register', requireAdmin, async (req, res, next) => {
+router.get('/projects/export-register', requireCanView, async (req, res, next) => {
   try {
-    const projects = await helpers.getAllProjects();
+    const projects = req.session.managerRole === ROLES.PROJECT_LEADER
+      ? await helpers.getProjectsForLeaderEmployee(req.session.managerEmployeeId)
+      : await helpers.getAllProjects();
     const headers = ['Ссылка','НомерСтроки','Сотрудник','Должность','ДатаВхода','ДатаВыхода','ФункциональнаяОбласть','ПрограммныйПродукт','Опыт','ОсновнойКонсультант','Проект','ДатаНачала','ДатаОкончания'];
     const rows = [];
     for (const project of projects) {
@@ -596,9 +624,14 @@ router.get('/projects/:id', requireProjectAccess, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/projects', requireAdmin, async (req, res, next) => {
+router.post('/projects', requireCanEdit, async (req, res, next) => {
   try {
-    const project = await helpers.createProject(req.body || {});
+    const fields = { ...(req.body || {}) };
+    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
+      if (!req.session.managerEmployeeId) return res.status(403).json({ error: 'Учётная запись РП не связана с профилем сотрудника' });
+      fields.leaderEmployeeId = req.session.managerEmployeeId;
+    }
+    const project = await helpers.createProject(fields);
     res.json({ ok: true, project });
   } catch (err) {
     console.error('Ошибка создания проекта:', err);
@@ -606,12 +639,20 @@ router.post('/projects', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.put('/projects/:id', requireProjectAccess, async (req, res, next) => {
+router.put('/projects/:id', requireCanEdit, async (req, res, next) => {
   try {
     const previousProject = await helpers.getProjectById(Number(req.params.id));
     if (!previousProject) return res.status(404).json({ error: 'Проект не найден' });
-    if (!canAccessProject(req, previousProject)) return res.status(403).json({ error: 'Этот проект не закреплён за вами' });
+    if (!canEditProject(req.session.managerRole, previousProject, req.session.managerEmployeeId)) {
+      return res.status(403).json({ error: 'Этот проект недоступен для редактирования' });
+    }
     const fields = { ...(req.body || {}) };
+    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
+      delete fields.leader_employee_id;
+      delete fields.leaderEmployeeId;
+      delete fields.leader_name;
+      delete fields.status;
+    }
     const project = await helpers.updateProject(Number(req.params.id), fields);
     await helpers.syncProjectTeamMembers(project);
     res.json({ ok: true, project });
@@ -642,21 +683,37 @@ router.post('/projects/import', requireAdmin, projectUpload.single('file'), asyn
   }
 });
 
-router.post('/projects/archive', requireAdmin, async (req, res, next) => {
+router.post('/projects/archive', requireCanEdit, async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Выберите проекты' });
+    }
+    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
+      for (const id of ids) {
+        const project = await helpers.getProjectById(Number(id));
+        if (!canEditProject(req.session.managerRole, project, req.session.managerEmployeeId)) {
+          return res.status(403).json({ error: 'Один из проектов не закреплён за вами' });
+        }
+      }
     }
     const archived = await helpers.archiveProjects(ids);
     res.json({ ok: true, archived });
   } catch (err) { next(err); }
 });
 
-router.post('/projects/restore', requireAdmin, async (req, res, next) => {
+router.post('/projects/restore', requireCanEdit, async (req, res, next) => {
   try {
     const { ids } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Выберите проекты' });
+    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
+      for (const id of ids) {
+        const project = await helpers.getProjectById(Number(id));
+        if (!canEditProject(req.session.managerRole, project, req.session.managerEmployeeId)) {
+          return res.status(403).json({ error: 'Один из проектов не закреплён за вами' });
+        }
+      }
+    }
     const restored = await helpers.restoreProjects(ids);
     res.json({ ok: true, restored });
   } catch (err) { next(err); }
@@ -664,6 +721,9 @@ router.post('/projects/restore', requireAdmin, async (req, res, next) => {
 
 router.get('/settings', requireAuth, async (req, res, next) => {
   try {
+    if (!isAdmin(req.session.managerRole)) {
+      return res.json({ current_manager_email: req.session.managerEmail || req.session.managerLogin || '' });
+    }
     const keys = [
       'smtp_host', 'smtp_port', 'smtp_user', 'smtp_from', 'manager_email', 'positions',
       'ai_provider', 'ai_folder_id', 'ai_base_url', 'ai_model_name',
@@ -677,7 +737,7 @@ router.get('/settings', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.put('/settings', requireAuth, async (req, res, next) => {
+router.put('/settings', requireAdmin, async (req, res, next) => {
   try {
     const managerEmail = normalizeEmail(req.session.managerEmail || req.session.managerLogin);
     if (!isEmail(managerEmail)) return res.status(400).json({ error: 'Войдите в систему по электронной почте повторно' });
@@ -705,7 +765,7 @@ router.post('/settings/test-email', requireAdmin, async (req, res, next) => {
   }
 });
 
-router.get('/stats', requireCanReview, async (req, res, next) => {
+router.get('/stats', requireCanView, async (req, res, next) => {
   try {
     res.json(await helpers.getStats());
   } catch (err) { next(err); }
@@ -720,7 +780,7 @@ router.get('/managers', requireAdmin, async (req, res, next) => {
 router.post('/managers', requireAdmin, async (req, res, next) => {
   try {
     const { name, password, role } = req.body;
-    const validRoles = new Set(['admin', 'scrum', 'leader']);
+    const validRoles = new Set(VALID_ROLES);
     const email = normalizeEmail(req.body.email || req.body.login);
     if (!name || !name.trim()) return res.status(400).json({ error: 'Имя обязательно' });
     if (!email) return res.status(400).json({ error: 'Почта обязательна' });
@@ -844,14 +904,14 @@ router.post('/feedback/notify-manager', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.get('/feedback', requireAuth, async (req, res, next) => {
+router.get('/feedback', requireAdmin, async (req, res, next) => {
   try {
     const rows = await helpers.getAllFeedback();
     res.json({ feedback: rows });
   } catch (err) { next(err); }
 });
 
-router.post('/feedback/summarize', requireAuth, async (req, res, next) => {
+router.post('/feedback/summarize', requireAdmin, async (req, res, next) => {
   try {
     const rows = await helpers.getAllFeedback();
     if (!rows || rows.length === 0) {
@@ -874,7 +934,7 @@ router.get('/position-competencies', requireAuth, async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
-router.post('/position-competencies', requireCanEdit, async (req, res, next) => {
+router.post('/position-competencies', requireAdmin, async (req, res, next) => {
   try {
     const { position, competency } = req.body;
     if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });
@@ -883,7 +943,7 @@ router.post('/position-competencies', requireCanEdit, async (req, res, next) => 
   } catch (err) { next(err); }
 });
 
-router.delete('/position-competencies', requireCanEdit, async (req, res, next) => {
+router.delete('/position-competencies', requireAdmin, async (req, res, next) => {
   try {
     const { position, competency } = req.body;
     if (!position || !competency) return res.status(400).json({ error: 'Должность и компетенция обязательны' });

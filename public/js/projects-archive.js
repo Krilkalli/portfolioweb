@@ -18,6 +18,7 @@ function formatDate(value) {
 }
 
 let projects = [];
+let canRestoreProjects = false;
 
 function visibleProjects() {
   const query = document.getElementById('archiveSearch').value.trim().toLowerCase();
@@ -48,9 +49,9 @@ function render() {
         <span><i class="fi fi-rr-building"></i>${escHtml(project.customer || 'Заказчик не указан')}</span>
         <span><i class="fi fi-rr-calendar"></i>В архиве с ${escHtml(formatDate(project.updated_at))}</span>
       </div>
-      <div class="archive-item-actions">
+      ${canRestoreProjects ? `<div class="archive-item-actions">
         <button class="btn btn-primary btn-sm" type="button" onclick="restoreProject(${project.id})"><i class="fi fi-rr-refresh"></i> Восстановить</button>
-      </div>
+      </div>` : '<div class="archive-item-actions"><span class="badge badge-muted">Только просмотр</span></div>'}
     </article>`).join('');
 }
 
@@ -116,6 +117,8 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(response => response.json()).catch(() => ({ authenticated:false }));
   if (!auth.authenticated) return location.href = '/login.html';
+  canRestoreProjects = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(auth.manager?.role);
+  document.getElementById('restoreAllVisible').style.display = canRestoreProjects ? '' : 'none';
   document.getElementById('navbarManager').textContent = auth.manager ? `${auth.manager.name} — ${auth.manager.email}` : '';
   if (localStorage.getItem('theme') === 'light') document.getElementById('themeToggle').innerHTML = '<i class="fi fi-rr-sun"></i>';
   try {

@@ -518,7 +518,7 @@ npm run dev
 | `AD_DOMAIN` | домен AD | `company.local` |
 | `AD_ADMIN_GROUP` | группа администраторов | `Portfolio_Admins` |
 | `AD_ALLOWED_GROUPS` | разрешённые группы через запятую | `Portfolio_Admins,Portfolio_Managers` |
-| `AD_DEFAULT_ROLE` | роль обычного разрешённого пользователя AD | `leader` |
+| `AD_DEFAULT_ROLE` | роль обычного разрешённого пользователя AD | `department_head` (только просмотр) |
 | `AD_ALLOW_LOCAL_FALLBACK` | разрешить локальный вход при ошибке AD | рекомендуется `false` |
 | `AD_TLS_REJECT_UNAUTHORIZED` | проверять сертификат AD | `true` |
 

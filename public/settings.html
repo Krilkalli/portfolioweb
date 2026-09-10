@@ -187,7 +187,7 @@
     </div>
 
     <!-- Positions Card -->
-    <div class="card collapsible">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title"><i class="fi fi-rr-briefcase"></i> Управление должностями</span>
         <span class="collapse-icon">−</span>
@@ -202,7 +202,7 @@
     </div>
 
     <!-- Position Aliases Card -->
-    <div class="card collapsible">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title"><i class="fi fi-rr-tags"></i> Аналоги должностей для выгрузки</span>
         <span class="collapse-icon">−</span>
@@ -230,7 +230,7 @@
     </div>
 
     <!-- Competencies per Position Card -->
-    <div class="card collapsible" data-role="admin,scrum">
+    <div class="card collapsible" data-role="admin">
       <div class="card-header collapsible-header" onclick="this.closest('.card').classList.toggle('collapsed')">
         <span class="card-title"><i class="fi fi-rr-clipboard"></i> Компетенции по должностям</span>
         <span class="collapse-icon">−</span>
@@ -285,7 +285,7 @@
         <span class="collapse-icon">−</span>
       </div>
       <p style="font-size:0.82rem;color:var(--text-muted);margin-bottom:12px;">
-        Пользователи панели с ролями ГСМ, СМ и РП работают с одинаковыми разделами и действиями.
+        Администратор департамента создаёт учётные записи и назначает роли согласно матрице ответственности.
       </p>
       <div id="managerList" style="margin-bottom:16px;"></div>
       <hr class="divider">
@@ -294,12 +294,14 @@
         <input type="email" class="form-control" id="newManagerEmail" placeholder="Почта менеджера" autocomplete="email" inputmode="email">
         <input type="password" class="form-control" id="newManagerPass" placeholder="Пароль (мин. 12 символов)">
         <select class="form-control" id="newManagerRole">
+          <option value="department_head">Руководитель департамента (РД)</option>
+          <option value="chief_scrum">Главный скрам-мастер (ГСМ)</option>
           <option value="scrum">СМ</option>
           <option value="leader">РП</option>
-          <option value="admin">ГСМ</option>
+          <option value="admin">Администратор департамента (АД)</option>
         </select>
         <div class="form-hint">Для роли РП укажите ФИО точно как в профиле сотрудника. Система автоматически свяжет учётную запись с этим профилем.</div>
-        <div class="form-hint">Роль определяет обозначение пользователя, а доступ к разделам у ГСМ, СМ и РП одинаковый.</div>
+        <div class="form-hint">РД работает в режиме просмотра; ГСМ и СМ управляют портфолио; РП дополнительно ведёт закреплённые проекты.</div>
         <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить пользователя</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>
       </div>

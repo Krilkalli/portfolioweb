@@ -9,6 +9,7 @@ const { composeProjectDescription } = require('../projectDescription');
 const { normalizeForComparison } = require('../changeComparison');
 const { notifyManagerNewSubmission, notifyEmployeeSubmitted } = require('../mailer');
 const { getPublicBaseUrl } = require('../publicUrl');
+const { canOperate } = require('../permissions');
 const https = require('https');
 const querystring = require('querystring');
 
@@ -195,7 +196,7 @@ router.post('/:token/submit', async (req, res, next) => {
 
     if (req.query.mode === 'manager') {
       const role = req.session?.managerRole || '';
-      if (!req.session?.isManager || !['admin', 'scrum', 'leader'].includes(role)) {
+      if (!req.session?.isManager || !canOperate(role)) {
         return res.status(403).json({ error: 'Режим менеджера требует авторизации' });
       }
       const updates = {};

@@ -8,6 +8,7 @@ const config = require('./config');
 const { Store } = require('express-session');
 const { sessions, initPromise } = require('./db');
 const { securityHeaders, createRateLimiter, csrfProtection } = require('./security');
+const { ROLES, canView, canOperate } = require('./permissions');
 
 // ─── PostgreSQL Session Store ──────────────────────────────────────────────────
 class PgStore extends Store {
@@ -80,13 +81,16 @@ const PROJECT_PAGES = ['/projects.html', '/project.html'];
 app.use((req, res, next) => {
   if (req.path === '/myprojects.html') {
     if (!req.session.isManager) return res.redirect('/login.html');
-    return res.redirect('/projects.html');
+    return res.redirect(req.session.managerRole === ROLES.PROJECT_LEADER ? '/projects.html' : '/index.html');
   }
-  if (PROTECTED_PAGES.includes(req.path) && !req.session.isManager) {
-    return res.redirect('/login.html');
+  if (PROTECTED_PAGES.includes(req.path)) {
+    if (!req.session.isManager) return res.redirect('/login.html');
+    if (!canView(req.session.managerRole)) return res.redirect('/login.html');
+    if (req.path === '/archive.html' && !canOperate(req.session.managerRole)) return res.redirect('/index.html');
   }
   if (PROJECT_PAGES.includes(req.path)) {
     if (!req.session.isManager) return res.redirect('/login.html');
+    if (!canView(req.session.managerRole)) return res.redirect('/index.html');
   }
   next();
 });

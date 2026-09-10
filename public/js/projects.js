@@ -42,7 +42,9 @@ let selectedIds = new Set();
 let searchQuery = '';
 let leaderFilter = '';
 let sortOrder = 'newest';
-let isAdmin = true;
+let canEditProjects = false;
+let isDepartmentAdmin = false;
+let isProjectLeader = false;
 
 function openModal() { document.getElementById('projectModal').classList.add('active'); }
 function closeModal() { document.getElementById('projectModal').classList.remove('active'); }
@@ -97,6 +99,7 @@ function syncSelectAll() {
 }
 
 function updateProjectActions() {
+  if (!canEditProjects) return;
   const selected = projects.filter(project => selectedIds.has(Number(project.id)));
   const onlyActive = selected.length > 0 && selected.every(project => project.status !== 'Архив');
   document.getElementById('archiveProjectsBtn').style.display = onlyActive ? '' : 'none';
@@ -175,7 +178,7 @@ function renderProjects(list) {
 
     return `
       <tr class="project-row ${archived ? 'row-archived' : ''}">
-        <td class="col-check" data-admin-only style="text-align:center;${isAdmin ? '' : 'display:none;'}">
+        <td class="col-check" data-project-edit style="text-align:center;${canEditProjects ? '' : 'display:none;'}">
           <input type="checkbox" class="project-check" data-id="${project.id}" ${selectedIds.has(Number(project.id)) ? 'checked' : ''}>
         </td>
         <td><div class="project-name"><a href="/project.html?id=${project.id}" target="_self">${escHtml(project.title)}</a></div></td>
@@ -207,8 +210,13 @@ async function loadLeaders() {
 }
 
 document.getElementById('createProjectBtn').addEventListener('click', () => {
-  if (!leaders.length) {
-    toast('Сначала назначьте РП на дашборде', 'warning');
+  if (!canEditProjects) return;
+  if (isProjectLeader && !currentManager?.employeeId) {
+    toast('Учётная запись РП не связана с профилем сотрудника', 'warning');
+    return;
+  }
+  if (!isProjectLeader && !leaders.length) {
+    toast('Сначала создайте учётную запись РП в настройках', 'warning');
     return;
   }
   document.getElementById('projectForm').reset();
@@ -226,7 +234,7 @@ document.getElementById('projectForm').addEventListener('submit', async (e) => {
   const btn = document.getElementById('saveProjectBtn');
   const result = document.getElementById('projectFormResult');
   const title = document.getElementById('projectTitle').value.trim();
-  const leaderId = document.getElementById('projectLeader').value;
+  const leaderId = isProjectLeader ? currentManager?.employeeId : document.getElementById('projectLeader').value;
 
   if (!title) { result.style.color = 'var(--danger)'; result.textContent = 'Введите название проекта'; return; }
   if (!leaderId) { result.style.color = 'var(--danger)'; result.textContent = 'Выберите руководителя'; return; }
@@ -342,7 +350,15 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
   currentManager = auth.manager;
-  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = ''; });
+  canEditProjects = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(currentManager?.role);
+  isDepartmentAdmin = currentManager?.role === 'admin';
+  isProjectLeader = currentManager?.role === 'leader';
+  document.querySelectorAll('[data-project-edit]').forEach(element => { element.style.display = canEditProjects ? '' : 'none'; });
+  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = isDepartmentAdmin ? '' : 'none'; });
+  const leaderGroup = document.getElementById('projectLeaderGroup');
+  if (leaderGroup) leaderGroup.style.display = isProjectLeader ? 'none' : '';
+  if (!canEditProjects) document.getElementById('projectsSubtitle').textContent = 'Просмотр реестра проектов без возможности изменения данных.';
+  else if (isProjectLeader) document.getElementById('projectsSubtitle').textContent = 'Создание и редактирование закреплённых за вами проектов.';
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await Promise.all([loadLeaders(), loadProjects()]);

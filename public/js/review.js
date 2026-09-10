@@ -128,6 +128,7 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 let pendingGroups = [];
 let rejectTargetId = null;
 let rejectTargetType = null; // 'employee' | 'change'
+let canDecideChanges = false;
 
 // ─── Загрузка ─────────────────────────────────────────────────────────────────
 async function loadPending() {
@@ -181,11 +182,11 @@ function renderEmployeeCard(group) {
         </div>
         <span class="badge badge-warning" style="margin-left:8px;">${group.changes.length} изм.</span>
       </div>
-      <div class="actions">
+      ${canDecideChanges ? `<div class="actions">
         <button class="btn btn-ghost btn-sm" style="color:var(--accent); border-color:var(--accent);" onclick="reviewWithAI(${group.employee_id}, this)"><i class="fi fi-rr-magic-wand"></i> Анализ ИИ</button>
         <button class="btn btn-success btn-sm" onclick="approveAll(${group.employee_id})"><i class="fi fi-rr-check-circle"></i> Подтвердить всё</button>
         <button class="btn btn-danger btn-sm" onclick="openRejectModal(${group.employee_id}, 'employee')"><i class="fi fi-rr-cross-circle"></i> Отклонить всё</button>
-      </div>
+      </div>` : '<span class="badge badge-muted">Только просмотр</span>'}
     </div>
     <div class="diff-wrap">
       ${group.changes.map(c => renderDiffField(c)).join('')}
@@ -211,10 +212,10 @@ function renderDiffField(change) {
     <div class="diff-field" id="change-${change.id}">
       <div class="diff-field-label">
         <span>${label}</span>
-        <div style="display:flex;gap:6px;">
+        ${canDecideChanges ? `<div style="display:flex;gap:6px;">
           <button class="btn btn-success btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="approveChange(${change.id}, ${change.employee_id})"><i class="fi fi-rr-check-circle"></i></button>
           <button class="btn btn-danger btn-sm" style="height:26px;padding:0 10px;font-size:0.75rem;" onclick="openRejectModal(${change.id}, 'change', ${change.employee_id})"><i class="fi fi-rr-cross-circle"></i></button>
-        </div>
+        </div>` : ''}
       </div>
       <div class="diff-cols">
         <div class="diff-col diff-col-old">
@@ -455,6 +456,7 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 
   const nm = document.getElementById('navbarManager');
   if (nm && auth.manager) nm.textContent = auth.manager.name + ' —';
+  canDecideChanges = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(auth.manager?.role);
 
   initTheme();
   await loadPending();

@@ -63,11 +63,12 @@ module.exports = {
     enabled: process.env.AD_ENABLED === 'true',
     url: process.env.AD_URL || '',
     domain: process.env.AD_DOMAIN || 'test.local',
-    // Группа AD, чья принадлежность даёт роль "admin" (Chief Manager) в приложении.
+    // Группа AD, чья принадлежность даёт роль администратора департамента.
     adminGroup: process.env.AD_ADMIN_GROUP || 'HR_Managers',
     allowedGroups: String(process.env.AD_ALLOWED_GROUPS || process.env.AD_ADMIN_GROUP || 'HR_Managers')
       .split(',').map(value => value.trim()).filter(Boolean),
-    defaultRole: process.env.AD_DEFAULT_ROLE || 'leader',
+    // Без отдельного сопоставления групп выдаём минимальную роль: только просмотр.
+    defaultRole: process.env.AD_DEFAULT_ROLE || 'department_head',
     allowLocalFallback: booleanEnv('AD_ALLOW_LOCAL_FALLBACK', false),
     tlsRejectUnauthorized: booleanEnv('AD_TLS_REJECT_UNAUTHORIZED', true),
     tlsCa: process.env.AD_TLS_CA_PATH ? fs.readFileSync(process.env.AD_TLS_CA_PATH) : undefined,

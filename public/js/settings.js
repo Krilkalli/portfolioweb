@@ -524,7 +524,7 @@ async function loadManagers() {
   } catch {}
 }
 
-const ROLE_LABELS = { admin: 'ГСМ', scrum: 'СМ', leader: 'РП' };
+const ROLE_LABELS = { department_head: 'РД', chief_scrum: 'ГСМ', scrum: 'СМ', leader: 'РП', admin: 'АД' };
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -533,11 +533,11 @@ function renderManagers(managers) {
     list.innerHTML = '<p style="color:var(--text-muted);font-size:0.85rem;">Нет менеджеров</p>';
     return;
   }
-  const isAdmin = true;
+  const isAdmin = currentManager?.role === 'admin';
   const adminCount = managers.filter(m => m.role === 'admin').length;
   list.innerHTML = `
     <div class="form-hint" style="margin-bottom:10px;">
-      Пользователей с ролью ГСМ: <strong>${adminCount}</strong>
+      Администраторов департамента: <strong>${adminCount}</strong>
     </div>
   ` + managers.map(m => `
     <div class="position-item">
@@ -552,9 +552,11 @@ function renderManagers(managers) {
         ${isAdmin && m.id !== currentManager?.id ? `
         <div style="margin-top:6px;">
           <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
-            <option value="admin" ${m.role==='admin'?'selected':''}>ГСМ</option>
+            <option value="department_head" ${m.role==='department_head'?'selected':''}>Руководитель департамента (РД)</option>
+            <option value="chief_scrum" ${m.role==='chief_scrum'?'selected':''}>Главный скрам-мастер (ГСМ)</option>
             <option value="scrum" ${m.role==='scrum'?'selected':''}>СМ</option>
             <option value="leader" ${m.role==='leader'?'selected':''}>РП</option>
+            <option value="admin" ${m.role==='admin'?'selected':''}>Администратор департамента (АД)</option>
           </select>
         </div>` : ''}
       </div>
@@ -704,7 +706,8 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
 
 function applyRoleUI(role) {
   document.querySelectorAll('[data-role]').forEach(el => {
-    el.style.display = '';
+    const allowed = el.getAttribute('data-role').split(',').map(value => value.trim());
+    el.style.display = allowed.includes(role) ? '' : 'none';
   });
 }
 

@@ -760,7 +760,7 @@ async function init() {
     const email = config.defaultManagerEmail;
     await _run(
       'INSERT INTO managers (name, email, password_hash, role, created_at) VALUES ($1, $2, $3, $4, $5)',
-      ['Главный администратор', email, hash, 'admin', new Date().toISOString()]
+      ['Администратор департамента', email, hash, 'admin', new Date().toISOString()]
     );
     console.log(`✅ Создан менеджер по умолчанию: ${email}`);
   }
@@ -2069,7 +2069,7 @@ const helpers = {
       const normalizedEmail = String(email).trim().toLowerCase();
       const existing = await client.query('SELECT * FROM managers WHERE email = $1', [normalizedEmail]);
       if (existing.rows[0]) throw new Error('Менеджер с такой почтой уже существует');
-      const validRoles = ['admin', 'scrum', 'leader'];
+      const validRoles = ['department_head', 'chief_scrum', 'scrum', 'leader', 'admin'];
       const managerRole = validRoles.includes(role) ? role : 'scrum';
       let linkedEmployeeId = null;
       if (managerRole === 'leader') {
@@ -2105,7 +2105,7 @@ const helpers = {
       if (count.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего менеджера');
       if (target.rows[0].role === 'admin') {
         const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
-        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего главного администратора');
+        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя удалить последнего администратора департамента');
       }
       await client.query('DELETE FROM managers WHERE id = $1', [Number(id)]);
       if (target.rows[0].role === 'leader' && target.rows[0].employee_id) {
@@ -2125,7 +2125,7 @@ const helpers = {
   },
 
   async updateManagerRole(id, role) {
-    const validRoles = ['admin', 'scrum', 'leader'];
+    const validRoles = ['department_head', 'chief_scrum', 'scrum', 'leader', 'admin'];
     if (!validRoles.includes(role)) throw new Error('Неверная роль');
     const client = await pool.connect();
     try {
@@ -2134,7 +2134,7 @@ const helpers = {
       if (!target.rows[0]) throw new Error('Пользователь не найден');
       if (target.rows[0].role === 'admin' && role !== 'admin') {
         const adminCount = await client.query("SELECT COUNT(*)::int cnt FROM managers WHERE role = 'admin'");
-        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя снять роль у последнего главного администратора');
+        if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя снять роль у последнего администратора департамента');
       }
       let employeeId = target.rows[0].employee_id;
       if (role === 'leader' && !employeeId) {

@@ -15,11 +15,11 @@ function setManagerSession(req, res, manager) {
       req.session.managerName = manager.name;
       req.session.managerEmail = manager.email;
       req.session.managerLogin = manager.email;
-      req.session.managerRole = manager.role || 'leader';
+      req.session.managerRole = manager.role || 'scrum';
       req.session.managerEmployeeId = manager.employee_id || null;
       req.session.save((saveError) => {
         if (saveError) return reject(saveError);
-        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'leader', employeeId: manager.employee_id || null } });
+        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'scrum', employeeId: manager.employee_id || null } });
         resolve();
       });
     });
@@ -114,7 +114,7 @@ router.get('/me', (req, res) => {
       id: req.session.managerId,
       name: req.session.managerName,
       email: req.session.managerEmail || req.session.managerLogin,
-      role: req.session.managerRole || 'leader',
+      role: req.session.managerRole || 'scrum',
       employeeId: req.session.managerEmployeeId || null,
     } : null,
   });

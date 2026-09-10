@@ -201,8 +201,9 @@
   </div>
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
-    <a href="/projects.html" class="btn btn-ghost btn-sm">Проекты</a>
-    <a href="/archive.html" class="btn btn-ghost btn-sm">Архив</a>
+    <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="department_head,chief_scrum,scrum,admin">Проекты</a>
+    <a href="/projects.html" class="btn btn-ghost btn-sm" data-role="leader">Мои проекты</a>
+    <a href="/archive.html" class="btn btn-ghost btn-sm" data-role="chief_scrum,scrum,leader,admin">Архив</a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -276,9 +277,9 @@
         </div>
       </div>
     </div>
-    <button id="addEmployeeBtn" class="btn btn-primary btn-sm dashboard-action"><i class="fi fi-rr-plus"></i> Сотрудника</button>
+    <button id="addEmployeeBtn" class="btn btn-primary btn-sm dashboard-action" data-role="chief_scrum,scrum,leader,admin"><i class="fi fi-rr-plus"></i> Сотрудника</button>
     <!-- <button id="importExcelBtn" class="btn btn-primary btn-sm" data-role="admin,scrum"><i class="fi fi-rr-download"></i> Импорт Excel</button> -->
-    <button id="massMailBtn" class="btn btn-primary btn-sm dashboard-action" data-role="admin,scrum,leader"><i class="fi fi-rr-envelope"></i> Рассылка</button>
+    <button id="massMailBtn" class="btn btn-primary btn-sm dashboard-action" data-role="chief_scrum,scrum,leader,admin"><i class="fi fi-rr-envelope"></i> Рассылка</button>
     <a href="/api/excel/export" class="btn btn-ghost btn-sm dashboard-action"><i class="fi fi-rr-upload"></i> Экспорт Excel</a>
   </div>
 
@@ -362,10 +363,6 @@
           <input type="text" class="form-control" id="new_city" placeholder="Москва">
         </div>
       </div>
-      <label class="filter-label" style="margin:0 0 16px;">
-        <input type="checkbox" id="new_is_rp"> Назначить сотруднику роль РП
-      </label>
-      <div class="form-hint" style="margin-top:-10px;margin-bottom:16px;">Роль РП назначается отдельно и не зависит от выбранной должности.</div>
       <div id="addResult" style="margin-bottom:12px;"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;">
         <button type="button" class="btn btn-ghost" id="cancelAdd">Отмена</button>

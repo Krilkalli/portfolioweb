@@ -36,6 +36,8 @@ let employees = [];
 let teamMembers = [];
 let functionalBlockOptions = [];
 let selectedFunctionalBlocks = [];
+let canEditProjects = false;
+let isProjectLeader = false;
 
 const FUNCTIONAL_BLOCKS_LABEL = 'Функциональные блоки:';
 
@@ -77,7 +79,7 @@ function renderFunctionalBlocks() {
   }
   checklist.innerHTML = values.map(block => `
     <label class="checkbox-option">
-      <input type="checkbox" value="${escHtml(block)}" ${selectedFunctionalBlocks.includes(block) ? 'checked' : ''}>
+      <input type="checkbox" value="${escHtml(block)}" ${selectedFunctionalBlocks.includes(block) ? 'checked' : ''} ${canEditProjects ? '' : 'disabled'}>
       <span>${escHtml(block)}</span>
     </label>
   `).join('');
@@ -94,12 +96,12 @@ function renderTeam() {
 
   wrap.innerHTML = items.map((member, idx) => `
     <div class="team-row">
-      <select class="form-control team-member-select" data-idx="${idx}">
+      <select class="form-control team-member-select" data-idx="${idx}" ${canEditProjects ? '' : 'disabled'}>
         <option value="">Выберите сотрудника</option>
         ${employees.map(emp => `<option value="${emp.id}" ${String(member.employee_id || '') === String(emp.id) ? 'selected' : ''}>${escHtml(emp.name)}</option>`).join('')}
       </select>
       <div style="font-size:0.8rem;color:var(--text-muted);white-space:nowrap;">${idx + 1}</div>
-      <button type="button" class="btn btn-ghost btn-icon delete-member-btn" data-idx="${idx}" title="Удалить"><i class="fi fi-rr-trash"></i></button>
+      ${canEditProjects ? `<button type="button" class="btn btn-ghost btn-icon delete-member-btn" data-idx="${idx}" title="Удалить"><i class="fi fi-rr-trash"></i></button>` : ''}
     </div>
   `).join('');
 }
@@ -124,6 +126,20 @@ function setFormData(project) {
   document.getElementById('teamWrapper').style.display = (project.team_size || teamMembers.length) ? 'block' : 'none';
   document.getElementById('toggleTeamBtn').textContent = (project.team_size || teamMembers.length) ? 'Свернуть' : 'Развернуть';
   renderTeam();
+  applyProjectPermissions();
+}
+
+function applyProjectPermissions() {
+  document.getElementById('saveProjectBtnTop').style.display = canEditProjects ? '' : 'none';
+  document.getElementById('addTeamMemberBtn').style.display = canEditProjects ? '' : 'none';
+  document.getElementById('addFunctionalBlockBtn').style.display = canEditProjects ? '' : 'none';
+  document.getElementById('newFunctionalBlock').style.display = canEditProjects ? '' : 'none';
+  document.querySelectorAll('#projectCardForm input, #projectCardForm textarea, #projectCardForm select').forEach(element => {
+    element.disabled = !canEditProjects;
+  });
+  if (isProjectLeader) document.getElementById('leader_employee_id').disabled = true;
+  const subtitle = document.querySelector('.page-subtitle');
+  if (subtitle && !canEditProjects) subtitle.textContent = 'Просмотр карточки проекта без возможности изменения данных.';
 }
 
 async function loadEmployees() {
@@ -150,6 +166,7 @@ async function loadProject() {
 }
 
 async function saveProject() {
+  if (!canEditProjects) return toast('Для вашей роли доступен только просмотр проекта', 'warning');
   const payload = {
     title: document.getElementById('title').value.trim(),
     leader_employee_id: document.getElementById('leader_employee_id').value || null,
@@ -251,7 +268,8 @@ document.getElementById('end_present').addEventListener('change', (e) => {
   const auth = await fetch('/api/auth/me').then(r => r.json()).catch(() => ({ authenticated: false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
   currentManager = auth.manager;
-  document.querySelectorAll('[data-admin-only]').forEach(element => { element.style.display = ''; });
+  canEditProjects = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(currentManager?.role);
+  isProjectLeader = currentManager?.role === 'leader';
   document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await loadEmployees();

@@ -526,10 +526,13 @@ function projectDataChanged() {
 // ─── Load Employee ─────────────────────────────────────────────────────────
 async function loadEmployee() {
   token = new URLSearchParams(location.search).get('token');
-  if (!token) { showError(); return; }
+  const employeeId = new URLSearchParams(location.search).get('employeeId');
+  if (!token && !(employeeId && managerUser)) { showError(); return; }
   isViewMode = new URLSearchParams(location.search).get('mode') === 'view';
   try {
-    const r = await fetch(`/api/form/${token}`);
+    const r = employeeId && managerUser
+      ? await fetch(`/api/employees/${encodeURIComponent(employeeId)}`)
+      : await fetch(`/api/form/${token}`);
     if (!r.ok) { showError(); return; }
     employee = await r.json();
     const [posR, compR] = await Promise.all([
@@ -706,7 +709,8 @@ function renderViewContent() {
 function setViewMode(view) {
   isViewMode = view;
   const formState = document.getElementById('formState');
-  document.getElementById('editModeBtn')?.classList.toggle('hidden', !view);
+  const canEdit = !managerUser || ['chief_scrum', 'scrum', 'leader', 'admin'].includes(managerUser.role);
+  document.getElementById('editModeBtn')?.classList.toggle('hidden', !view || !canEdit);
   document.getElementById('headerSubtitle').textContent = view ? '— Просмотр профиля' : '— Обновление профиля';
   document.getElementById('spellerBtn')?.classList.toggle('hidden', view);
   formState.classList.toggle('view-mode', view);
@@ -820,7 +824,13 @@ async function performSubmit(fields) {
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';
 
   // Если менеджер открыл форму через дашборд (?as=manager) — применяем напрямую
-  if (asManager && managerUser && ['admin', 'scrum', 'leader'].includes(managerUser.role)) {
+  if (asManager && managerUser) {
+    if (!['chief_scrum', 'scrum', 'leader', 'admin'].includes(managerUser.role)) {
+      toast('Для вашей роли доступен только просмотр профиля', 'warning');
+      btn.disabled = false;
+      btn.innerHTML = 'Сохранить';
+      return;
+    }
     try {
       const empId = employee.id;
       const payload = {};
@@ -1170,7 +1180,7 @@ async function initForm() {
 
   // If manager opened via dashboard, update submit button text
   const asManager = new URLSearchParams(location.search).get('as') === 'manager';
-  if (asManager && managerUser && ['admin', 'scrum', 'leader'].includes(managerUser.role)) {
+  if (asManager && managerUser && ['chief_scrum', 'scrum', 'leader', 'admin'].includes(managerUser.role)) {
     const submitBtn = document.getElementById('submitBtn');
     if (submitBtn) submitBtn.innerHTML = 'Сохранить';
     // Hide feedback section for managers
