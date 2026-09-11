@@ -73,6 +73,30 @@ function isDepartmentAdmin() {
   return currentManager?.role === 'admin';
 }
 
+function isDepartmentHead() {
+  return currentManager?.role === 'department_head';
+}
+
+function sortEmployeesForDashboard(list) {
+  const ownCardCanBePinned = ['leader', 'scrum'].includes(currentManager?.role);
+  const ownEmployeeId = Number(currentManager?.employeeId || 0);
+  return [...list].sort((left, right) => {
+    if (ownCardCanBePinned && ownEmployeeId) {
+      const leftIsOwn = Number(left.id) === ownEmployeeId;
+      const rightIsOwn = Number(right.id) === ownEmployeeId;
+      if (leftIsOwn !== rightIsOwn) return leftIsOwn ? -1 : 1;
+    }
+    return String(left.name || '').localeCompare(String(right.name || ''), 'ru', {
+      sensitivity: 'base',
+      numeric: true,
+    });
+  });
+}
+
+function visibleEmployeeColumnCount() {
+  return isDepartmentHead() ? 6 : 8;
+}
+
 async function loadStats() {
   try {
     const r = await fetch('/api/stats');
@@ -97,7 +121,7 @@ async function loadEmployees() {
     applyFilter();
     updateSelectionUI();
   } catch (e) {
-    document.getElementById('employeesTbody').innerHTML = `<tr><td colspan="6" style="text-align:center;color:var(--danger);padding:40px">Ошибка загрузки данных</td></tr>`;
+    document.getElementById('employeesTbody').innerHTML = `<tr><td colspan="${visibleEmployeeColumnCount()}" style="text-align:center;color:var(--danger);padding:40px">Ошибка загрузки данных</td></tr>`;
   }
 }
 
@@ -186,7 +210,7 @@ function renderTable(list) {
   const tbody = document.getElementById('employeesTbody');
   const searchQuery = document.getElementById('searchInput').value.trim();
   if (!list.length) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${visibleEmployeeColumnCount()}" style="text-align:center;padding:40px;color:var(--text-muted)">Ничего не найдено</td></tr>`;
     return;
   }
   tbody.innerHTML = list.map(e => {
@@ -492,7 +516,7 @@ function applyFilter() {
   if (q) list = list.filter(emp => window.EmployeeSearch?.matchesEmployee(emp, q));
   const count = document.getElementById('searchResultCount');
   if (count) count.textContent = (q || pos || city || rp || selectedCerts.size > 0) ? `Найдено: ${list.length}` : '';
-  renderTable(list);
+  renderTable(sortEmployeesForDashboard(list));
 }
 
 // ─── Logout ──────────────────────────────────────────────────────────────────
@@ -768,6 +792,7 @@ document.getElementById('massMailForm').addEventListener('submit', async (e) => 
 });
 // ─── Role-based UI ──────────────────────────────────────────────────────────
 function applyRoleUI(role) {
+  document.body.dataset.managerRole = role || '';
   document.querySelectorAll('[data-role]').forEach(el => {
     const allowed = el.dataset.role.split(',').map(value => value.trim());
     el.style.display = allowed.includes(role) ? '' : 'none';
@@ -780,8 +805,6 @@ function applyRoleUI(role) {
   if (!auth.authenticated) { location.href = '/login.html'; return; }
 
   currentManager = auth.manager;
-  const nm = document.getElementById('navbarManager');
-  if (nm && auth.manager) nm.textContent = `${auth.manager.name} — ${auth.manager.email}`;
   const senderEmail = document.getElementById('mailSenderEmail');
   if (senderEmail) senderEmail.textContent = auth.manager?.email || '—';
 

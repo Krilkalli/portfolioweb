@@ -6,6 +6,7 @@
   <title>Архив сотрудников — Портфолио IS1C</title>
   <script src="/js/theme-init.js"></script>
   <link rel="stylesheet" href="/css/styles.css">
+  <link rel="stylesheet" href="/css/employee-table.css">
   <link rel="stylesheet" href="/vendor/uicons/regular/rounded.css">
   <style>
     .archive-main { padding:32px 0 56px; flex:1; }
@@ -13,35 +14,9 @@
     .archive-title { display:flex; align-items:center; gap:12px; font-size:1.55rem; font-weight:750; }
     .archive-title-icon { display:grid; place-items:center; width:42px; height:42px; border-radius:13px; color:var(--accent-light); background:var(--accent-glow); border:1px solid var(--border-accent); }
     .archive-subtitle { color:var(--text-muted); font-size:.9rem; margin-top:7px; }
-    .archive-tabs { display:grid; grid-template-columns:repeat(2,minmax(180px,1fr)); gap:12px; margin-bottom:18px; }
-    .archive-tab { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:16px 18px; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-md); cursor:pointer; font:inherit; text-align:left; transition:all var(--transition); }
-    .archive-tab:hover { transform:translateY(-1px); border-color:var(--border-accent); background:var(--bg-card-hover); }
-    .archive-tab.active { color:#fff; border-color:var(--accent); background:linear-gradient(135deg,var(--accent),#5148df); box-shadow:0 12px 28px var(--accent-glow); }
-    .archive-tab-label { display:flex; align-items:center; gap:10px; font-weight:650; }
-    .archive-count { min-width:30px; padding:3px 9px; border-radius:999px; text-align:center; font-size:.78rem; background:rgba(255,255,255,.1); }
-    .archive-toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:18px; flex-wrap:wrap; }
-    .archive-search { position:relative; width:min(460px,100%); }
-    .archive-search i { position:absolute; left:13px; top:50%; transform:translateY(-50%); color:var(--text-muted); pointer-events:none; }
-    .archive-search input { padding-left:39px; }
-    .archive-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
-    .archive-item { position:relative; display:flex; flex-direction:column; min-height:190px; padding:20px; overflow:hidden; }
-    .archive-item::before { content:''; position:absolute; inset:0 auto 0 0; width:3px; background:linear-gradient(var(--accent),transparent); opacity:.75; }
-    .archive-item-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
-    .archive-item-title { color:var(--text-primary); font-size:1rem; font-weight:680; line-height:1.4; overflow-wrap:anywhere; }
-    .archive-item-meta { display:grid; gap:7px; margin:13px 0 18px; color:var(--text-muted); font-size:.82rem; }
-    .archive-item-meta span { display:flex; align-items:center; gap:8px; min-width:0; }
-    .archive-item-meta i { color:var(--accent-light); width:16px; flex:0 0 auto; }
-    .archive-item-actions { display:flex; gap:8px; margin-top:auto; }
-    .archive-empty { grid-column:1/-1; padding:58px 20px; text-align:center; color:var(--text-muted); border:1px dashed var(--border); border-radius:var(--radius-lg); background:var(--bg-card); }
-    .archive-empty i { display:block; margin-bottom:10px; color:var(--accent-light); font-size:2rem; }
-    @media (max-width:620px) {
-      .archive-tabs { grid-template-columns:1fr; }
-      .archive-grid { grid-template-columns:1fr; }
-      .archive-toolbar .btn { width:100%; justify-content:center; }
-    }
   </style>
 </head>
-<body class="page-wrapper">
+<body class="page-wrapper archive-page">
 <nav class="navbar">
   <div class="navbar-brand">
     <a href="/index.html" class="navbar-brand-link" aria-label="Вернуться на дашборд" title="На дашборд">
@@ -65,20 +40,40 @@
     <a id="backToWork" href="/index.html" class="btn btn-ghost btn-sm"><i class="fi fi-rr-arrow-left"></i> К рабочему списку</a>
   </header>
 
-  <div class="archive-toolbar">
-    <div class="archive-search">
-      <i class="fi fi-rr-search"></i>
-      <input id="archiveSearch" class="form-control" type="search" placeholder="Поиск по сотрудникам..." aria-label="Поиск в архиве сотрудников">
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <div class="search-wrap">
+        <svg class="search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+        </svg>
+        <input id="archiveSearch" class="form-control" type="search" placeholder="ФИО, должность, город, почта..." aria-label="Поиск в архиве сотрудников" style="width:340px">
+      </div>
+      <span class="search-result-count" id="employeeArchiveCount"></span>
     </div>
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span class="archive-count" id="employeeArchiveCount">0</span>
-      <button id="restoreAllVisible" class="btn btn-primary btn-sm" type="button"><i class="fi fi-rr-refresh"></i> Восстановить всех найденных</button>
-    </div>
+    <button id="restoreSelected" class="btn btn-primary btn-sm dashboard-action" type="button" disabled><i class="fi fi-rr-refresh"></i> Восстановить выбранных</button>
   </div>
 
-  <section id="archiveGrid" class="archive-grid" aria-live="polite">
-    <div class="archive-empty"><span class="spinner"></span></div>
-  </section>
+  <div class="card employees-card">
+    <div class="table-wrap">
+      <table class="table" id="employeesTable" aria-live="polite">
+        <thead>
+          <tr>
+            <th class="col-check" style="text-align:center;width:40px;"><input type="checkbox" id="selectAllArchived" aria-label="Выбрать всех сотрудников"></th>
+            <th class="col-employee" style="text-align:left;">Сотрудник</th>
+            <th class="col-role" style="text-align:left;">Должность</th>
+            <th class="col-city" style="text-align:left;">Город</th>
+            <th class="col-status" style="text-align:left;">Статус</th>
+            <th class="col-link" style="text-align:center;">Ссылка</th>
+            <th class="col-resume" style="text-align:center;">Резюме</th>
+            <th class="col-actions" style="text-align:center;"></th>
+          </tr>
+        </thead>
+        <tbody id="employeesTbody">
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </main>
 
 <div id="toastContainer" class="toast-container"></div>

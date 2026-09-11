@@ -4,6 +4,20 @@ const router = express.Router();
 const { helpers } = require('../db');
 const config = require('../config');
 const { authenticateAD } = require('../auth/adAuth');
+const { getRoleLabel, getRoleShortLabel } = require('../permissions');
+
+function managerForClient(manager) {
+  const role = manager.role || 'scrum';
+  return {
+    id: manager.id,
+    name: manager.name,
+    email: manager.email,
+    role,
+    roleLabel: getRoleLabel(role),
+    roleShortLabel: getRoleShortLabel(role),
+    employeeId: manager.employee_id || null,
+  };
+}
 
 // ─── Устанавливает сессию и отвечает клиенту ───────────────────────────────
 function setManagerSession(req, res, manager) {
@@ -19,7 +33,7 @@ function setManagerSession(req, res, manager) {
       req.session.managerEmployeeId = manager.employee_id || null;
       req.session.save((saveError) => {
         if (saveError) return reject(saveError);
-        res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role || 'scrum', employeeId: manager.employee_id || null } });
+        res.json({ ok: true, manager: managerForClient(manager) });
         resolve();
       });
     });
@@ -107,17 +121,22 @@ router.post('/logout', (req, res) => {
   req.session.destroy(() => { res.json({ ok: true }); });
 });
 
-router.get('/me', (req, res) => {
-  res.json({
-    authenticated: !!req.session.isManager,
-    manager: req.session.isManager ? {
-      id: req.session.managerId,
-      name: req.session.managerName,
-      email: req.session.managerEmail || req.session.managerLogin,
-      role: req.session.managerRole || 'scrum',
-      employeeId: req.session.managerEmployeeId || null,
-    } : null,
-  });
+router.get('/me', async (req, res, next) => {
+  try {
+    if (!req.session.isManager) return res.json({ authenticated: false, manager: null });
+    const manager = await helpers.getManagerById(req.session.managerId);
+    if (!manager) {
+      return req.session.destroy(() => res.json({ authenticated: false, manager: null }));
+    }
+    req.session.managerName = manager.name;
+    req.session.managerEmail = manager.email;
+    req.session.managerLogin = manager.email;
+    req.session.managerRole = manager.role || 'scrum';
+    req.session.managerEmployeeId = manager.employee_id || null;
+    res.json({ authenticated: true, manager: managerForClient(manager) });
+  } catch (error) {
+    next(error);
+  }
 });
 
 module.exports = router;

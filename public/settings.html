@@ -145,26 +145,26 @@
         </div>
         <div class="form-group">
           <label class="form-label" for="ai_model_name">Название модели</label>
-          <select id="ai_model_name" name="ai_model_name" class="form-control">
-            <option value="google/gemma4:26b">google/gemma4:26b</option>
-            <option value="google/gemma4:31b">google/gemma4:31b</option>
-            <option value="openai/gpt-5.2">openai/gpt-5.2</option>
-            <option value="openai/gpt-5.2-codex">openai/gpt-5.2-codex</option>
-            <option value="openai/gpt-5.3-codex">openai/gpt-5.3-codex</option>
-            <option value="openai/gpt-5.4">openai/gpt-5.4</option>
-            <option value="openai/gpt-5.4-mini">openai/gpt-5.4-mini</option>
-            <option value="openai/gpt-5.5">openai/gpt-5.5</option>
-            <option value="qwen/qwen3.5-35b">qwen/qwen3.5-35b</option>
-            <option value="qwen/qwen3.5-plus">qwen/qwen3.5-plus</option>
-            <option value="qwen/qwen3.6-plus">qwen/qwen3.6-plus</option>
-            <option value="wormsoft/agent/high">wormsoft/agent/high</option>
-            <option value="wormsoft/agent/low">wormsoft/agent/low</option>
-            <option value="wormsoft/agent/medium">wormsoft/agent/medium</option>
-            <option value="wormsoft/code/high">wormsoft/code/high</option>
-            <option value="wormsoft/code/low">wormsoft/code/low</option>
-            <option value="wormsoft/code/medium">wormsoft/code/medium</option>
-            <option value="zai/glm-5.1">zai/glm-5.1</option>
-          </select>
+          <input id="ai_model_name" name="ai_model_name" class="form-control" list="aiModelOptions" placeholder="Например: gpt-5.4-mini">
+          <datalist id="aiModelOptions">
+            <option value="gpt-5.4-mini"></option>
+            <option value="gpt-5.5"></option>
+            <option value="gpt-5.3-codex"></option>
+            <option value="gpt-5.6-luna"></option>
+            <option value="gpt-5.6-sol"></option>
+            <option value="gpt-5.6-terra"></option>
+            <option value="gpt-6-astra"></option>
+            <option value="claude-sonnet-4-6"></option>
+            <option value="claude-sonnet-5"></option>
+            <option value="gemini-2.5-flash"></option>
+            <option value="gemini-2.5-pro"></option>
+            <option value="gemini-3.5-flash"></option>
+            <option value="deepseek-v4-flash"></option>
+            <option value="deepseek-v4-pro"></option>
+            <option value="glm-5.2"></option>
+            <option value="qwen3.7-plus"></option>
+          </datalist>
+          <div class="form-hint">Укажите точный API-алиас из каталога провайдера. Для APIpass — без префикса <code>openai/</code>.</div>
         </div>
         <div class="form-group">
           <label class="form-label" for="ai_prompt_fill">Промпт для помощи сотруднику <span class="text-muted" style="font-weight:400;">— Автоматический запрос при улучшении текста</span></label>
@@ -296,11 +296,11 @@
         <select class="form-control" id="newManagerRole">
           <option value="department_head">Руководитель департамента (РД)</option>
           <option value="chief_scrum">Главный скрам-мастер (ГСМ)</option>
-          <option value="scrum">СМ</option>
-          <option value="leader">РП</option>
-          <option value="admin">Администратор департамента (АД)</option>
+          <option value="scrum">Скрам-мастер (СМ)</option>
+          <option value="leader">Руководитель проектов (РП)</option>
+          <option value="admin">Администратор департамента (АдминД)</option>
         </select>
-        <div class="form-hint">Для роли РП укажите ФИО точно как в профиле сотрудника. Система автоматически свяжет учётную запись с этим профилем.</div>
+        <div class="form-hint">Для ролей СМ и РП укажите настоящее ФИО. Система свяжет учётную запись с существующим портфолио, а если его ещё нет — автоматически создаст новое.</div>
         <div class="form-hint">РД работает в режиме просмотра; ГСМ и СМ управляют портфолио; РП дополнительно ведёт закреплённые проекты.</div>
         <button class="btn btn-primary" id="addManagerBtn"><i class="fi fi-rr-plus"></i> Добавить пользователя</button>
         <div id="managerResult" style="font-size:0.85rem;"></div>

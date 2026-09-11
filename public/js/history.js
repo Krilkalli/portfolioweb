@@ -357,7 +357,6 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
 (async () => {
   const auth = await fetch('/api/auth/me').then(response => response.json()).catch(() => ({ authenticated:false }));
   if (!auth.authenticated) { location.href = '/login.html'; return; }
-  if (auth.manager) document.getElementById('navbarManager').textContent = `${auth.manager.name} — ${auth.manager.email}`;
   canRevertHistory = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(auth.manager?.role);
   initTheme();
   await loadHistory();

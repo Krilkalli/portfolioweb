@@ -22,6 +22,8 @@ const {
   isAdmin,
   canViewProject,
   canEditProject,
+  getRoleLabel,
+  getRoleShortLabel,
 } = require('../permissions');
 
 const templatesDir = path.join(__dirname, '..', '..', 'templates');
@@ -127,7 +129,9 @@ function employeeForManager(req, employee, base) {
   const { token, ...safeEmployee } = employee;
   const result = {
     ...safeEmployee,
-    manager_link: `${base}/form.html?employeeId=${employee.id}&as=manager&mode=view`,
+    // Ссылка менеджера должна оставаться на том же origin, что и дашборд.
+    // Иначе переход localhost -> IP (или IP -> DNS) теряет session cookie.
+    manager_link: `/form.html?employeeId=${employee.id}&as=manager&mode=view`,
   };
   if (canOperate(req.session.managerRole)) {
     result.token = token;
@@ -627,6 +631,7 @@ router.get('/projects/:id', requireProjectAccess, async (req, res, next) => {
 router.post('/projects', requireCanEdit, async (req, res, next) => {
   try {
     const fields = { ...(req.body || {}) };
+    delete fields.status;
     if (req.session.managerRole === ROLES.PROJECT_LEADER) {
       if (!req.session.managerEmployeeId) return res.status(403).json({ error: 'Учётная запись РП не связана с профилем сотрудника' });
       fields.leaderEmployeeId = req.session.managerEmployeeId;
@@ -647,11 +652,11 @@ router.put('/projects/:id', requireCanEdit, async (req, res, next) => {
       return res.status(403).json({ error: 'Этот проект недоступен для редактирования' });
     }
     const fields = { ...(req.body || {}) };
+    delete fields.status;
     if (req.session.managerRole === ROLES.PROJECT_LEADER) {
       delete fields.leader_employee_id;
       delete fields.leaderEmployeeId;
       delete fields.leader_name;
-      delete fields.status;
     }
     const project = await helpers.updateProject(Number(req.params.id), fields);
     await helpers.syncProjectTeamMembers(project);
@@ -681,42 +686,6 @@ router.post('/projects/import', requireAdmin, projectUpload.single('file'), asyn
   } finally {
     if (req.file) fs.unlink(req.file.path, () => {});
   }
-});
-
-router.post('/projects/archive', requireCanEdit, async (req, res, next) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Выберите проекты' });
-    }
-    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
-      for (const id of ids) {
-        const project = await helpers.getProjectById(Number(id));
-        if (!canEditProject(req.session.managerRole, project, req.session.managerEmployeeId)) {
-          return res.status(403).json({ error: 'Один из проектов не закреплён за вами' });
-        }
-      }
-    }
-    const archived = await helpers.archiveProjects(ids);
-    res.json({ ok: true, archived });
-  } catch (err) { next(err); }
-});
-
-router.post('/projects/restore', requireCanEdit, async (req, res, next) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Выберите проекты' });
-    if (req.session.managerRole === ROLES.PROJECT_LEADER) {
-      for (const id of ids) {
-        const project = await helpers.getProjectById(Number(id));
-        if (!canEditProject(req.session.managerRole, project, req.session.managerEmployeeId)) {
-          return res.status(403).json({ error: 'Один из проектов не закреплён за вами' });
-        }
-      }
-    }
-    const restored = await helpers.restoreProjects(ids);
-    res.json({ ok: true, restored });
-  } catch (err) { next(err); }
 });
 
 router.get('/settings', requireAuth, async (req, res, next) => {
@@ -773,7 +742,12 @@ router.get('/stats', requireCanView, async (req, res, next) => {
 
 router.get('/managers', requireAdmin, async (req, res, next) => {
   try {
-    res.json({ managers: await helpers.getAllManagers() });
+    const managers = (await helpers.getAllManagers()).map(manager => ({
+      ...manager,
+      roleLabel: getRoleLabel(manager.role),
+      roleShortLabel: getRoleShortLabel(manager.role),
+    }));
+    res.json({ managers });
   } catch (err) { next(err); }
 });
 
@@ -789,7 +763,18 @@ router.post('/managers', requireAdmin, async (req, res, next) => {
     if (!validRoles.has(role)) return res.status(400).json({ error: 'Выберите корректную роль пользователя' });
     const hash = require('bcryptjs').hashSync(password, 12);
     const manager = await helpers.createManager(name.trim(), email, hash, role);
-    res.json({ ok: true, manager: { id: manager.id, name: manager.name, email: manager.email, role: manager.role, employeeId: manager.employee_id } });
+    res.json({
+      ok: true,
+      manager: {
+        id: manager.id,
+        name: manager.name,
+        email: manager.email,
+        role: manager.role,
+        roleLabel: getRoleLabel(manager.role),
+        roleShortLabel: getRoleShortLabel(manager.role),
+        employeeId: manager.employee_id,
+      },
+    });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

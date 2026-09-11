@@ -12,7 +12,7 @@ class OpenAIProvider extends AIProvider {
     super();
     this.apiKey = apiKey;
     this.baseURL = baseURL || 'https://ai.wormsoft.ru/api/gpt';
-    this.model = model || 'openai/gpt-5.4-mini';
+    this.model = normalizeModelName(model || 'gpt-5.4-mini', this.baseURL);
   }
 
   async _request(systemPrompt, userText) {
@@ -66,6 +66,18 @@ class OpenAIProvider extends AIProvider {
 
   async enhanceText(text, prompt) { return this._request(prompt, text); }
   async reviewText(text, prompt) { return this._request(prompt, text); }
+}
+
+function normalizeModelName(model, baseURL) {
+  const value = String(model || '').trim();
+  try {
+    const hostname = new URL(String(baseURL || '')).hostname.toLowerCase();
+    if (hostname === 'apipass.tech' || hostname.endsWith('.apipass.tech')) {
+      // APIpass публикует алиасы без префиксов openai/, google/, qwen/ и т. п.
+      return value.includes('/') ? value.split('/').pop() : value;
+    }
+  } catch {}
+  return value;
 }
 
 async function getAIProvider() {
@@ -188,5 +200,6 @@ module.exports = {
   reviewText,
   reviewJSONData,
   enhanceJSON,
-  summarizeFeedback
+  summarizeFeedback,
+  normalizeModelName,
 };

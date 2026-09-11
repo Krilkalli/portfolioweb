@@ -189,25 +189,37 @@ function normalizeName(name) {
   return String(name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-async function findEmployeeProfileForLeader(client, name, email, excludeManagerId = null) {
+async function ensureEmployeeProfileForAccount(client, name, email, role, excludeManagerId = null) {
   const normalizedName = normalizeName(name);
-  if (!normalizedName) throw new Error('Для роли РП укажите ФИО сотрудника');
+  const roleName = role === 'leader' ? 'РП' : 'СМ';
+  if (!normalizedName) throw new Error(`Для роли ${roleName} укажите ФИО сотрудника`);
 
   const matches = await client.query(
     'SELECT id, name, email, status FROM employees WHERE name_lower = $1 ORDER BY id',
     [normalizedName]
   );
   if (!matches.rows.length) {
-    throw new Error(`Сотрудник «${String(name || '').trim()}» не найден. Укажите ФИО точно как в профиле сотрудника`);
+    const prepared = prepEmployee({
+      name: String(name || '').trim(),
+      email: String(email || '').trim().toLowerCase(),
+      status: 'active',
+      is_rp: role === 'leader',
+    });
+    const columns = Object.keys(prepared);
+    const inserted = await client.query(
+      `INSERT INTO employees (${columns.join(', ')}) VALUES (${columns.map((_, index) => `$${index + 1}`).join(', ')}) RETURNING id, name, email, status`,
+      Object.values(prepared)
+    );
+    return inserted.rows[0];
   }
 
   const activeMatches = matches.rows.filter(employee => employee.status !== 'archived');
-  if (!activeMatches.length) throw new Error('Найденный профиль сотрудника находится в архиве');
+  const candidates = activeMatches.length ? activeMatches : matches.rows;
 
-  let employee = activeMatches[0];
-  if (activeMatches.length > 1) {
+  let employee = candidates[0];
+  if (candidates.length > 1) {
     const normalizedEmail = String(email || '').trim().toLowerCase();
-    const emailMatches = activeMatches.filter(item => String(item.email || '').trim().toLowerCase() === normalizedEmail);
+    const emailMatches = candidates.filter(item => String(item.email || '').trim().toLowerCase() === normalizedEmail);
     if (emailMatches.length !== 1) {
       throw new Error('Найдено несколько сотрудников с таким ФИО. Укажите email, совпадающий с профилем сотрудника');
     }
@@ -223,6 +235,16 @@ async function findEmployeeProfileForLeader(client, name, email, excludeManagerI
   );
   if (linkedManager.rows[0]) {
     throw new Error(`Профиль сотрудника уже связан с учётной записью «${linkedManager.rows[0].name}»`);
+  }
+
+  // Карточка с таким ФИО уже существует, поэтому не создаём дубль. Если она
+  // была в архиве, возвращаем её в рабочий список перед привязкой учётки.
+  if (employee.status === 'archived') {
+    const restored = await client.query(
+      "UPDATE employees SET status = 'active', updated_at = $1 WHERE id = $2 RETURNING id, name, email, status",
+      [new Date().toISOString(), employee.id]
+    );
+    [employee] = restored.rows;
   }
 
   return employee;
@@ -566,18 +588,28 @@ async function init() {
   `);
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'admin'").catch(() => {});
   await _run("ALTER TABLE managers ADD COLUMN IF NOT EXISTS employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
-  await _run(`
-    UPDATE managers m
-    SET employee_id = (
-      SELECT e.id
-      FROM employees e
-      WHERE e.status <> 'archived'
-        AND e.name_lower = LOWER(REGEXP_REPLACE(TRIM(m.name), '[[:space:]]+', ' ', 'g'))
-      ORDER BY e.id
-      LIMIT 1
-    )
-    WHERE m.role = 'leader' AND m.employee_id IS NULL
-  `).catch(() => {});
+  await _run("UPDATE managers SET name = 'Администратор департамента' WHERE role = 'admin' AND LOWER(TRIM(name)) = LOWER('Главный администратор')");
+
+  // РП и СМ всегда связаны с портфолио сотрудника. Для существующих учётных
+  // записей без связи создаём пустое портфолио либо находим его по ФИО/email.
+  const managersWithoutProfiles = await _all("SELECT id, name, email, role FROM managers WHERE role IN ('leader', 'scrum') AND employee_id IS NULL ORDER BY id");
+  for (const manager of managersWithoutProfiles) {
+    const profileClient = await pool.connect();
+    try {
+      await profileClient.query('BEGIN');
+      const employee = await ensureEmployeeProfileForAccount(profileClient, manager.name, manager.email, manager.role, manager.id);
+      await profileClient.query('UPDATE managers SET employee_id = $1 WHERE id = $2', [employee.id, manager.id]);
+      if (manager.role === 'leader') {
+        await profileClient.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employee.id]);
+      }
+      await profileClient.query('COMMIT');
+    } catch (error) {
+      await profileClient.query('ROLLBACK');
+      console.warn(`Не удалось связать учётную запись ${manager.email} с портфолио: ${error.message}`);
+    } finally {
+      profileClient.release();
+    }
+  }
   await _run(`
     UPDATE employees e
     SET is_rp = TRUE, updated_at = COALESCE(NULLIF(e.updated_at, ''), $1)
@@ -604,6 +636,10 @@ async function init() {
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS leader_employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_system TEXT DEFAULT ''").catch(() => {});
   await _run("ALTER TABLE projects ADD COLUMN IF NOT EXISTS source_data TEXT DEFAULT '[]'").catch(() => {});
+  // Проекты больше не архивируются. Возвращаем старые архивные записи в реестр
+  // и запрещаем повторное появление архивного статуса на уровне базы.
+  await _run("UPDATE projects SET status = 'Черновик' WHERE LOWER(status) IN ('архив', 'archived')");
+  await _run("ALTER TABLE projects ADD CONSTRAINT projects_status_not_archived CHECK (LOWER(status) NOT IN ('архив', 'archived'))").catch(() => {});
 
   // В старых импортированных проектах колонка УПП «Функциональная область»
   // ошибочно хранилась как выбранные РП функциональные блоки. Разделяем данные.
@@ -1720,7 +1756,7 @@ const helpers = {
     return withProjectDateChecks(await withActiveProjectMembers(project));
   },
 
-  async createProject({ title, leaderEmployeeId, status }) {
+  async createProject({ title, leaderEmployeeId }) {
     const cleanTitle = String(title || '').trim();
     if (!cleanTitle) throw new Error('Название проекта обязательно');
 
@@ -1733,7 +1769,7 @@ const helpers = {
       `INSERT INTO projects (title, status, leader_employee_id, leader_name, customer, description, start_period, end_period, team_size, technologies, team_members, created_at, updated_at, sent_at)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
        RETURNING id, title, status, customer, description, start_period, end_period, team_size, technologies, team_members, leader_employee_id, leader_name, created_at, updated_at, sent_at`,
-      [cleanTitle, status || 'Черновик', leader.id, leader.name, '', '', '', '', 0, '', '[]', now, now, '']
+      [cleanTitle, 'Черновик', leader.id, leader.name, '', '', '', '', 0, '', '[]', now, now, '']
     );
   },
 
@@ -1786,7 +1822,7 @@ const helpers = {
           preparedFields.leader_name = leader.rows[0].name;
         }
       }
-      const allowed = ['title','status','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_area','functional_blocks','team_members','leader_employee_id','leader_name'];
+      const allowed = ['title','customer','code_name','legal_customer_name','industry_description','description','start_period','end_period','end_present','team_size','technologies','functional_area','functional_blocks','team_members','leader_employee_id','leader_name'];
       const updates = [];
       const params = [Number(id)];
       let idx = 2;
@@ -1838,7 +1874,7 @@ const helpers = {
           `INSERT INTO projects (title, status, leader_employee_id, leader_name, created_at, updated_at, sent_at)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING id, title, status, leader_employee_id, leader_name, created_at, updated_at, sent_at`,
-          [title, project.status || 'Черновик', leaderId, manager.name, now, now, '']
+          [title, 'Черновик', leaderId, manager.name, now, now, '']
         );
         inserted.push(result.rows[0]);
       }
@@ -2013,17 +2049,6 @@ const helpers = {
     return synced;
   },
 
-  async archiveProjects(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return 0;
-    const res = await _run(
-      `UPDATE projects
-       SET status = 'Архив', updated_at = $1
-       WHERE id = ANY($2::int[])`,
-      [new Date().toISOString(), ids.map(Number)]
-    );
-    return res ? res.rowCount : 0;
-  },
-
   async saveFeedback(employeeId, rating, comment) {
     await _run('DELETE FROM employee_feedback WHERE employee_id = $1', [Number(employeeId)]);
     return _run('INSERT INTO employee_feedback (employee_id, rating, comment, submitted_at) VALUES ($1, $2, $3, $4)',
@@ -2052,16 +2077,6 @@ const helpers = {
     `);
   },
 
-  async restoreProjects(ids) {
-    if (!Array.isArray(ids) || ids.length === 0) return 0;
-    const res = await _run(
-      `UPDATE projects SET status = 'Черновик', updated_at = $1
-       WHERE id = ANY($2::int[]) AND status = 'Архив'`,
-      [new Date().toISOString(), ids.map(Number)]
-    );
-    return res ? res.rowCount : 0;
-  },
-
   async createManager(name, email, passwordHash, role) {
     const client = await pool.connect();
     try {
@@ -2072,10 +2087,12 @@ const helpers = {
       const validRoles = ['department_head', 'chief_scrum', 'scrum', 'leader', 'admin'];
       const managerRole = validRoles.includes(role) ? role : 'scrum';
       let linkedEmployeeId = null;
-      if (managerRole === 'leader') {
-        const employee = await findEmployeeProfileForLeader(client, name, normalizedEmail);
+      if (managerRole === 'leader' || managerRole === 'scrum') {
+        const employee = await ensureEmployeeProfileForAccount(client, name, normalizedEmail, managerRole);
         linkedEmployeeId = employee.id;
-        await client.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), linkedEmployeeId]);
+        if (managerRole === 'leader') {
+          await client.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), linkedEmployeeId]);
+        }
       }
       const result = await client.query(
         'INSERT INTO managers (name, email, password_hash, role, employee_id, created_at) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
@@ -2137,15 +2154,18 @@ const helpers = {
         if (adminCount.rows[0].cnt <= 1) throw new Error('Нельзя снять роль у последнего администратора департамента');
       }
       let employeeId = target.rows[0].employee_id;
-      if (role === 'leader' && !employeeId) {
-        const employee = await findEmployeeProfileForLeader(client, target.rows[0].name, target.rows[0].email, target.rows[0].id);
+      const needsEmployeeProfile = role === 'leader' || role === 'scrum';
+      if (needsEmployeeProfile && !employeeId) {
+        const employee = await ensureEmployeeProfileForAccount(client, target.rows[0].name, target.rows[0].email, role, target.rows[0].id);
         employeeId = employee.id;
+      }
+      if (role === 'leader' && employeeId) {
         await client.query('UPDATE employees SET is_rp = TRUE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employeeId]);
       }
-      if (role !== 'leader') {
-        if (target.rows[0].role === 'leader' && employeeId) {
-          await client.query('UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employeeId]);
-        }
+      if (role !== 'leader' && target.rows[0].role === 'leader' && employeeId) {
+        await client.query('UPDATE employees SET is_rp = FALSE, updated_at = $1 WHERE id = $2', [new Date().toISOString(), employeeId]);
+      }
+      if (!needsEmployeeProfile) {
         employeeId = null;
       }
       await client.query('UPDATE managers SET role = $1, employee_id = $2 WHERE id = $3', [role, employeeId, Number(id)]);

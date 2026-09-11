@@ -1,4 +1,28 @@
 (() => {
+  const roleLabels = {
+    department_head: { short: 'РД', full: 'Руководитель департамента' },
+    chief_scrum: { short: 'ГСМ', full: 'Главный скрам-мастер' },
+    scrum: { short: 'СМ', full: 'Скрам-мастер' },
+    leader: { short: 'РП', full: 'Руководитель проекта' },
+    admin: { short: 'АдминД', full: 'Администратор департамента' },
+  };
+
+  window.renderNavbarManager = (manager) => {
+    const target = document.getElementById('navbarManager');
+    if (!target || !manager) return;
+    const labels = roleLabels[manager.role] || { short: manager.roleShortLabel || '—', full: manager.roleLabel || 'Пользователь' };
+    target.textContent = '';
+    target.classList.add('navbar-manager-context');
+    const role = document.createElement('span');
+    role.className = 'navbar-manager-role';
+    role.textContent = manager.roleShortLabel || labels.short;
+    role.title = manager.roleLabel || labels.full;
+    const name = document.createElement('span');
+    name.className = 'navbar-manager-name';
+    name.textContent = manager.name || 'ФИО не указано';
+    target.append(role, name);
+  };
+
   const header = document.querySelector('.navbar, .form-header');
   if (!header) return;
 
@@ -12,12 +36,6 @@
       ['/index.html', 'Дашборд'],
       ['/projects.html', 'Проекты'],
     ];
-    if (['/index.html', '/archive.html'].includes(currentPath)) {
-      links.push(['/archive.html', 'Архив']);
-    }
-    if (['/projects.html', '/project.html', '/projects-archive.html'].includes(currentPath)) {
-      links.push(['/projects-archive.html', 'Архив проектов']);
-    }
     links.push(['/settings.html', 'Настройки']);
     const nav = document.createElement('div');
     nav.className = 'navbar-nav-links';
@@ -34,6 +52,11 @@
     actions.insertBefore(nav, managerLabel || actions.querySelector('#logoutBtn'));
     if (themeButton) actions.insertBefore(themeButton, nav);
   }
+
+  fetch('/api/auth/me')
+    .then(response => response.json())
+    .then(auth => { if (auth.authenticated && auth.manager) window.renderNavbarManager(auth.manager); })
+    .catch(() => {});
 
   const syncHeaderHeight = () => {
     document.documentElement.style.setProperty('--app-navbar-height', `${header.offsetHeight}px`);

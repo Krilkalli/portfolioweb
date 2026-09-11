@@ -527,12 +527,20 @@ function projectDataChanged() {
 async function loadEmployee() {
   token = new URLSearchParams(location.search).get('token');
   const employeeId = new URLSearchParams(location.search).get('employeeId');
-  if (!token && !(employeeId && managerUser)) { showError(); return; }
+  if (employeeId && !managerUser) {
+    location.href = '/login.html';
+    return;
+  }
+  if (!token && !employeeId) { showError(); return; }
   isViewMode = new URLSearchParams(location.search).get('mode') === 'view';
   try {
     const r = employeeId && managerUser
       ? await fetch(`/api/employees/${encodeURIComponent(employeeId)}`)
       : await fetch(`/api/form/${token}`);
+    if (employeeId && (r.status === 401 || r.status === 403)) {
+      location.href = '/login.html';
+      return;
+    }
     if (!r.ok) { showError(); return; }
     employee = await r.json();
     const [posR, compR] = await Promise.all([

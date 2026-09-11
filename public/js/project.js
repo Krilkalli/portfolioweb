@@ -270,7 +270,6 @@ document.getElementById('end_present').addEventListener('change', (e) => {
   currentManager = auth.manager;
   canEditProjects = ['chief_scrum', 'scrum', 'leader', 'admin'].includes(currentManager?.role);
   isProjectLeader = currentManager?.role === 'leader';
-  document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await loadEmployees();
   await loadFunctionalBlocks();

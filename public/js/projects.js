@@ -38,7 +38,6 @@ document.getElementById('themeToggle').addEventListener('click', () => {
 let currentManager = null;
 let projects = [];
 let leaders = [];
-let selectedIds = new Set();
 let searchQuery = '';
 let leaderFilter = '';
 let sortOrder = 'newest';
@@ -82,41 +81,8 @@ function populateLeaderSelect() {
   }
 }
 
-function syncSelectAll() {
-  const selectAll = document.getElementById('selectAllProjects');
-  const checks = [...document.querySelectorAll('.project-check')];
-  const activeChecks = checks.filter(c => !c.disabled);
-  if (!selectAll) return;
-  if (activeChecks.length === 0) {
-    selectAll.checked = false;
-    selectAll.indeterminate = false;
-    updateProjectActions();
-    return;
-  }
-  selectAll.checked = activeChecks.every(c => c.checked);
-  selectAll.indeterminate = activeChecks.some(c => c.checked) && !activeChecks.every(c => c.checked);
-  updateProjectActions();
-}
-
-function updateProjectActions() {
-  if (!canEditProjects) return;
-  const selected = projects.filter(project => selectedIds.has(Number(project.id)));
-  const onlyActive = selected.length > 0 && selected.every(project => project.status !== 'Архив');
-  document.getElementById('archiveProjectsBtn').style.display = onlyActive ? '' : 'none';
-}
-
-function updateSelectionFromDom() {
-  selectedIds.clear();
-  document.querySelectorAll('.project-check').forEach(cb => {
-    if (cb.checked) selectedIds.add(Number(cb.dataset.id));
-  });
-  syncSelectAll();
-}
-
 function applyFilters(list) {
   let out = [...list];
-
-  out = out.filter(p => p.status !== 'Архив');
 
   if (leaderFilter) {
     out = out.filter(p => String(p.leader_employee_id || '') === leaderFilter);
@@ -144,8 +110,7 @@ function renderProjects(list) {
   const filtered = applyFilters(list);
 
   if (!filtered.length) {
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)">Проекты не найдены</td></tr>';
-    syncSelectAll();
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)">Проекты не найдены</td></tr>';
     return;
   }
 
@@ -153,10 +118,7 @@ function renderProjects(list) {
     const leader = project.leader_name || project.leader_employee_name || '—';
     const status = project.status || 'Черновик';
     const sent = status === 'Отправлено';
-    const archived = status === 'Архив';
-    const statusStyle = archived
-      ? 'background:rgba(148,163,184,0.15);color:#94a3b8;'
-      : sent
+    const statusStyle = sent
         ? 'background:rgba(34,197,94,0.15);color:var(--success);'
         : 'background:rgba(245,158,11,0.15);color:var(--warning);';
     const check = project.date_check || {};
@@ -177,10 +139,7 @@ function renderProjects(list) {
           : 'background:rgba(34,197,94,0.15);color:var(--success);';
 
     return `
-      <tr class="project-row ${archived ? 'row-archived' : ''}">
-        <td class="col-check" data-project-edit style="text-align:center;${canEditProjects ? '' : 'display:none;'}">
-          <input type="checkbox" class="project-check" data-id="${project.id}" ${selectedIds.has(Number(project.id)) ? 'checked' : ''}>
-        </td>
+      <tr class="project-row">
         <td><div class="project-name"><a href="/project.html?id=${project.id}" target="_self">${escHtml(project.title)}</a></div></td>
         <td><span class="badge" style="${statusStyle}padding:6px 10px;border-radius:999px;">${escHtml(status)}</span></td>
         <td>${escHtml(leader)}</td>
@@ -189,7 +148,6 @@ function renderProjects(list) {
     `;
   }).join('');
 
-  syncSelectAll();
 }
 
 async function loadProjects() {
@@ -299,45 +257,6 @@ document.getElementById('projectExcelInput').addEventListener('change', async (e
   }
 });
 
-document.getElementById('archiveProjectsBtn').addEventListener('click', async () => {
-  if (selectedIds.size === 0) { toast('Сначала выберите проекты', 'warning'); return; }
-  if (!confirm(`Переместить в архив ${selectedIds.size} проектов?`)) return;
-  try {
-    const r = await fetch('/api/projects/archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ids: Array.from(selectedIds) }),
-    });
-    const d = await r.json();
-    if (r.ok) {
-      toast(`В архив перемещено: ${d.archived}`, 'success');
-      selectedIds.clear();
-      await loadProjects();
-    } else {
-      toast(d.error || 'Ошибка архивации', 'error');
-    }
-  } catch { toast('Ошибка соединения', 'error'); }
-});
-
-document.getElementById('selectAllProjects').addEventListener('change', (e) => {
-  const checks = [...document.querySelectorAll('.project-check')];
-  checks.forEach(cb => {
-    if (cb.disabled) return;
-    cb.checked = e.target.checked;
-    const id = Number(cb.dataset.id);
-    if (e.target.checked) selectedIds.add(id); else selectedIds.delete(id);
-  });
-  syncSelectAll();
-});
-
-document.addEventListener('change', (e) => {
-  if (e.target.classList.contains('project-check')) {
-    const id = Number(e.target.dataset.id);
-    if (e.target.checked) selectedIds.add(id); else selectedIds.delete(id);
-    syncSelectAll();
-  }
-});
-
 document.getElementById('projectSearchInput').addEventListener('input', (e) => { searchQuery = e.target.value.trim(); renderProjects(projects); });
 document.getElementById('projectLeaderFilter').addEventListener('change', (e) => { leaderFilter = e.target.value; renderProjects(projects); });
 document.getElementById('projectSortOrder').addEventListener('change', (e) => { sortOrder = e.target.value; renderProjects(projects); });
@@ -359,7 +278,6 @@ document.getElementById('logoutBtn').addEventListener('click', async () => {
   if (leaderGroup) leaderGroup.style.display = isProjectLeader ? 'none' : '';
   if (!canEditProjects) document.getElementById('projectsSubtitle').textContent = 'Просмотр реестра проектов без возможности изменения данных.';
   else if (isProjectLeader) document.getElementById('projectsSubtitle').textContent = 'Создание и редактирование закреплённых за вами проектов.';
-  document.getElementById('navbarManager').textContent = currentManager?.email || '';
   initTheme();
   await Promise.all([loadLeaders(), loadProjects()]);
 })();

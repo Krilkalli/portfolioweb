@@ -8,6 +8,8 @@ const {
   isAdmin,
   canViewProject,
   canEditProject,
+  getRoleLabel,
+  getRoleShortLabel,
 } = require('../server/permissions');
 
 test('the responsibility matrix exposes all five roles', () => {
@@ -16,7 +18,7 @@ test('the responsibility matrix exposes all five roles', () => {
     ROLES.CHIEF_SCRUM,
     ROLES.SCRUM,
     ROLES.PROJECT_LEADER,
-    ROLES.ADMIN,
+    ROLES.DEPARTMENT_ADMIN,
   ]);
 });
 
@@ -27,11 +29,16 @@ test('department head has view-only access', () => {
 });
 
 test('chief scrum, scrum, project leader and administrator can operate', () => {
-  for (const role of [ROLES.CHIEF_SCRUM, ROLES.SCRUM, ROLES.PROJECT_LEADER, ROLES.ADMIN]) {
+  for (const role of [ROLES.CHIEF_SCRUM, ROLES.SCRUM, ROLES.PROJECT_LEADER, ROLES.DEPARTMENT_ADMIN]) {
     assert.equal(canView(role), true);
     assert.equal(canOperate(role), true);
   }
-  assert.equal(isAdmin(ROLES.ADMIN), true);
+  assert.equal(isAdmin(ROLES.DEPARTMENT_ADMIN), true);
+});
+
+test('department administrator has the new public role name', () => {
+  assert.equal(getRoleLabel(ROLES.DEPARTMENT_ADMIN), 'Администратор департамента');
+  assert.equal(getRoleShortLabel(ROLES.DEPARTMENT_ADMIN), 'АдминД');
 });
 
 test('project leader is limited to assigned projects', () => {
@@ -43,4 +50,6 @@ test('project leader is limited to assigned projects', () => {
   assert.equal(canEditProject(ROLES.PROJECT_LEADER, otherProject, 42), false);
   assert.equal(canViewProject(ROLES.SCRUM, otherProject), true);
   assert.equal(canEditProject(ROLES.SCRUM, otherProject), true);
+  assert.equal(canViewProject(ROLES.CHIEF_SCRUM, otherProject), true);
+  assert.equal(canEditProject(ROLES.CHIEF_SCRUM, otherProject), true);
 });

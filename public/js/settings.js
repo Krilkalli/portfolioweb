@@ -362,7 +362,11 @@ async function loadSettings() {
     // AI Settings
     if (document.getElementById('ai_base_url')) {
       document.getElementById('ai_base_url').value = s.ai_base_url || 'https://ai.wormsoft.ru/api/gpt';
-      document.getElementById('ai_model_name').value = s.ai_model_name || 'openai/gpt-5.4-mini';
+      const aiBaseUrl = s.ai_base_url || 'https://ai.wormsoft.ru/api/gpt';
+      const savedModel = s.ai_model_name || 'gpt-5.4-mini';
+      document.getElementById('ai_model_name').value = /(^|\.)apipass\.tech$/i.test((() => {
+        try { return new URL(aiBaseUrl).hostname; } catch { return ''; }
+      })()) && savedModel.includes('/') ? savedModel.split('/').pop() : savedModel;
       document.getElementById('ai_prompt_fill').value = s.ai_prompt_fill || 'Ты опытный HR-специалист. Улучши стиль написания, исправь грамматические и орфографические ошибки в тексте, сохранив смысл. Текст должен звучать профессионально. Верни только исправленный текст без преамбул.';
       document.getElementById('ai_prompt_review').value = s.ai_prompt_review || 'Ты строгий HR-ревьюер. Проанализируй текст и укажи на несоответствия, логические или орфографические ошибки. Верни результат в виде краткого списка замечаний. Если всё отлично, напиши "Замечаний нет".';
       if (document.getElementById('ai_prompt_summarize')) {
@@ -524,7 +528,7 @@ async function loadManagers() {
   } catch {}
 }
 
-const ROLE_LABELS = { department_head: 'РД', chief_scrum: 'ГСМ', scrum: 'СМ', leader: 'РП', admin: 'АД' };
+const ROLE_LABELS = { department_head: 'РД', chief_scrum: 'ГСМ', scrum: 'СМ', leader: 'РП', admin: 'АдминД' };
 
 function renderManagers(managers) {
   const list = document.getElementById('managerList');
@@ -545,7 +549,7 @@ function renderManagers(managers) {
         <div style="font-weight:600;font-size:0.9rem;">${escHtml(m.name)}</div>
         <div style="font-size:0.75rem;color:var(--text-muted);display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
           <span>${escHtml(m.email)}</span>
-          <span class="badge badge-accent" style="font-size:0.65rem;">${ROLE_LABELS[m.role] || m.role}</span>
+          <span class="badge badge-accent" style="font-size:0.65rem;" title="${escHtml(m.roleLabel || '')}">${escHtml(m.roleShortLabel || ROLE_LABELS[m.role] || m.role)}</span>
           ${m.employee_name ? `<span>Сотрудник: ${escHtml(m.employee_name)}</span>` : ''}
           ${m.id === currentManager?.id ? '<span class="badge badge-accent" style="font-size:0.65rem;">Вы</span>' : ''}
         </div>
@@ -554,9 +558,9 @@ function renderManagers(managers) {
           <select class="form-control" style="font-size:0.78rem;padding:4px 8px;max-width:180px;" onchange="changeManagerRole(${m.id}, this.value)">
             <option value="department_head" ${m.role==='department_head'?'selected':''}>Руководитель департамента (РД)</option>
             <option value="chief_scrum" ${m.role==='chief_scrum'?'selected':''}>Главный скрам-мастер (ГСМ)</option>
-            <option value="scrum" ${m.role==='scrum'?'selected':''}>СМ</option>
-            <option value="leader" ${m.role==='leader'?'selected':''}>РП</option>
-            <option value="admin" ${m.role==='admin'?'selected':''}>Администратор департамента (АД)</option>
+            <option value="scrum" ${m.role==='scrum'?'selected':''}>Скрам-мастер (СМ)</option>
+            <option value="leader" ${m.role==='leader'?'selected':''}>Руководитель проектов (РП)</option>
+            <option value="admin" ${m.role==='admin'?'selected':''}>Администратор департамента (АдминД)</option>
           </select>
         </div>` : ''}
       </div>
@@ -697,7 +701,6 @@ document.getElementById('importFile').addEventListener('change', async (e) => {
   if (!auth.authenticated) { location.href = '/login.html'; return; }
   currentManager = auth.manager;
   document.getElementById('currentManagerLogin').textContent = currentManager?.email || '';
-  document.getElementById('navbarManager').textContent = currentManager ? `${currentManager.name} — ${currentManager.email}` : '';
 
   initTheme();
   applyRoleUI(currentManager?.role);

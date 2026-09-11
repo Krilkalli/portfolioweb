@@ -76,9 +76,12 @@ app.use(session({
 app.use('/api', csrfProtection);
 
 // ─── Защита страниц менеджера ─────────────────────────────────────────────────
-const PROTECTED_PAGES = ['/index.html', '/review.html', '/history.html', '/settings.html', '/archive.html', '/projects-archive.html'];
+const PROTECTED_PAGES = ['/index.html', '/review.html', '/history.html', '/settings.html', '/archive.html'];
 const PROJECT_PAGES = ['/projects.html', '/project.html'];
 app.use((req, res, next) => {
+  if (req.path === '/projects-archive.html') {
+    return res.redirect(req.session.isManager ? '/projects.html' : '/login.html');
+  }
   if (req.path === '/myprojects.html') {
     if (!req.session.isManager) return res.redirect('/login.html');
     return res.redirect(req.session.managerRole === ROLES.PROJECT_LEADER ? '/projects.html' : '/index.html');

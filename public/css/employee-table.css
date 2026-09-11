@@ -1,0 +1,103 @@
+/* Единый внешний вид списка сотрудников на дашборде и в архиве. */
+.employee-name { font-weight: 600; font-size: 0.9rem; }
+.employee-pos { font-size: 0.86rem; color: var(--text-muted); }
+.search-result-count { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; }
+.dashboard-action { min-width: 146px; min-height: 34px; justify-content: center; }
+.toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+.toolbar-left { flex: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; min-width: 0; }
+
+.employees-card { padding: 0; }
+.employees-card .table-wrap { overflow: visible; }
+#employeesTable { width: 100%; table-layout: fixed; }
+#employeesTable thead { position: sticky; top: 0; z-index: 10; }
+#employeesTable thead th { background: var(--bg-secondary); }
+#employeesTable .col-employee { width: 30%; }
+#employeesTable .col-role { width: 18%; }
+#employeesTable .col-city { width: 110px; }
+#employeesTable .col-status { width: 175px; }
+#employeesTable .col-link { width: 64px; }
+#employeesTable .col-resume {
+  width: 72px;
+  text-align: center;
+  vertical-align: middle;
+}
+#employeesTable .col-actions {
+  width: 64px;
+  text-align: center;
+  vertical-align: middle;
+}
+#employeesTable th.col-link,
+#employeesTable th.col-resume,
+#employeesTable th.col-actions { white-space: nowrap; }
+#employeesTable td { text-align: center; }
+#employeesTable td:first-child + td { text-align: left; }
+#employeesTable td.col-role,
+#employeesTable td.col-city,
+#employeesTable td.col-status { font-size: 0.86rem; }
+#employeesTable td.col-status {
+  padding-left: 16px;
+  text-align: left !important;
+}
+#employeesTable .employee-status-wrap {
+  min-width: 0;
+  justify-content: center;
+  align-items: flex-start;
+}
+#employeesTable .employee-city { font-size: 0.86rem; }
+#employeesTable .employee-updated { font-size: 0.8rem; white-space: nowrap; }
+#employeesTable .col-status .badge { font-size: 0.8rem; }
+#employeesTable th.col-link,
+#employeesTable th.col-resume,
+#employeesTable td.col-link,
+#employeesTable td.col-resume {
+  padding-left: 0;
+  padding-right: 0;
+  text-align: center !important;
+}
+#employeesTable td.col-link .copy-link-btn { margin-inline: auto; }
+#employeesTable td.col-resume .resume-menu {
+  display: flex !important;
+  justify-content: center;
+  width: 100%;
+}
+#employeesTable td.col-actions { text-align: center; }
+
+/* В архиве в столбце действий одновременно находятся две кнопки. */
+.archive-page #employeesTable .col-actions {
+  width: 92px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.archive-page #employeesTable .archive-action-menu {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+}
+.archive-page #employeesTable .archive-action-menu > .btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  flex: 0 0 32px;
+  margin: 0;
+}
+.archive-page #employeesTable .archive-delete-button {
+  background: rgba(239, 68, 68, .15);
+  color: var(--danger);
+}
+
+@media (max-width: 700px) {
+  .archive-page #employeesTable .archive-action-menu > .btn {
+    width: auto;
+    min-width: 0;
+    flex: 1 1 0;
+  }
+}
+
+/* Руководителю департамента не показываем персональные ссылки и действия. */
+body[data-manager-role="department_head"] #employeesTable .col-link,
+body[data-manager-role="department_head"] #employeesTable .col-actions {
+  display: none !important;
+}

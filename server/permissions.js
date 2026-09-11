@@ -3,7 +3,23 @@ const ROLES = Object.freeze({
   CHIEF_SCRUM: 'chief_scrum',
   SCRUM: 'scrum',
   PROJECT_LEADER: 'leader',
-  ADMIN: 'admin',
+  DEPARTMENT_ADMIN: 'admin',
+});
+
+const ROLE_LABELS = Object.freeze({
+  [ROLES.DEPARTMENT_HEAD]: 'Руководитель департамента',
+  [ROLES.CHIEF_SCRUM]: 'Главный скрам-мастер',
+  [ROLES.SCRUM]: 'Скрам-мастер',
+  [ROLES.PROJECT_LEADER]: 'Руководитель проекта',
+  [ROLES.DEPARTMENT_ADMIN]: 'Администратор департамента',
+});
+
+const ROLE_SHORT_LABELS = Object.freeze({
+  [ROLES.DEPARTMENT_HEAD]: 'РД',
+  [ROLES.CHIEF_SCRUM]: 'ГСМ',
+  [ROLES.SCRUM]: 'СМ',
+  [ROLES.PROJECT_LEADER]: 'РП',
+  [ROLES.DEPARTMENT_ADMIN]: 'АдминД',
 });
 
 const VALID_ROLES = Object.freeze(Object.values(ROLES));
@@ -12,7 +28,7 @@ const OPERATIONAL_ROLES = Object.freeze([
   ROLES.CHIEF_SCRUM,
   ROLES.SCRUM,
   ROLES.PROJECT_LEADER,
-  ROLES.ADMIN,
+  ROLES.DEPARTMENT_ADMIN,
 ]);
 
 function hasRole(role, allowedRoles) {
@@ -28,7 +44,15 @@ function canOperate(role) {
 }
 
 function isAdmin(role) {
-  return role === ROLES.ADMIN;
+  return role === ROLES.DEPARTMENT_ADMIN;
+}
+
+function getRoleLabel(role) {
+  return ROLE_LABELS[role] || 'Пользователь';
+}
+
+function getRoleShortLabel(role) {
+  return ROLE_SHORT_LABELS[role] || '—';
 }
 
 function canViewProject(role, project, managerEmployeeId) {
@@ -47,6 +71,8 @@ function canEditProject(role, project, managerEmployeeId) {
 
 module.exports = {
   ROLES,
+  ROLE_LABELS,
+  ROLE_SHORT_LABELS,
   VALID_ROLES,
   VIEW_ROLES,
   OPERATIONAL_ROLES,
@@ -54,6 +80,8 @@ module.exports = {
   canView,
   canOperate,
   isAdmin,
+  getRoleLabel,
+  getRoleShortLabel,
   canViewProject,
   canEditProject,
 };

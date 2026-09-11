@@ -39,7 +39,6 @@
   <div class="navbar-actions">
     <button id="themeToggle" class="btn btn-ghost btn-sm" title="Сменить тему"><i class="fi fi-rr-moon"></i></button>
     <a href="/index.html" class="btn btn-ghost btn-sm">Дашборд</a>
-    <a href="/projects-archive.html" class="btn btn-ghost btn-sm">Архив проектов</a>
     <a href="/settings.html" class="btn btn-ghost btn-sm">⚙ Настройки</a>
     <span id="navbarManager" style="font-size:0.75rem;color:var(--text-muted);padding:0 4px;"></span>
     <button id="logoutBtn" class="btn btn-ghost btn-sm">Выйти</button>
@@ -58,9 +57,6 @@
       <button id="uploadExcelBtn" class="btn btn-ghost btn-sm" data-admin-only><i class="fi fi-rr-upload"></i> Загрузить эксель</button>
       <a id="exportUppRegisterBtn" href="/api/projects/export-register" class="btn btn-ghost btn-sm"><i class="fi fi-rr-download"></i> Выгрузить регистр УПП</a>
       <input type="file" id="projectExcelInput" accept=".xlsx,.xls" hidden>
-    </div>
-    <div class="projects-toolbar-right">
-      <button id="archiveProjectsBtn" class="btn btn-danger btn-sm" data-project-edit><i class="fi fi-rr-box"></i> Архив</button>
     </div>
   </div>
   <div id="projectImportResult" class="card" style="display:none;padding:14px;margin-bottom:16px;"></div>
@@ -90,9 +86,6 @@
       <table class="table" id="projectsTable">
         <thead>
           <tr>
-            <th class="col-check" data-project-edit style="text-align:center;width:40px;">
-              <input type="checkbox" id="selectAllProjects">
-            </th>
             <th style="text-align:left;">Название проекта</th>
             <th style="text-align:left; width:160px;">Статус</th>
             <th style="text-align:left; width:240px;">Руководитель</th>
@@ -100,7 +93,7 @@
           </tr>
         </thead>
         <tbody id="projectsTbody">
-          <tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
+          <tr><td colspan="4" style="text-align:center;padding:40px;color:var(--text-muted)"><span class="spinner"></span></td></tr>
         </tbody>
       </table>
     </div>
